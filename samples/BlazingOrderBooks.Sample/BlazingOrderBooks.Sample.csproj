@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks> <!-- the feed handler's books and wire: native memory, read in place -->
+    </PropertyGroup>
+    <ItemGroup>
+        <ProjectReference Include="../../src/Tapline.BlazorRealtime/Tapline.BlazorRealtime.csproj"/>
+        <ProjectReference Include="../../src/Tapline.Wasm/Tapline.Wasm.csproj"/>
+    </ItemGroup>
+</Project>

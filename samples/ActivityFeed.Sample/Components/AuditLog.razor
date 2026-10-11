@@ -1,0 +1,240 @@
+@page "/audit/as/{Id:int}"
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@implements IDisposable
+@inject Practice Practice
+@inject Outlet Outlet
+@inject IJSRuntime JS
+
+@* The access log as one person reads it: this page's connection signed in as them (passthrough), and the log read as
+   whoever it's signed in as. /audit shows it in a frame, beside its choice of reader. *@
+@if (!Embed)
+{
+    <Masthead/>
+}
+<section class="panel alone audit">
+    <header>
+        <h3>The access log <span class="role">who was shown which record</span></h3>
+    </header>
+    <p class="about">
+        Each record made available to someone's feed, written off the service's loop to a database of its own, which
+        ChalkQL reads as a source under the practice's policy. The auditor role reads it, and to anyone else it holds no
+        line: read it as someone else to see.
+    </p>
+    @if (_people is null)
+    {
+        <p class="meta">@(_problem ?? "Asking the practice service who's who…")</p>
+    }
+    else
+    {
+        <p class="meta">
+            Read as @(_reader?.Name ?? $"person {Id}") (@(_reader?.Role ?? "?")) · this page's connection signed in as
+            <code>@(Outlet.Identity?.UserId ?? "nobody yet")</code>
+            @if (_newest is { } answer)
+            {
+                <span> · as <code>@answer.Principal</code>, for @answer.Purpose</span>
+            }
+        </p>
+        @if (_newest?.Refused is { } refused)
+        {
+            <p class="status">Refused: @refused</p>
+        }
+
+        <h4>Who was shown a record</h4>
+        <p class="meta">
+            <select @bind="_part">
+                <option value="0">activity</option>
+                <option value="3">section</option>
+            </select>
+            <input type="number" min="1" @bind="_record" placeholder="its number"/>
+            <button class="act" @onclick="LookUpAsync" disabled="@(_record is null or <= 0)">Look up</button>
+        </p>
+        @if (_lookedUp is { } found)
+        {
+            @if (Whose(found) is { } whose)
+            {
+                <p class="meta" title="From the access log, as the reader reads it: whose the record is, never what it was for">@whose</p>
+            }
+            @if (found.Refused is { } why)
+            {
+                <p class="status">Refused: @why</p>
+            }
+            else if (found.Rows.Length == 0)
+            {
+                <p class="meta">No line of the log names @(_part == 3 ? "section" : "activity") @_asked, as @found.Principal reads it.</p>
+            }
+            else
+            {
+                <p class="meta">@(_part == 3 ? "Section" : "Activity") @_asked was shown to @found.Rows.Length:</p>
+                <table class="log">
+                    <tr><th>Shown to</th><th>Topic</th><th>Basis</th><th>First</th><th>Last</th><th>Posts</th></tr>
+                    @foreach (var row in found.Rows)
+                    {
+                        <tr>
+                            <td>@NameOf(row.Person, row.User)</td><td><code>@row.Topic</code></td><td>@row.Basis.Label()</td>
+                            <td class="time">@row.First.ToString("HH:mm:ss")</td><td class="time">@row.Last.ToString("HH:mm:ss")</td>
+                            <td>@row.Posts</td>
+                        </tr>
+                    }
+                </table>
+            }
+        }
+
+        <h4>Newest entries</h4>
+        @if (_newest is { Refused: null, Rows.Length: 0 })
+        {
+            <p class="meta">No line, as @_newest.Principal reads it.</p>
+        }
+        else if (_newest is { Refused: null } newest)
+        {
+            <table class="log" @onmouseenter="() => _held = true" @onmouseleave="() => _held = false"
+                   title="Held while the pointer is over it, so a row stays where it is">
+                <tr><th>#</th><th>When</th><th>Shown to</th><th>Topic</th><th>Record</th><th>Whose</th><th>Basis</th></tr>
+                @foreach (var row in newest.Rows)
+                {
+                    <tr>
+                        <td>@row.Seq</td><td class="time">@row.First.ToString("HH:mm:ss.fff")</td>
+                        <td>@NameOf(row.Person, row.User)</td><td><code>@row.Topic</code></td>
+                        <td>
+                            <button class="act" @onclick="() => ShowAsync(row.Part, row.Record)">
+                                @(row.Part == 3 ? "section" : "activity") @row.Record
+                            </button>
+                        </td>
+                        <td>@NameOf(row.Patient, null)</td><td>@row.Basis.Label()</td>
+                    </tr>
+                }
+            </table>
+        }
+    }
+</section>
+
+@code {
+    readonly CancellationTokenSource _cts = new();
+    Persona[]? _people;
+    string? _problem;
+    AuditAnswer? _newest, _lookedUp;
+    int _part; // (0: an activity; 3: a section)
+    long? _record;
+    long _asked;
+    bool _held; // (the newest entries held while the pointer is over them: a row stays where it is)
+
+    Persona? _reader;
+
+    /// <summary>Whom it's read as: the person this page signs its connection in as.</summary>
+    [Parameter]
+    public int Id { get; set; }
+
+    /// <summary>In a frame on /audit: the log alone.</summary>
+    [SupplyParameterFromQuery]
+    public bool Embed { get; set; }
+
+    /// <summary>The reader: whoever this page's connection is signed in as, in the practice's realm (0: nobody yet).</summary>
+    int ReaderId => Outlet.Identity is { Realm: PracticeSignIn.Realm, UserId: var user } && int.TryParse(user, out var id) ? id : 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        for (var delay = 500;; delay = Math.Min(delay * 2, 4000))
+            try
+            {
+                _people = await Practice.PersonasAsync(_cts.Token);
+                _reader = _people.FirstOrDefault(p => p.Id == Id);
+                _problem = _reader is null ? $"Nobody at the practice is {Id}." : null;
+                break;
+            }
+            catch (Exception e) when (e is Grpc.Core.RpcException or HttpRequestException)
+            {
+                _problem = $"The practice service isn't answering at {string.Join(" or ", Practice.Addresses.Select(a => a.ToString()))} yet: asking again shortly.";
+                StateHasChanged();
+                try { await Task.Delay(delay, _cts.Token); }
+                catch (OperationCanceledException) { return; }
+            }
+            catch (OperationCanceledException) { return; }
+
+        if (_reader is not null) _ = FollowAsync(_cts.Token);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        if (Embed) await JS.InvokeVoidAsync("practiceView.embedded");
+    }
+
+    /// <summary>This page's connection signed in as the reader (passthrough, through the router), unless it is already.</summary>
+    async Task<bool> SignInAsync(CancellationToken ct)
+    {
+        if (ReaderId == Id) return true;
+        var answer = await JS.InvokeAsync<SignInAnswer>("practiceView.signIn", ct, PracticeSignIn.Realm, PracticeSignIn.UserOf(Id));
+        if (!answer.Accepted) _newest = new AuditAnswer { Refused = $"not signed in: {answer.Reason}" };
+        return answer.Accepted;
+    }
+
+    sealed record SignInAnswer(bool Accepted, string? Reason);
+
+    /// <summary>The newest entries, read again every two seconds while the page is open.</summary>
+    async Task FollowAsync(CancellationToken ct)
+    {
+        using var every = new PeriodicTimer(TimeSpan.FromSeconds(2));
+        try
+        {
+            while (!await SignInAsync(ct)) await Task.Delay(2000, ct);
+            do
+            {
+                await ReadAsync();
+            } while (await every.WaitForNextTickAsync(ct));
+        }
+        catch (Exception e) when (e is OperationCanceledException or JSDisconnectedException)
+        {
+        }
+    }
+
+    async Task ReadAsync()
+    {
+        if (ReaderId == 0) return;
+        if (!_held || _newest is null) _newest = await AskAsync(0, 0);
+        if (_asked > 0) _lookedUp = await AskAsync((byte)_part, _asked);
+        await InvokeAsync(StateHasChanged);
+    }
+
+    async Task LookUpAsync()
+    {
+        if (_record is not > 0) return;
+        _asked = _record.Value;
+        _lookedUp = await AskAsync((byte)_part, _asked);
+    }
+
+    async Task ShowAsync(byte part, long record)
+    {
+        (_part, _record, _asked) = (part, record, record);
+        _lookedUp = await AskAsync(part, record);
+    }
+
+    /// <summary>The service's read of the log, as the reader signed in (an entitled read: ChalkQL's, under the practice's policy).</summary>
+    async Task<AuditAnswer> AskAsync(byte part, long record)
+    {
+        try
+        {
+            return await Practice.AnyAsync(c => c.AuditAsync(ReaderId, part, record), _cts.Token);
+        }
+        catch (Grpc.Core.RpcException e)
+        {
+            return new AuditAnswer { Refused = $"the practice service didn't answer ({e.StatusCode})" };
+        }
+    }
+
+    /// <summary>
+    ///     Whose the record looked up is — the patient, the visit, the GP attending — from its lines of the log (the same on
+    ///     each): "section 274 — Jane Smith's, visit 909, Dr Anil Patel attending". What it was for is clinical, and isn't
+    ///     the log's: the auditor reads who was shown a record, never its content.
+    /// </summary>
+    string? Whose(AuditAnswer found)
+    {
+        if (found.Refused is not null || found.Rows.FirstOrDefault() is not { } row) return null;
+        var what = $"{(_part == 3 ? "section" : "activity")} {_asked} — {NameOf(row.Patient, null)}'s";
+        if (row.Booking > 0) what += $", visit {row.Booking}";
+        if (row.Clinician > 0) what += $", {NameOf(row.Clinician, null)} attending";
+        return what;
+    }
+
+    string NameOf(int id, string? user) => _people?.FirstOrDefault(p => p.Id == id)?.Name ?? user ?? $"patient {id}";
+
+    public void Dispose() => _cts.Cancel();
+}

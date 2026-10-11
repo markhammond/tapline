@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <!-- ChalkQL's incremental view maintenance (ViewMaintenance.Incremental) is experimental: its behaviour and API may
+             change in any release until it's declared stable. The page can ask for it ("Incremental (experimental)"), and the
+             provider can check what a view gives against its statement (Pivot:Validate). -->
+        <NoWarn>$(NoWarn);CHALK003</NoWarn>
+    </PropertyGroup>
+    <ItemGroup>
+        <ProjectReference Include="../../src/Tapline.BlazorRealtime/Tapline.BlazorRealtime.csproj" />
+        <ProjectReference Include="../../src/Tapline.MagicOnion.Server/Tapline.MagicOnion.Server.csproj"/>
+        <ProjectReference Include="../PivotTable.Contracts/PivotTable.Contracts.csproj"/>
+        <Using Include="PivotTable.Contracts"/>                <!-- a cell's key and row: shared with the stream's clients -->
+    </ItemGroup>
+    <ItemGroup>
+        <!-- ChalkQL: SQL over in-process data (its planner, Apache Calcite, runs in a Java 21 sidecar it starts itself);
+             its POCO source holds the trades. Namespaces Chalk.*. -->
+        <PackageReference Include="ChalkQL" Version="0.6.1"/>
+        <PackageReference Include="ChalkQL.Sources" Version="0.6.1"/>
+    </ItemGroup>
+</Project>

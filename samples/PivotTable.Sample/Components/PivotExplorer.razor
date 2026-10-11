@@ -1,0 +1,1422 @@
+
+   
+   
+                               
+                               
+               
+                   
+               
+                   
+               
+                   
+               
+               
+                   
+               
+               
+                   
+               
+                                                                                
+              
+               
+               
+                                                                      
+              
+               
+               
+        
+       
+           
+       
+        
+                   
+                   
+        
+       
+           
+       
+       
+           
+       
+        
+       
+           
+       
+
+   
+
+       
+        
+    
+               
+               
+            
+                
+                     
+                
+                     
+            
+            
+       
+           
+           
+        
+
+   
+
+            
+          
+           
+           
+           
+           
+           
+           
+           
+           
+           
+           
+           
+           
+            
+                
+                
+            
+            
+                    
+                    
+                
+                       
+                       
+              
+                
+   
+   
+              
+              
+            
+           
+               
+           
+                       
+                    
+                   
+                       
+                           
+                   
+                       
+                   
+                                   
+                               
+                                   
+                               
+                                   
+                                   
+                           
+                               
+                                       
+                           
+                                 
+                               
+                           
+                               
+                           
+                                 
+                              
+                              
+                                             
+                                         
+                   
+                       
+                   
+       
+           
+       
+       
+           
+       
+       
+       
+       
+           
+           
+       
+       
+           
+           
+       
+       
+           
+       
+       
+       
+   
+       
+       
+   
+       
+           
+       
+       
+       
+       
+           
+       
+       
+       
+       
+           
+       
+       
+       
+       
+           
+       
+       
+       
+       
+           
+       
+       
+       
+       
+           
+       
+       
+       
+       
+       
+       
+           
+       
+       
+           
+       
+           
+               
+               
+               
+           
+       
+           
+           
+       
+       
+       
+       
+           
+       
+       
+           
+       
+       
+       
+               
+                   
+               
+               
+                   
+                   
+               
+       
+       
+       
+           
+       
+       
+       
+               
+               
+       
+           
+       
+       
+       
+       
+       
+       
+           
+       
+       
+       
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+@using System.Globalization
+@using Microsoft.AspNetCore.WebUtilities
+@using PivotTable.Contracts
+@implements IAsyncDisposable
+@inject Outlet Outlet
+@inject Publisher Publisher
+@inject PivotProvider Provider
+@inject IJSRuntime JS
+@inject NavigationManager Nav
+
+<h3>Live positions</h3>
+<p class="lede">Long and short positions valued at live marks, with realized and unrealized PnL over time. Reshape the pivot by dragging fields and
+    applying filters. The page writes the SQL, the <em>pivot provider</em> maintains it as a standing view in ChalkQL, and Tapline streams only the cells that change.</p>
+@* Perspectives: layouts to start from — each a link (its layout in the address, as any pivot's is), opened in place *@
+<p class="perspectives">Perspectives:
+    @for (var i = 0; i < Perspectives.Length; i++)
+    {
+        var (name, title, layout) = Perspectives[i];
+        var link = layout(_criteria);
+        var shown = Shows(link);
+        @(i > 0 ? " · " : "")<a href="@Nav.GetUriWithQueryParameters(link)" target="_top" title="@(shown ? $"{title} (shown)" : title)" class="@(shown ? "shown" : null)" aria-current="@(shown ? "true" : null)">@name</a>
+    }
+    @* (the disclaimer, after the last of them: quiet — a space before it, for a reader or a copy) *@
+    @(" ")<span class="disclaimer"><strong>Disclaimer:</strong> Illustrative only.</span>
+</p>
+
+@* The house's drawdown (pivot.js fills it in, as the provider publishes it): its equity, its drawdown from its high over the
+   hour before, the trigger and how close it is, a breach now and the hour's episodes *@
+<section class="drawdown" @ref="_drawdownPanel" hidden></section>
+
+<div class="areas" @ref="_areas">
+    <div class="area filters @(Target("filters"))" data-area="filters" @ondragover:preventDefault @ondragenter='() => _over = "filters"'>
+        <span class="area-head"><span class="area-name">Filters</span></span>
+        @foreach (var d in Pivot.Dimensions.Where(d => !_criteria.Rows.Contains(d.Name) && !_criteria.Columns.Contains(d.Name))) { @Chip(d, "filters") }
+    </div>
+    <div class="area values @(Target("values"))" data-area="values" @ondragover:preventDefault @ondragenter='() => _over = "values"'>
+        <span class="area-head"><span class="area-name">Values</span></span>
+        @foreach (var key in _order)
+        {
+            var extras = FormsOf(key).Where(f => f != "value").ToArray();
+            <span class="field value @(_values.Contains(key) ? "on" : "off")" draggable="@(_showAsOpen == key ? "false" : "true")" data-field="@key"
+                  @ondragstart='() => { _dragging = key; _over = "values"; }' @ondragend="() => { _dragging = null; _over = null; }">
+                <button class="name" title="@ValueTip(key)" @onclick="() => ToggleValue(key)">@TitleOf(key)</button>
+                @if (HasForms(key))
+                {
+                    <button class="icon show-as @(extras.Length > 0 ? "on" : "") @(_showAsOpen == key ? "open" : "")" title="@ShowAsTip(key)" @onclick="() => OpenShowAs(key)">@if (extras.Length > 0) { <span class="by">@string.Join(" ", extras.Select(f => Forms.First(x => x.Form == f).Chip))</span> } else { <text>▾</text> }</button>
+                }
+                @if (_showAsOpen == key)
+                {
+                    var forms = FormsOf(key);
+                    <div class="popup show-as-popup" @onclick:stopPropagation>
+                        <p class="menu-title">Show @TitleOf(key) as</p>
+                        @foreach (var (form, title, _) in Forms.Where(f => Offered(key, f.Form)))
+                        {
+                            var (on, only, unplaced) = (forms.Contains(form), forms is [var one] && one == form, form == "running" && !Dated);
+                            @if (form == "row") { <p class="menu-group" title="The filters on the fields a percentage runs across ignored: filter two clients, and each is still a share of all of them">Of the market</p> }
+                            @if (form == "rowShown") { <p class="menu-group" title="The pivot's own totals: the percentages of a row, a column or the whole add up to 100%">Of what's shown</p> }
+                            <label class="@(only || (unplaced && !on) ? "disabled" : "")" title="@(unplaced ? "It runs along the dates: put Date in the rows or columns" : "")"><input type="checkbox" checked="@on" disabled="@(only || (unplaced && !on))" @onchange="() => ToggleForm(key, form)" /> @title</label>
+                        }
+                        <p class="hint">Each ticked, a column: the value; a percentage of its row's total (the Total column), its column's (the Total row) or the grand total — @(ShownValue.HasMarket(key) ? "of the market (the filters on the fields it runs across ignored) or " : "")of what's shown@(Runs(key) ? "; or a running total along the dates, since the first date's open" : ""). The data provider computes each. Volume as % of column, with dates across: each row's market share.</p>
+                    </div>
+                }
+            </span>
+        }
+    </div>
+    <div class="area columns @(Target("columns"))" data-area="columns" @ondragover:preventDefault @ondragenter='() => _over = "columns"'>
+        <span class="area-head">
+            <span class="area-name">Columns</span>
+        </span>
+        @foreach (var name in _criteria.Columns) { @Chip(Find(name), "columns") }
+        @if (_criteria.Columns.Length == 0) { <span class="drop-hint">drop a field here</span> }
+    </div>
+    <div class="area rows @(Target("rows"))" data-area="rows" @ondragover:preventDefault @ondragenter='() => _over = "rows"'>
+        <span class="area-head">
+            <span class="area-name">Rows</span>
+        </span>
+        @foreach (var name in _criteria.Rows) { @Chip(Find(name), "rows") }
+    </div>
+</div>
+@if (_filterOpen is not null || _sortOpen is not null || _showAsOpen is not null) { <div class="backdrop" @onclick="CloseFilter"></div> }
+@if (!_criteria.OneDay && !_criteria.Rows.Contains("date") && !_criteria.Columns.Contains("date"))
+{
+    <p class="hint warn">Several days, not grouped by date: positions, notional and unrealized PnL are each day's close, and don't add up across days (—). Realized PnL does.</p>
+}
+
+<div class="grid">
+    <div class="scroll"><table class="pivot" @ref="_grid"></table></div>
+    @* Under the grid: its note — the amounts' unit and currency (their headings marked *) and when its days end, each a choice:
+       the note is the setting (pivot.js shows it while a pivot of the fields' is shown, its currency grey till the pivot in it
+       is) — the switches for how its view is maintained, and, at its right, a copy of it, for a spreadsheet *@
+    <div class="grid-bar">
+        <p class="amounts-note" data-amounts-note hidden>
+            * Amounts in
+            @* (the unit: every amount in it, thousands say, so none jumps from 999k to 1.00M — the page's alone; as wide as its
+               name, as the zone is) *@
+            <span class="fit">
+                <span class="fit-text" aria-hidden="true">@Scales.First(s => s.Unit == _scale).Title</span>
+                <select value="@_scale" @onchange="SetScale" aria-label="Amounts in" title="Amounts in units, thousands or millions">
+                    @foreach (var (unit, title) in Scales) { <option value="@unit">@title</option> }
+                </select>
+            </span>
+            of
+            @* (grey from its choice till the pivot in it is shown — refused, it stays grey: the pivot shown is the other's) *@
+            <select class="currency @(Unshown ? "pending" : "")" value="@_criteria.ReportingCurrency" @onchange="SetReportingCurrency" aria-label="Reporting currency"
+                    title="@(Unshown ? $"Shown in {_shownCurrency} till the pivot in {_criteria.ReportingCurrency} is" : null)">
+                @foreach (var c in Pivot.Currencies) { <option value="@c">@c</option> }
+            </select>
+            · Day ends at
+            <select value="@_criteria.Cutoff" @onchange="SetCutoff" aria-label="Day ends at">
+                @foreach (var c in Pivot.Cutoffs) { <option value="@c">@c</option> }
+            </select>
+            @* (as wide as the zone chosen: a hidden copy of its name sizes it, the select filling that) *@
+            <span class="fit">
+                <span class="fit-text" aria-hidden="true">@_criteria.Zone</span>
+                <select value="@_criteria.Zone" @onchange="SetZone" aria-label="Time zone">
+                    @foreach (var z in TimeZones.Names) { <option value="@z">@z</option> }
+                </select>
+            </span>
+            @* (how amounts are valued: an information mark — a tooltip on hover, and on keyboard focus, read out too) *@
+            <span class="info" tabindex="0" aria-describedby="valuation-note">@Info<span class="tip" id="valuation-note" role="tooltip">Amounts at each day's close, at its marks and FX rates — the current day's: now.</span></span>
+        </p>
+        @* How the pivot's view is maintained — incrementally, or recomputed (its statement run in full each update); and,
+           maintained incrementally, how it takes a new plan (a recomputed view runs in full every update: nothing to swap,
+           so hidden, its place kept: IVM stays under the pointer). Switches, kept in this browser *@
+        <span class="maintenance-switches">
+            <label class="maintenance" title="On by default: incremental view maintenance (IVM, ChalkQL's, experimental) — each update computes what changed since the last, its joins and totals keeping state between updates. Off: the statement runs in full each update."><input type="checkbox" role="switch" checked="@_incremental" @onchange="ToggleIncremental" />IVM (experimental)<span class="maintenance-note" data-maintenance-note hidden> · recomputed</span></label>
+            <label class="maintenance @(_incremental ? "" : "unseen")" title="On by default: when ChalkQL plans a pivot's statement anew — its tables having drifted — its view builds the new plan beside the one it runs and swaps it in at an update, its state kept (blue/green), so no update computes the view from nothing. Off: the next update computes it from nothing."><input type="checkbox" role="switch" checked="@_lowJitter" disabled="@(!_incremental)" @onchange="ToggleLowJitter" />Low jitter</label>
+        </span>
+        <button type="button" class="copy-grid" data-copy-grid title="Copy the grid — its figures precise, as they are before they're rounded to be shown — to paste into a spreadsheet"><svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M10.5 3.5v-.5a1.5 1.5 0 0 0-1.5-1.5H4A1.5 1.5 0 0 0 2.5 3v5A1.5 1.5 0 0 0 4 9.5h.5" fill="none" stroke="currentColor" stroke-width="1.4"/></svg><span>Copy</span></button>
+    </div>
+</div>
+<p class="stats warn" @ref="_replica" hidden></p>
+@* The vital statistics (pivot.js fills them in): the brokerage — its pace, set by ?trades in the address — ChalkQL, the pivots *@
+<h4 class="vitals">Vital statistics</h4>
+@* The provider's stats (each second), and the pivot shown's steady-state sweep time — from the earliest event an answer covers to its
+   publication to Tapline, from their clock cells *@
+<p class="stats"><span @ref="_stats"></span><span data-answer-lag></span></p>
+@if (Outlet.StreamingBytesPerSecond > 0)
+{
+    @* ?bwlimit: read as the circuit opened — a link reloads the page (target="_top": not an enhanced navigation) *@
+    <p class="stats">this page's stream is capped at @($"{Outlet.StreamingBytesPerSecond / 1024.0:0.##} KiB/s") (?bwlimit): each cell's latest
+        arrives as the link allows · <a href="@Nav.GetUriWithQueryParameter("bwlimit", (string?)null)" target="_top">no limit</a></p>
+}
+@if (_refusal is { } refused)
+{
+    <div class="refused" role="alert">
+        <strong>Refused:</strong> @refused.Reason
+        <div class="needle">correlation <code>@refused.CorrelationId</code> — the same id in the provider's log, the router's, and this page's console</div>
+    </div>
+}
+@if (_status.Length > 0) { <p class="status">@_status</p> }
+@* The SQL, collapsible (this browser remembers which): the statement — written from the fields, or yours — and the plan
+   ChalkQL prepared for it, physical or logical. *@
+<details class="sql" open="@_sqlOpen">
+    <summary @onclick="ToggleSql" @onclick:preventDefault>@Chevron@(_editing ? "Your pivot query details" : "Requested pivot query details")</summary>
+    <h4>
+        @(_editing ? "Your standing view SQL, applied as it is" : "Standing view SQL, in ChalkQL's dialect")
+        @if (_editing)
+        {
+            <button @onclick="ApplySql">apply</button>
+            <button class="link" @onclick="StopEditing">back to the fields</button>
+        }
+        else
+        {
+            <button class="link" @onclick="StartEditing">edit</button>
+        }
+        <a class="reference" href="https://calcite.apache.org/docs/reference.html" target="_blank" rel="noopener noreferrer"
+           title="ChalkQL's SQL is Apache Calcite's, with its named and list parameters (@@now, IN @@instrument)">Apache Calcite SQL reference ↗</a>
+    </h4>
+    @if (_editing)
+    {
+        <textarea rows="24" spellcheck="false" @bind="_sql"></textarea>
+        <p class="hint">A pivot's statement answers <code>row_key</code>, <code>column_key</code> (text: each a cell's levels joined by " · " — a total's fewer, the grand total's none) and <code>quantity</code> (units of the asset), <code>notional</code>, <code>realized_pnl</code>, <code>unrealized_pnl</code>, <code>balance</code>, <code>volume</code> (the reporting currency) and <code>trades</code> (a count) — and, if it likes, <code>max_gross</code> (each client's larger side, long or short notional, its positions netted by instrument, summed over the clients a cell spans): numbers, or null where they don't add up, one row per cell. It reads the brokerage's tables — <code>cpty</code>, <code>account</code>, <code>ccy</code>, <code>instrument</code>, <code>posting</code>, <code>journal</code>, <code>position_risk</code> (the clients' positions, the house's side of them and its hedges), <code>fills</code>, <code>marks</code>, <code>conversion_rate</code>, <code>time_zones</code> — and <code>trading_days(zone, cutoff_hour)</code> (a zone's last ten trading days, the cutoff on the hour: <code>trading_day</code>, <code>days_ago</code>, <code>opens</code>, <code>closes</code>), and may bind <code>@@now</code> and the lists below (the filters' values). ChalkQL runs it safely: it only reads, and only those.</p>
+    }
+    else
+    {
+        <pre>@_criteria.ToSql()</pre>
+    }
+    @if (_bound is { Count: > 0 } bound)
+    {
+        @* The values it binds: the filters', each a list (the statement names them — the same layout, the same statement) *@
+        <table class="bindings">
+            <thead><tr><th>Bound variable</th><th>Values</th></tr></thead>
+            <tbody>
+                @foreach (var (name, values) in bound)
+                {
+                    <tr><td><code>@@@name</code></td><td>@(values.Length == 0 ? "(none)" : string.Join(", ", values))</td></tr>
+                }
+            </tbody>
+        </table>
+    }
+    @if (_sqlOpen && _topic is not null && Provider.PlanOf(_topic) is { } plan)
+    {
+        <h4>
+            ChalkQL query plan
+            <span class="plan-views" role="group" aria-label="Plan">
+                <button class="link @(_logicalPlan ? "" : "on")" aria-pressed="@(_logicalPlan ? "false" : "true")" @onclick="() => _logicalPlan = false">physical</button>
+                <button class="link @(_logicalPlan ? "on" : "")" aria-pressed="@(_logicalPlan ? "true" : "false")" @onclick="() => _logicalPlan = true">logical</button>
+            </span>
+        </h4>
+        @if (_resolution is { } resolved)
+        {
+            <p class="hint" title="Resolving the statement into a prepared query: built by ChalkQL's planner, or retrieved from a pivot running">Time to first result: @Ms(resolved.Took) (@resolved.How)</p>
+        }
+        <pre class="plan">@(_logicalPlan ? plan.Logical : plan.Physical)</pre>
+    }
+</details>
+
+@code {
+    static readonly (string Key, string Title)[] ValueFields = [.. Pivot.Measures.Select(m => (m.Key, m.Title))];   // (each its [Display]'s)
+
+    /// <summary>Each field's and value's label and tooltip — their [Display] — for the grid's headings and tips.</summary>
+    static readonly Dictionary<string, object> Fields = Pivot.Dimensions.Select(d => (d.Name, d.Title, d.Description))
+        .Concat(Pivot.Measures.Concat(Pivot.PnLParts).Select(m => (Name: m.Key, m.Title, m.Description)))
+        .ToDictionary(f => f.Name, f => (object)new { title = f.Title, description = f.Description });
+
+    /// <summary>
+    ///     A value chip's tooltip: what the value is, then what a click does (every column's default: a column's ⚙ can
+    ///     override it).
+    /// </summary>
+    string ValueTip(string key) => $"{Pivot.Measures.First(m => m.Key == key).Description} — click to {(_values.Contains(key) ? "hide" : "show")}, drag to reorder";
+    static bool IsValue(string key) => ValueFields.Any(v => v.Key == key);
+    static string TitleOf(string key) => ValueFields.First(v => v.Key == key).Title;
+
+    /// <summary>
+    ///     How a value can show — as a spreadsheet pivot's "Show as": the value itself; a percentage of its row's total, its
+    ///     column's or the grand total, each of the market (the filters on the fields it runs across ignored: Power BI's ALL)
+    ///     or of what's shown (the pivot's own totals, as a spreadsheet's); or a running total in Date (<see cref="Runs" />).
+    ///     Each ticked is a column of its own, which the data provider computes (<see cref="ShownValue" />: the page asks for
+    ///     them with the pivot, and its cells carry them); in the address, after the value's key ("volume.column",
+    ///     "volume.columnShown", "volume.running"); on the value's chip, its mark ("%col", "%col shown", "cum.").
+    /// </summary>
+    static readonly (string Form, string Title, string Chip)[] Forms =
+    [
+        ("value", "Value", ""),
+        ("row", "% of row", "%row"), ("column", "% of column", "%col"), ("total", "% of grand total", "%total"),
+        ("rowShown", "% of row", "%row shown"), ("columnShown", "% of column", "%col shown"), ("totalShown", "% of grand total", "%total shown"),
+        ("running", "Running total in Date", "cum.")
+    ];
+
+    /// <summary>A form's title, its total's kind said: "% of column (market)", "% of column (shown)".</summary>
+    static string FormTitle(string form) => Forms.First(f => f.Form == form).Title + (form is "row" or "column" or "total" ? " (market)" : form.EndsWith("Shown") ? " (shown)" : "");
+
+    /// <summary>Whether a value can show so: a percentage of the market where it has a market total; a running total where it adds up across dates.</summary>
+    static bool Offered(string key, string form) => form switch
+    {
+        "row" or "column" or "total" => ShownValue.HasMarket(key),
+        "running" => Runs(key),
+        _ => true
+    };
+
+    /// <summary>Whether a value can run along the dates: what adds up across them — each day's dealing; a close's figures don't.</summary>
+    static bool Runs(string key) => key is "volume" or "trades";
+
+    /// <summary>Whether Date is in the rows or columns: what a running total runs along.</summary>
+    bool Dated => _criteria.Rows.Contains("date") || _criteria.Columns.Contains("date");
+
+    /// <summary>A value's forms, in <see cref="Forms" />' order: as ticked, or its value alone.</summary>
+    string[] FormsOf(string key) => _forms.TryGetValue(key, out var forms) ? forms : ["value"];
+
+    /// <summary>Whether a value can show as a percentage: not a mark price (a rate, averaged: no total to be part of).</summary>
+    static bool HasForms(string key) => key != "mark";
+
+    /// <summary>The values shown, each as its forms: the address's entries, in order — "volume", "volume.column".</summary>
+    IEnumerable<string> Entries(IEnumerable<string> values) => values.SelectMany(v => FormsOf(v).Select(f => f == "value" ? v : $"{v}.{f}"));
+
+    /// <summary>An entry's value and form — none, if it's neither a value nor a form the value has (<see cref="ShownValue.TryParse" />).</summary>
+    static (string Value, string Form)? EntryOf(string entry) =>
+        ShownValue.TryParse(entry, out var shown) && IsValue(shown.Value) ? (shown.Value, shown.Form == ShowAs.Value ? "value" : entry[(entry.IndexOf('.') + 1)..]) : null;
+
+    /// <summary>
+    ///     What a pivot's cells carry besides its values, in their order — the values shown, each as its forms, computed by
+    ///     the data provider (a running total where Date's in the rows or columns): none for a statement of your own.
+    /// </summary>
+    ShownValue[] ExtrasOf(PivotCriteria criteria) => _editing ? [] :
+        [.. criteria.Extras.Where(e => e.Form != ShowAs.RunningTotalInDate || criteria.Rows.Contains("date") || criteria.Columns.Contains("date"))];
+
+    /// <summary>A value's Show as button's tooltip: what it chooses, and the forms shown.</summary>
+    string ShowAsTip(string key) => $"show {TitleOf(key)} as its value, a percentage of its row's total, its column's or the grand total{(ShownValue.HasMarket(key) ? " (of the market, or of what's shown)" : " (of what's shown)")}{(Runs(key) ? ", or a running total in Date" : "")}"
+        + (FormsOf(key) is var forms && forms is not ["value"] ? $" — now: {string.Join(", ", Forms.Where(f => forms.Contains(f.Form)).Select(f => FormTitle(f.Form)))}" : "");
+
+    /// <summary>
+    ///     An order of every value with those given — the values shown, as an address lists them — put in it as given, each
+    ///     where one of them was: the values hidden keep their places.
+    /// </summary>
+    static List<string> Placed(IReadOnlyList<string> order, IReadOnlyList<string> shown)
+    {
+        var placed = new List<string>(order);
+        var slots = Enumerable.Range(0, placed.Count).Where(i => shown.Contains(placed[i])).ToList();
+        for (var i = 0; i < slots.Count; i++) placed[slots[i]] = shown[i];
+        return placed;
+    }
+    static readonly MarkupString Info = new("<svg viewBox='0 0 16 16' width='15' height='15' aria-hidden='true'><circle cx='8' cy='8' r='6.5' fill='none' stroke='currentColor' stroke-width='1.3'/><circle cx='8' cy='4.9' r='0.9' fill='currentColor'/><path d='M7.2 7h1.6v4.6H7.2z' fill='currentColor'/></svg>");
+    static readonly MarkupString Cog = new("<svg viewBox='0 0 16 16' width='13' height='13' aria-hidden='true'><path fill='currentColor' fill-rule='evenodd' d='M6.9 1h2.2l.4 1.9 1.3.6 1.7-1 1.5 1.5-1 1.7.6 1.3 1.9.4v2.2l-1.9.4-.6 1.3 1 1.7-1.5 1.5-1.7-1-1.3.6-.4 1.9H6.9l-.4-1.9-1.3-.6-1.7 1-1.5-1.5 1-1.7-.6-1.3L1 9.1V6.9l1.9-.4.6-1.3-1-1.7L4 2l1.7 1 1.3-.6zM8 5.6a2.4 2.4 0 1 0 0 4.8 2.4 2.4 0 0 0 0-4.8z'/></svg>");
+    static readonly MarkupString Chevron = new("<svg viewBox='0 0 16 16' width='10' height='10' aria-hidden='true'><path d='M6 3.5 10.5 8 6 12.5' fill='none' stroke='currentColor' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+    static readonly MarkupString Funnel = new("<svg viewBox='0 0 16 16' width='11' height='11' aria-hidden='true'><path d='M1.5 2.5h13l-5 6v4.5l-3 1.5v-6z' fill='currentColor'/></svg>");
+
+    readonly CancellationTokenSource _cts = new();
+    ElementReference _grid, _replica, _stats, _areas, _drawdownPanel;
+    DotNetObjectReference<PivotExplorer>? _self;                      // (the areas' drops, placed by the grid's script)
+    PivotCriteria _criteria = PivotCriteria.Default;
+    List<string> _values = ["position", "notional", "pnl", "balance"];       // the values shown — in _order's order
+    List<string> _order = [.. ValueFields.Select(v => v.Key)];       // every value, in the order the Values area and the grid show them (dragged into it)
+    Dictionary<string, string[]> _forms = [];                         // each value's forms (Show as), unless its value alone
+    string? _showAsOpen;                                              // the value whose Show as is open
+    readonly Dictionary<string, List<SortKey>> _sort = [];           // a field's order: its labels, or values one after another (absent: its labels, A to Z)
+    Collapsed _collapsed = Collapsed.None;                            // what the grid shown has collapsed (its script says): for the address
+    string _status = "";
+    bool _editing, _interactive, _totalFirst, _totalRowFirst;
+    bool _incremental = true;                                         // (maintained incrementally unless this browser turned it off)
+    bool _lowJitter = true;                                           // (and new plans built beside, blue/green, unless this browser turned it off)
+    string _sql = "", _search = "";
+    string? _topic, _applied, _dragging, _over, _filterOpen, _sortOpen;
+    HashSet<string> _draft = [];
+    int _draftLast = 1;
+    string? _draftFrom, _draftTo, _current, _oldest;
+    SubscriptionRefusal? _refusal;
+    CancellationTokenSource? _shown;                                  // the subscription shown (its hold's)
+    string? _shownCurrency;                                           // the reporting currency of the pivot shown (the fields'): the note's grey till it's the one chosen
+    CancellationTokenSource? _pending;                                // a change waiting to be applied (debounced)
+    int _unavailable;                                                 // the subscriptions in a row the service wasn't up for (starting): the next try's backoff
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;                                     // interactive only (not during prerender)
+        _interactive = true;
+        _self = DotNetObjectReference.Create(this);
+        await JS.InvokeVoidAsync("pivotView.attachAreas", _cts.Token, _areas, _self);
+        if (TradesQuery is { } perDay) Provider.SetTradesPerDay(perDay);
+        await LoadSettings();                                         // (this browser's settings, before the first pivot is asked for)
+        ReadLayout();                                                 // (and the address's layout, if it has one: over them, this time)
+        _ = Apply();
+        _ = KeepStats();
+        _ = KeepDrawdown();
+        StateHasChanged();
+    }
+
+    static Dimension Find(string name) => Pivot.Dimensions.First(d => d.Name == name);
+
+
+    /// <summary>The page's ?trades, client trades a day — 10000000, 10_000_000, 10,000,000, 10M or 500k — if any.</summary>
+    double? TradesQuery
+    {
+        get
+        {
+            if (!QueryHelpers.ParseQuery(new Uri(Nav.Uri).Query).TryGetValue("trades", out var value)) return null;
+            var text = value.ToString().Replace("_", "").Replace(",", "").Trim();
+            var scale = text.EndsWith('k') || text.EndsWith('K') ? 1e3 : text.EndsWith('m') || text.EndsWith('M') ? 1e6 : 1;
+            if (scale != 1) text = text[..^1];
+            return double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var n) && n >= 0 ? n * scale : null;
+        }
+    }
+
+    bool Filtered(Dimension d) => d.Name == "date" ? _criteria.LastDays != 1 : _criteria.Kept(d).Length != d.Values.Length;
+
+    /// <summary>The days chosen, briefly: "today", "last 5", or a range of dates.</summary>
+    string DaysText => _criteria.LastDays switch
+    {
+        1 => "today",
+        > 1 => $"last {_criteria.LastDays}",
+        _ => _criteria.From == _criteria.To ? $"{_criteria.From}" : $"{_criteria.From} → {_criteria.To}"
+    };
+
+    string Target(string area) => _dragging is not null && _over == area && (area == "values") == IsValue(_dragging) ? "target" : "";   // (values among the values; fields in the other areas)
+
+    /// <summary>A field: dragged between the areas (or along one), sorted (in rows and columns), filtered by its funnel.</summary>
+    RenderFragment Chip(Dimension d, string area) =>
+        @<span class="field @(Filtered(d) ? "filtered" : "")" draggable="@(_filterOpen == d.Name || _sortOpen == d.Name ? "false" : "true")"
+               @ondragstart="() => { _dragging = d.Name; _over = area; }" @ondragend="() => { _dragging = null; _over = null; }"
+               data-field="@d.Name" @ondragover:preventDefault>
+            <span class="name" title="@d.Description">@d.Title</span>@if (d.Name == "date") { <span class="summary">@DaysText</span> }
+            @if (area != "filters")
+            {
+                var order = SortKeys(d, area);
+                <button class="icon sort" title="sort @d.Name: @SortTitle(d, order)" @onclick="() => OpenSort(d)">@(order[0].Desc ? "↓" : "↑")@if (order[0].By != Labels) { <span class="by">@SortValueTitle(order[0].By)@(order.Count > 1 ? $" +{order.Count - 1}" : "")</span> }</button>
+                var shown = !_criteria.NoTotals.Contains(d.Name);
+                <button class="icon sigma @(shown ? "on" : "off")" title="@TotalsTitle(d, area, shown)" @onclick="() => ToggleTotals(d)">Σ</button>
+            }
+            <button class="icon funnel @(Filtered(d) ? "on" : "")" title="filter @d.Name" @onclick="() => OpenFilter(d)">@Funnel</button>
+            @if (_sortOpen == d.Name)
+            {
+                var (needs, keys) = (ByValueNeeds(d, area), SortKeys(d, area));   // (sorted by values it can't be now: by its labels, till it can)
+                <div class="popup sort-popup" @onclick:stopPropagation>
+                    <p class="menu-title">Sort @d.Title by</p>
+                    @for (var i = 0; i < keys.Count; i++)
+                    {
+                        var (at, key) = (i, keys[i]);
+                        <div class="sort-key">
+                            <span class="then">@(at == 0 ? "" : "then")</span>
+                            <select id="sort-@d.Name-@at" value="@key.By" @onchange="e => SetSortKey(d, area, at, (string)e.Value!)">
+                                @if (at == 0) { <option value="@Labels">@d.Title</option> }
+                                @foreach (var (value, title) in SortValues.Where(v => v.Key == key.By || !keys.Any(k => k.By == v.Key)))
+                                {
+                                    <option value="@value" disabled="@(needs is not null)">@title</option>
+                                }
+                            </select>
+                            <button class="field value on" title="@(key.Desc ? "descending: click for ascending" : "ascending: click for descending")" @onclick="() => FlipSortKey(d, area, at)">@(key.Desc ? "↓ Descending" : "↑ Ascending")</button>
+                            @if (at > 0) { <button class="icon remove" title="remove this sort" @onclick="() => RemoveSortKey(d, area, at)">✕</button> }
+                        </div>
+                    }
+                    @if (needs is null && keys[0].By != Labels && keys.Count < MaxSortKeys)
+                    {
+                        <button class="link" @onclick="() => AddSortKey(d, area)">+ then by…</button>
+                    }
+                    <p class="hint">@(needs ?? (keys[0].By == Labels ? $"By {d.Name}, or by values: each {d.Name} by its figure in the {(area == "rows" ? "Total column" : "Total row")}." : "Each by its figure in the " + (area == "rows" ? "Total column" : "Total row") + $", the next where they tie; {d.Name} settles the rest. Re-sorted as figures change, held still while the pointer is over the grid."))</p>
+                </div>
+            }
+            @if (_filterOpen == d.Name && d.Name == "date")
+            {
+                <div class="popup days" @onclick:stopPropagation>
+                    <label><input type="radio" name="days" checked="@(_draftLast > 0)" @onchange="() => _draftLast = _draftLast > 0 ? _draftLast : 1" /> Last
+                        <select value="@(_draftLast > 0 ? _draftLast : 1)" @onchange="e => _draftLast = int.Parse((string)e.Value!)">
+                            @foreach (var n in Pivot.LastDays) { <option value="@n">@n</option> }
+                        </select> days</label>
+                    <label><input type="radio" name="days" checked="@(_draftLast == 0)" @onchange="() => _draftLast = 0" /> From
+                        <input type="date" min="@_oldest" max="@_current" value="@_draftFrom" @onchange="e => (_draftLast, _draftFrom) = (0, (string?)e.Value)" />
+                        to
+                        <input type="date" min="@_oldest" max="@_current" value="@_draftTo" @onchange="e => (_draftLast, _draftTo) = (0, (string?)e.Value)" /></label>
+                    <p class="hint">Trading days ending at @_criteria.Cutoff, @_criteria.Zone: the last n roll with each day; dates stay put.</p>
+                    <div class="buttons">
+                        <button @onclick="ApplyDays">OK</button>
+                        <button @onclick="CloseFilter">Cancel</button>
+                    </div>
+                </div>
+            }
+            else if (_filterOpen == d.Name)
+            {
+                <div class="popup" @onclick:stopPropagation>
+                    <input class="search" placeholder="search @d.Name" @bind="_search" @bind:event="oninput" />
+                    <label class="all"><input type="checkbox" checked="@(_draft.Count == d.Values.Length)" @onchange="e => _draft = (bool)e.Value! ? [.. d.Values] : []" /> (select all)</label>
+                    <div class="list">
+                        @foreach (var v in d.Values.Where(v => v.Contains(_search, StringComparison.OrdinalIgnoreCase)))
+                        {
+                            var value = v;
+                            <label><input type="checkbox" checked="@_draft.Contains(value)" @onchange="e => { if ((bool)e.Value!) _draft.Add(value); else _draft.Remove(value); }" /> @value</label>
+                        }
+                    </div>
+                    @if (d.Name == "counter") { <button class="link" @onclick="() => _draft = [.. Pivot.Stablecoins]">stablecoins</button> }
+                    <div class="buttons">
+                        <button @onclick="() => ApplyFilter(d)">OK</button>
+                        <button @onclick="CloseFilter">Cancel</button>
+                    </div>
+                </div>
+            }
+        </span>;
+
+    /// <summary>
+    ///     A field dropped, where the grid's script saw it land (the page can't see where its fields are): before the field
+    ///     whose left half it's over — or left of the first, the area's name too — or, past the last, at the end.
+    /// </summary>
+    [JSInvokable]
+    public Task DropAt(string area, string? before) => InvokeAsync(async () =>
+    {
+        if (_dragging is { } dragged && IsValue(dragged)) await DropValue(area, before);   // (a value: moved among the values)
+        else DropBefore(area, before);
+        StateHasChanged();
+    });
+
+    /// <summary>A column's ⚙ changed what it shows (the grid's script says): max gross asked for, or not, again.</summary>
+    [JSInvokable]
+    public Task ColumnValuesChanged() => InvokeAsync(ReconsiderAsked);
+
+    /// <summary>
+    ///     Whether the page shows a value the statement answers only when asked — max gross, mark price — among its values, or
+    ///     a column's (its ⚙, for this column layout): a pivot pays for its aggregation only when it's shown.
+    /// </summary>
+    async Task<bool> Shows(string value, string[] columns)
+    {
+        if (_values.Contains(value)) return true;
+        try { return await JS.InvokeAsync<bool>("pivotView.columnsShow", _cts.Token, columns, value); }
+        catch (Exception e) when (e is OperationCanceledException or JSDisconnectedException) { return false; }
+    }
+
+    /// <summary>The criteria, asking for max gross and mark price as the page shows them now — and its values' forms (Show as).</summary>
+    async Task<PivotCriteria> Asked(PivotCriteria criteria) =>
+        criteria with { MaxGross = await Shows("gross", criteria.Columns), Mark = await Shows("mark", criteria.Columns), Extras = ShownValue.Extras(Entries(_values)) };
+
+    /// <summary>Whether criteria ask for another pivot than those: max gross, mark price or Show as asked for, or not.</summary>
+    static bool AsksOther(PivotCriteria asked, PivotCriteria criteria) =>
+        asked.MaxGross != criteria.MaxGross || asked.Mark != criteria.Mark || !asked.Extras.SequenceEqual(criteria.Extras);
+
+    async Task ReconsiderAsked()
+    {
+        if (await Asked(_criteria) is var asked && AsksOther(asked, _criteria)) Change(asked);
+    }
+
+    /// <summary>
+    ///     The dragged value, dropped among the values — before another, or at their end: the grid shows the values in this
+    ///     order under every column (the statement's the same: nothing's asked again). Anywhere else, it stays.
+    /// </summary>
+    async Task DropValue(string area, string? before)
+    {
+        var key = _dragging;
+        (_dragging, _over) = (null, null);
+        if (key is null || key == before || area != "values") return;
+        var order = _order.Where(k => k != key).ToList();
+        order.Insert(before is not null && order.IndexOf(before) is int at and >= 0 ? at : order.Count, key);
+        if (order.SequenceEqual(_order)) return;
+        (_order, _values) = (order, [.. order.Where(_values.Contains)]);
+        await Configure();
+        await SaveValues();
+    }
+
+    /// <summary>The values shown, and every value's order, kept in this browser.</summary>
+    async Task SaveValues()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("pivotView.saveSetting", _cts.Token, ValuesSetting, string.Join(",", _values));
+            await JS.InvokeVoidAsync("pivotView.saveSetting", _cts.Token, OrderSetting, string.Join(",", _order));
+            await JS.InvokeVoidAsync("pivotView.saveSetting", _cts.Token, ShowAsSetting, string.Join(";", _forms.Select(p => $"{p.Key}:{string.Join("+", p.Value)}")));
+        }
+        catch (Exception e) when (e is OperationCanceledException or JSDisconnectedException) { }
+    }
+
+    /// <summary>The dragged field, dropped in an area — before another field there, or at its end.</summary>
+    void DropBefore(string area, string? before)
+    {
+        var name = _dragging;
+        (_dragging, _over) = (null, null);
+        if (name is null || name == before || area == "values" || IsValue(name)) return;   // (a field isn't a value, nor a value a field)
+        var rows = _criteria.Rows.Where(r => r != name).ToList();
+        var columns = _criteria.Columns.Where(c => c != name).ToList();
+        void Insert(List<string> list) => list.Insert(before is not null && list.IndexOf(before) is int at and >= 0 ? at : list.Count, name);
+        if (area == "rows") Insert(rows);
+        else if (area == "columns") Insert(columns);
+        if (rows.Count == 0) { _status = "Rows need a field at least."; return; }
+        if (rows.Count > PivotCriteria.MaxRows || columns.Count > PivotCriteria.MaxColumns)
+        {
+            _status = $"At most {PivotCriteria.MaxRows} fields in rows, and {PivotCriteria.MaxColumns} in columns.";
+            return;
+        }
+        _status = "";
+        Change(_criteria with { Rows = [.. rows], Columns = [.. columns] });
+    }
+
+    void OpenFilter(Dimension d)
+    {
+        (_filterOpen, _search) = (d.Name, "");
+        _draft = [.. _criteria.Kept(d)];
+        if (d.Name != "date") return;
+        // The days a range can pick from: the zone's and cutoff's, as of now — the current one, back to the oldest kept.
+        var days = Pivot.TradingDays(_criteria.Zone, _criteria.Cutoff, DateTime.UtcNow).ToArray();
+        (_current, _oldest) = (days[0].TradingDay, days[^1].TradingDay);
+        (_draftLast, _draftFrom, _draftTo) = (_criteria.LastDays, _criteria.From ?? _current, _criteria.To ?? _current);
+    }
+
+    void ApplyDays()
+    {
+        _filterOpen = null;
+        if (_draftLast > 0) { Change(_criteria with { LastDays = _draftLast, From = null, To = null }); return; }
+        string from = string.CompareOrdinal(_draftFrom, _draftTo) <= 0 ? _draftFrom! : _draftTo!, to = from == _draftFrom ? _draftTo! : _draftFrom!;
+        Change(_criteria with { LastDays = 0, From = from, To = to });
+    }
+
+    /// <summary>
+    ///     Where a trading day ends, where the grand total's column and row go, and the values shown — this browser's
+    ///     settings, kept in its local storage (what each column shows: the grid's own).
+    /// </summary>
+    const string SqlOpenSetting = "pivot.sqlOpen";
+    bool _sqlOpen, _logicalPlan;                                       // the SQL shown (collapsed by default), and which plan
+    PivotProvider.Resolution? _resolution;
+    SortedDictionary<string, string[]>? _bound;                        // what the pivot shown binds: the filters' values, by name                             // its statement's prepared query: how long it took to build or retrieve
+    static string Ms(TimeSpan t) => t.TotalMilliseconds < 10 ? $"{t.TotalMilliseconds:0.##} ms" : $"{t.TotalMilliseconds:N0} ms";
+    const string CutoffSetting = "pivot.dayCutoff", TotalFirstSetting = "pivot.totalFirst", TotalRowFirstSetting = "pivot.totalRowFirst", IncrementalSetting = "pivot.incremental", LowJitterSetting = "pivot.lowJitter", ValuesSetting = "pivot.values", OrderSetting = "pivot.valueOrder", ShowAsSetting = "pivot.showAs", ScaleSetting = "pivot.units";
+    static readonly (string Unit, string Title)[] Scales = [("1", "units"), ("k", "thousands"), ("M", "millions")];
+
+    /// <summary>Whether the pivot shown is in another currency than the one chosen: its pivot not shown yet, or refused.</summary>
+    bool Unshown => _shownCurrency is { } shown && shown != _criteria.ReportingCurrency;
+    string _scale = "k";                                              // the amounts' unit: thousands, unless this browser says otherwise
+
+    /// <summary>
+    ///     The amounts' unit — ones, thousands or millions: how they're shown, not what's asked (the statement's the
+    ///     same).
+    /// </summary>
+    async Task SetScale(ChangeEventArgs e)
+    {
+        if (e.Value is not string unit || !Scales.Any(s => s.Unit == unit)) return;
+        _scale = unit;
+        await Configure();
+        try { await JS.InvokeVoidAsync("pivotView.saveSetting", _cts.Token, ScaleSetting, _scale); }
+        catch (Exception x) when (x is OperationCanceledException or JSDisconnectedException) { }
+    }
+
+
+    /// <summary>The grand total's column first, from its heading's ⚙ (the grid's script calls back).</summary>
+    [JSInvokable]
+    public Task SetTotalFirst(bool first) => InvokeAsync(() => ToggleTotalFirst(new ChangeEventArgs { Value = first }));
+
+    /// <summary>The grand total's row first, from its label's ⚙ (the grid's script calls back).</summary>
+    [JSInvokable]
+    public Task SetTotalRowFirst(bool first) => InvokeAsync(() => ToggleTotalRowFirst(new ChangeEventArgs { Value = first }));
+
+    /// <summary>
+    ///     What the grid shown has collapsed — row and column groups (by their labels), PnL to one — from its script:
+    ///     kept in the address.
+    /// </summary>
+    [JSInvokable]
+    public Task SetCollapsed(string[] rows, string[] columns, bool pnl) => InvokeAsync(() => { _collapsed = new Collapsed(rows, columns, pnl); return RememberLayout(); });
+
+    /// <summary>
+    ///     The grand total's column first (pinned beside the row labels), or last: the page's alone — the statement's the
+    ///     same.
+    /// </summary>
+    async Task ToggleTotalFirst(ChangeEventArgs e)
+    {
+        _totalFirst = e.Value is true;
+        await Configure();
+        try { await JS.InvokeVoidAsync("pivotView.saveSetting", _cts.Token, TotalFirstSetting, _totalFirst ? "1" : "0"); }
+        catch (Exception x) when (x is OperationCanceledException or JSDisconnectedException) { }
+    }
+
+    /// <summary>The grand total's row first (pinned below the column headings), or last: the page's alone too.</summary>
+    async Task ToggleTotalRowFirst(ChangeEventArgs e)
+    {
+        _totalRowFirst = e.Value is true;
+        await Configure();
+        try { await JS.InvokeVoidAsync("pivotView.saveSetting", _cts.Token, TotalRowFirstSetting, _totalRowFirst ? "1" : "0"); }
+        catch (Exception x) when (x is OperationCanceledException or JSDisconnectedException) { }
+    }
+
+    /// <summary>
+    ///     The pivot's view maintained incrementally (experimental), or recomputed: asked for again — another pivot, the one
+    ///     pages asking the same share — and remembered in this browser. A statement of your own: when you next run it.
+    /// </summary>
+    async Task ToggleIncremental(ChangeEventArgs e)
+    {
+        _incremental = e.Value is true;
+        if (!_editing) Schedule(0);
+        try { await JS.InvokeVoidAsync("pivotView.saveSetting", _cts.Token, IncrementalSetting, _incremental ? "1" : "0"); }
+        catch (Exception x) when (x is OperationCanceledException or JSDisconnectedException) { }
+    }
+
+    /// <summary>
+    ///     Low jitter on or off (IVM's: a new plan built beside the one the view runs, or computed at the next update) — a
+    ///     pivot
+    ///     of its own, which pages asking the same share — and remembered in this browser. A statement of your own: when you
+    ///     next run it.
+    /// </summary>
+    async Task ToggleLowJitter(ChangeEventArgs e)
+    {
+        _lowJitter = e.Value is true;
+        if (!_editing) Schedule(0);
+        try { await JS.InvokeVoidAsync("pivotView.saveSetting", _cts.Token, LowJitterSetting, _lowJitter ? "1" : "0"); }
+        catch (Exception x) when (x is OperationCanceledException or JSDisconnectedException) { }
+    }
+
+    void SetCutoff(ChangeEventArgs e) => SetDayEnd(_criteria.Zone, e.Value as string ?? "00:00");
+
+    void SetZone(ChangeEventArgs e) => SetDayEnd(e.Value as string ?? "UTC", _criteria.Cutoff);
+
+    void SetDayEnd(string zone, string cutoff)
+    {
+        // A range of dates was of the old reckoning: back to the current day.
+        Change(_criteria with { Zone = zone, Cutoff = cutoff, LastDays = _criteria.LastDays > 0 ? _criteria.LastDays : 1, From = null, To = null });
+        _ = SaveDayEnd(zone, cutoff);
+    }
+
+    async Task SaveDayEnd(string zone, string cutoff)
+    {
+        try { await JS.InvokeVoidAsync("pivotView.saveSetting", _cts.Token, CutoffSetting, $"{cutoff} {zone}"); }
+        catch (Exception e) when (e is OperationCanceledException or JSDisconnectedException) { }
+    }
+
+    /// <summary>The SQL shown or not — remembered in this browser.</summary>
+    async Task ToggleSql()
+    {
+        _sqlOpen = !_sqlOpen;
+        try { await JS.InvokeVoidAsync("pivotView.saveSetting", _cts.Token, SqlOpenSetting, _sqlOpen ? "1" : "0"); }
+        catch (Exception e) when (e is OperationCanceledException or JSDisconnectedException) { }
+    }
+
+    /// <summary>
+    ///     This browser's settings, if it has them: its day end ("17:00 America/New_York"), the totals' places, the
+    ///     values shown, how views are maintained.
+    /// </summary>
+    async Task LoadSettings()
+    {
+        try
+        {
+            _totalFirst = await JS.InvokeAsync<string?>("pivotView.loadSetting", _cts.Token, TotalFirstSetting) == "1";
+            _totalRowFirst = await JS.InvokeAsync<string?>("pivotView.loadSetting", _cts.Token, TotalRowFirstSetting) == "1";
+            _sqlOpen = await JS.InvokeAsync<string?>("pivotView.loadSetting", _cts.Token, SqlOpenSetting) == "1";
+            _incremental = await JS.InvokeAsync<string?>("pivotView.loadSetting", _cts.Token, IncrementalSetting) != "0";   // (on, unless turned off)
+            _lowJitter = await JS.InvokeAsync<string?>("pivotView.loadSetting", _cts.Token, LowJitterSetting) != "0";       // (on, unless turned off)
+            if (await JS.InvokeAsync<string?>("pivotView.loadSetting", _cts.Token, ScaleSetting) is { } unit && Scales.Any(s => s.Unit == unit)) _scale = unit;
+            if (await JS.InvokeAsync<string?>("pivotView.loadSetting", _cts.Token, OrderSetting) is { } order
+                && order.Split(',').Where(IsValue).Distinct().ToList() is { Count: > 0 } ordered)
+                _order = [.. ordered, .. ValueFields.Select(v => v.Key).Where(k => !ordered.Contains(k))];   // (a value since added: last)
+            if (await JS.InvokeAsync<string?>("pivotView.loadSetting", _cts.Token, ValuesSetting) is { } values
+                && _order.Where(values.Split(',').Contains).ToList() is { Count: > 0 } kept)
+                _values = kept;
+            if (await JS.InvokeAsync<string?>("pivotView.loadSetting", _cts.Token, ShowAsSetting) is { } showAs)   // (value:form+form;…)
+                _forms = showAs.Split(';').Select(p => p.Split(':')).Where(p => p.Length == 2 && IsValue(p[0]) && HasForms(p[0]))
+                    .Select(p => (Value: p[0], Forms: Forms.Select(f => f.Form).Where(f => p[1].Split('+').Contains(f) && Offered(p[0], f)).ToArray()))
+                    .Where(p => p.Forms is { Length: > 0 } and not ["value"]).ToDictionary(p => p.Value, p => p.Forms);
+            if (await JS.InvokeAsync<string?>("pivotView.loadSetting", _cts.Token, CutoffSetting) is { } saved
+                && saved.Split(' ', 2) is [var cutoff, var zone] && Pivot.Cutoffs.Contains(cutoff) && TimeZones.Names.Contains(zone))
+                _criteria = _criteria with { Zone = zone, Cutoff = cutoff };
+        }
+        catch (Exception e) when (e is OperationCanceledException or JSDisconnectedException) { }
+    }
+
+    void CloseFilter() => (_filterOpen, _sortOpen, _showAsOpen) = (null, null, null);
+
+    void ApplyFilter(Dimension d)
+    {
+        _filterOpen = null;
+        Change(_criteria with { Filters = new Dictionary<string, string[]>(_criteria.Filters) { [d.Name] = [.. d.Values.Where(_draft.Contains)] } });
+    }
+
+    /// <summary>A field's Σ: what its totals are — the totals across it — and whether they're shown.</summary>
+    string TotalsTitle(Dimension d, string area, bool shown)
+    {
+        var fields = area == "rows" ? _criteria.Rows : _criteria.Columns;
+        var at = Array.IndexOf(fields, d.Name);
+        var which = at == 0 ? (area == "rows" ? "the grand total row" : "the Total column")
+            : area == "rows" ? $"each {fields[at - 1]}'s total row" : $"each {fields[at - 1]}'s total column";
+        return $"totals across {d.Name} — {which}: {(shown ? "shown (click to hide)" : "hidden (click to show)")}";
+    }
+
+    /// <summary>A field's totals shown or not: in the statement — a GROUP BY for them, or none.</summary>
+    void ToggleTotals(Dimension d) => Change(_criteria with
+    {
+        NoTotals = _criteria.NoTotals.Contains(d.Name) ? [.. _criteria.NoTotals.Where(n => n != d.Name)] : [.. _criteria.NoTotals, d.Name]
+    });
+
+    // A field's order: its labels, A to Z or Z to A — or values, as a spreadsheet's pivot sorts by one, then by others
+    // where they tie (an Excel sort's levels): up to three, each its direction, its labels settling the rest. The page's
+    // alone: nothing asked of the server.
+    public readonly record struct SortKey(string By, bool Desc);
+
+    /// <summary>
+    ///     What a grid has collapsed: row and column groups, each by its label (a nested one's, its path), and PnL to one
+    ///     column.
+    /// </summary>
+    public sealed record Collapsed(string[] Rows, string[] Columns, bool PnL)
+    {
+        public static readonly Collapsed None = new([], [], false);
+    }
+
+    const string Labels = "label";
+    const int MaxSortKeys = 3;
+    static readonly (string Key, string Title)[] SortValues = [.. new[] { Pivot.Position, Pivot.Mark, Pivot.Notional, Pivot.MaxGross, Pivot.PosPnL, Pivot.Realized, Pivot.Unrealized, Pivot.Balance, Pivot.Volume, Pivot.Trades }.Select(m => (m.Key, m.Title))];
+
+    static string SortValueTitle(string key) => SortValues.First(v => v.Key == key).Title;
+
+    void OpenSort(Dimension d) => (_sortOpen, _filterOpen) = (_sortOpen == d.Name ? null : d.Name, null);
+
+    /// <summary>
+    ///     A field's order in force: as chosen — or, by values it can't be sorted by now, its labels (the choice kept
+    ///     till it can).
+    /// </summary>
+    List<SortKey> SortKeys(Dimension d, string area)
+        => _sort.TryGetValue(d.Name, out var keys) && keys.Count > 0 && (keys[0].By == Labels || ByValueNeeds(d, area) is null) ? keys : [new SortKey(Labels, false)];
+
+    string SortTitle(Dimension d, List<SortKey> keys)
+        => string.Join(", then ", keys.Select(k => $"{(k.By == Labels ? $"by {d.Name}" : $"by {SortValueTitle(k.By)}")} {(k.Desc ? "descending" : "ascending")}"));
+
+    void SetSort(Dimension d, List<SortKey> keys)
+    {
+        _sort[d.Name] = keys;
+        _ = Configure();
+    }
+
+    /// <summary>
+    ///     A key chosen: its labels (the values after it let go), or a value — in its direction, a value from labels
+    ///     largest first.
+    /// </summary>
+    void SetSortKey(Dimension d, string area, int at, string by)
+    {
+        var keys = new List<SortKey>(SortKeys(d, area));
+        if (by == Labels) keys = [new SortKey(Labels, keys[0].By == Labels && keys[0].Desc)];
+        else keys[at] = keys[at].By == Labels ? new SortKey(by, true) : keys[at] with { By = by };
+        SetSort(d, keys);
+    }
+
+    void FlipSortKey(Dimension d, string area, int at)
+    {
+        var keys = new List<SortKey>(SortKeys(d, area));
+        keys[at] = keys[at] with { Desc = !keys[at].Desc };
+        SetSort(d, keys);
+    }
+
+    void RemoveSortKey(Dimension d, string area, int at)
+    {
+        var keys = new List<SortKey>(SortKeys(d, area));
+        keys.RemoveAt(at);
+        SetSort(d, keys);
+    }
+
+    /// <summary>
+    ///     Then by the next value not yet sorted by (realized and unrealized PnL first: realized ties at zero for every
+    ///     position not traded today), largest first.
+    /// </summary>
+    void AddSortKey(Dimension d, string area)
+    {
+        var keys = new List<SortKey>(SortKeys(d, area));
+        string[] preferred = ["realized", "unrealized", "pnl", "position", "notional", "gross", "balance", "volume", "trades", "mark"];
+        if (preferred.FirstOrDefault(v => !keys.Any(k => k.By == v)) is { } next) keys.Add(new SortKey(next, true));
+        SetSort(d, keys);
+    }
+
+    /// <summary>
+    ///     Why a field can't be sorted by a value now, or null if it can: each of its groups needs a figure — its total (the
+    ///     next field's Σ), unless it's the innermost — in the Total column (rows) or row (columns): the outermost field's Σ
+    ///     across the way. The grid sums nothing: a total the statement didn't make isn't there to sort by.
+    /// </summary>
+    string? ByValueNeeds(Dimension d, string area)
+    {
+        var (along, across) = area == "rows" ? (_criteria.Rows, _criteria.Columns) : (_criteria.Columns, _criteria.Rows);
+        var at = Array.IndexOf(along, d.Name);
+        if (at + 1 < along.Length && _criteria.NoTotals.Contains(along[at + 1]))
+            return $"By a value needs each {d.Name}'s total: {along[at + 1]}'s Σ.";
+        if (across.Length > 0 && _criteria.NoTotals.Contains(across[0]))
+            return $"By a value needs the Total {(area == "rows" ? "column" : "row")}: {across[0]}'s Σ.";
+        return null;
+    }
+
+    void OpenShowAs(string key) => (_showAsOpen, _filterOpen, _sortOpen) = (_showAsOpen == key ? null : key, null, null);
+
+    /// <summary>
+    ///     A value's form ticked, or not — never none: the value shown (ticking asks for it), its columns as ticked, in
+    ///     <see cref="Forms" />' order. Asked of the data provider: a pivot whose cells carry it (till it's in, "…").
+    /// </summary>
+    async Task ToggleForm(string key, string form)
+    {
+        var forms = FormsOf(key);
+        string[] next = [.. Forms.Select(f => f.Form).Where(f => f == form ? !forms.Contains(f) : forms.Contains(f))];
+        if (next.Length == 0) return;
+        if (next is ["value"]) _forms.Remove(key); else _forms[key] = next;
+        if (!_values.Contains(key)) _values = [.. _order.Where(k => k == key || _values.Contains(k))];   // (in its place in the order)
+        await Configure();
+        await SaveValues();
+        await ReconsiderAsked();                                        // (shown now: asked for, if the statement answers it only so)
+    }
+
+    async Task ToggleValue(string key)
+    {
+        if (_values.Contains(key)) { if (_values.Count > 1) { _values.Remove(key); _forms.Remove(key); } }   // (hidden: its Show as forgotten, as a spreadsheet's pivot forgets a field taken out)
+        else _values = [.. _order.Where(k => k == key || _values.Contains(k))];   // (in its place in the order)
+        await Configure();
+        await SaveValues();
+        await ReconsiderAsked();                                        // (shown now, or no longer: asked for, or not)
+    }
+
+    void Change(PivotCriteria next)
+    {
+        _criteria = next;
+        if (!_editing) Schedule();
+    }
+
+    void SetReportingCurrency(ChangeEventArgs e) => Change(_criteria with { ReportingCurrency = e.Value as string ?? "USD" });
+
+    void StartEditing()
+    {
+        _sql = _criteria.ToSql();
+        _editing = true;
+    }
+
+    void StopEditing()
+    {
+        _editing = false;
+        Schedule();
+    }
+
+    Task ApplySql() => Apply();
+
+    /// <summary>A change, applied once the fields settle for a moment (each one is a new pivot: a new subscription).</summary>
+    void Schedule(int delayMs = 300)
+    {
+        _pending?.Cancel();
+        var mine = _pending = new CancellationTokenSource();
+        _ = Task.Delay(delayMs, mine.Token).ContinueWith(t => { if (!t.IsCanceled) _ = InvokeAsync(Apply); }, TaskScheduler.Default);
+    }
+
+    /// <summary>
+    ///     The statement — written from the fields, or yours — subscribed to through the "pivot" service: step 1 (the
+    ///     provider prepares and checks it, or refuses it, saying why), then the view activates it (step 2), replacing the
+    ///     pivot shown only once the new one is bound (make before break). Refused, the pivot shown stays.
+    /// </summary>
+    async Task Apply()
+    {
+        if (!_editing && await Asked(_criteria) is var shown && AsksOther(shown, _criteria)) _criteria = shown;   // (a new column layout: its ⚙'s; Show as)
+        var sql = _editing ? _sql : _criteria.ToSql();
+        _ = RememberLayout();
+        var bindings = _criteria.Bindings();                          // (the filters' values: bound, your statement's too)
+        var extras = ExtrasOf(_criteria);                             // (what its cells carry besides: the provider's Show as)
+        string[] entries = [.. extras.Select(e => e.ToString())];
+        var asked = PivotCriteria.Parameters(sql, bindings, incremental: _incremental, lowJitter: _lowJitter, extras: entries);
+        if (asked == _applied && _refusal is null) return;          // (that one's shown)
+        string? correlation = null;
+        try
+        {
+            // The grid awaits the new pivot's first answer by this id (marked pending meanwhile: the one shown streams on);
+            // the provider hands it back once the page has it — then the grid swaps, never empty.
+            correlation = await JS.InvokeAsync<string>("pivotView.prepare", _cts.Token, _grid);
+            var tap = await Publisher.SubscribeAsync(Outlet, "pivot", PivotCriteria.Parameters(sql, bindings, correlation, _incremental, _lowJitter, entries), cancellationToken: _cts.Token);
+            if (tap is null) { _status = "refused (no reason given)"; await Cancel(correlation); return; }
+            _unavailable = 0;
+            (_refusal, _status, _applied, _topic, _resolution, _bound) = (null, "", asked, tap.Topic, Provider.TakeResolution(correlation), bindings);
+            // Its levels and its amounts' currency, for the grid: the fields' — or, a statement of your own, unknown (unless it's theirs).
+            var theirs = !_editing || sql == _criteria.ToSql();
+            _ = Hold(tap, asked, correlation, theirs ? _criteria : null, extras);
+        }
+        catch (SubscriptionRefusedException e) { (_refusal, _status) = (e.Refusal, ""); await Cancel(correlation); }   // (the page's console logs it too: the router sent it)
+        catch (ServiceUnavailableException)
+        {
+            // Not up yet — the app starting (its provider loading ChalkQL and the brokerage), or a provider restarting: asked
+            // again by itself, a quarter of a second on, then longer (2 s at most), till it is — unless a change comes first.
+            _status = "pivot: starting — subscribing again shortly";
+            await Cancel(correlation);
+            Schedule(Math.Min(2000, 250 << Math.Min(_unavailable++, 3)));
+        }
+        catch (Exception e) when (e is OperationCanceledException or JSDisconnectedException) { }
+        finally { await InvokeAsync(StateHasChanged); }
+    }
+
+    async Task Cancel(string? correlation)
+    {
+        try { await JS.InvokeVoidAsync("pivotView.cancel", _cts.Token, _grid, correlation); }
+        catch (Exception e) when (e is OperationCanceledException or JSDisconnectedException) { }
+    }
+
+    /// <summary>
+    ///     One pivot: attached to the grid — which swaps it in once its first answer is in front of the page (the rendezvous)
+    ///     — then the one shown before let go, and this one held till replaced. If it faults, subscribed again once it
+    ///     recovers. A later change asked for before it was shown supersedes it: let go unseen.
+    /// </summary>
+    async Task Hold(Tap tap, string parameters, string? correlation, PivotCriteria? criteria, ShownValue[] extras)
+    {
+        var mine = new CancellationTokenSource();
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(mine.Token, _cts.Token);
+        var ct = linked.Token;
+        try
+        {
+            while (true)
+            {
+                using (tap)
+                {
+                    var shown = await JS.InvokeAsync<string>("pivotView.attachGrid", ct, tap.Binding, _grid, _replica, tap.Topic, Options(criteria, extras: extras), correlation);
+                    if (shown.StartsWith("failed"))                      // before it was shown: the pivot shown kept, the reason said —
+                    {
+                        // and its stream faulted (its table's checksum, say: the provider recovers it), asked for again once
+                        // it has recovered — or its statement wouldn't run (failed: SourceFailed), asked again only when
+                        // something changes.
+                        var unshown = tap.Completion.IsCompleted ? tap.Completion.Result : null;
+                        var recovers = unshown is { Code: not FaultCode.SourceFailed };
+                        (_status, _applied) = ($"{tap.Topic}: {unshown?.Message ?? shown[8..]}{(recovers ? " — asking again once it recovers" : "")}", null);
+                        await InvokeAsync(StateHasChanged);
+                        if (!recovers) return;
+                        while (Outlet.FaultOf(tap.Source) is not null) await Task.Delay(500, ct);
+                        await Task.Delay(500, ct);                       // (not at once: a fault each time would spin)
+                        await InvokeAsync(Apply);                        // (whatever's asked for now: its first answer awaited, as any)
+                        return;
+                    }
+                    if (shown != "shown") return;                        // superseded before it was shown: let go
+                    Interlocked.Exchange(ref _shown, mine)?.Cancel();     // shown: the one before it goes
+                    if (_shownCurrency != criteria?.ReportingCurrency)   // (its currency: the note's, chosen, in ink once it's shown)
+                    {
+                        _shownCurrency = criteria?.ReportingCurrency;
+                        await InvokeAsync(StateHasChanged);
+                    }
+                    correlation = null;                                  // (subscribed again after a fault: shown at once)
+                    var fault = await tap.Completion.WaitAsync(ct);
+                    if (fault is null) return;
+                    _status = $"{tap.Topic}: {fault.Message ?? fault.Code.ToString()} — subscribing again once it recovers";
+                    await InvokeAsync(StateHasChanged);
+                    while (Outlet.FaultOf(tap.Source) is not null) await Task.Delay(500, ct);
+                }
+                Tap? again;
+                try { again = await Publisher.SubscribeAsync(Outlet, "pivot", parameters, cancellationToken: ct); }
+                catch (Exception e) when (e is SubscriptionRefusedException or ServiceUnavailableException) { await Task.Delay(1000, ct); continue; }
+                if (again is null) return;
+                (tap, _status) = (again, "");
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch (Exception e) when (e is OperationCanceledException or JSDisconnectedException) { }
+    }
+
+    /// <summary>
+    ///     The grid's options: the values shown, each level's sort (by its labels or a value), the total's place — and,
+    ///     attaching a pivot, its levels, its amounts' currency and what its cells carry besides, in their order (the view's
+    ///     own: changing what's shown leaves them).
+    /// </summary>
+    Dictionary<string, object?> Options(PivotCriteria? criteria = null, bool attaching = true, ShownValue[]? extras = null)
+    {
+        // Each row and column field's order in force: by values only where the totals they need are there.
+        var sort = _criteria.Rows.Select(r => (Name: r, Area: "rows")).Concat(_criteria.Columns.Select(c => (Name: c, Area: "columns")))
+            .ToDictionary(f => f.Name, f => SortKeys(Find(f.Name), f.Area).ToArray());
+        var options = new Dictionary<string, object?> { ["values"] = _values.ToArray(), ["order"] = _order.ToArray(), ["showAs"] = _forms, ["sort"] = sort, ["totalFirst"] = _totalFirst, ["totalRowFirst"] = _totalRowFirst, ["scale"] = _scale, ["fields"] = Fields };
+        if (attaching)
+        {
+            options["rows"] = criteria?.Rows ?? Array.Empty<string>();
+            options["columns"] = criteria?.Columns ?? Array.Empty<string>();
+            options["currency"] = criteria?.ReportingCurrency;
+            options["extras"] = (extras ?? []).Select(e => new { entry = e.ToString(), places = e.Places }).ToArray();   // (each an i64 after its figures)
+            options["collapsed"] = new { rows = _collapsed.Rows, columns = _collapsed.Columns, pnl = _collapsed.PnL };   // (the grid's first takes it: the address's)
+        }
+        return options;
+    }
+
+    async Task Configure()
+    {
+        try { await JS.InvokeVoidAsync("pivotView.configure", _cts.Token, _grid, Options(attaching: false)); }
+        catch (Exception e) when (e is OperationCanceledException or JSDisconnectedException) { }
+        await RememberLayout();
+    }
+
+    // The layout in the address — a link to the pivot shown, in ASP.NET's way with a list (its key repeated):
+    //   ?rows=client&rows=instrument&columns=leg the areas' fields, in order (rows given, no columns: none)
+    //   ?values=position&values=notional         the values shown, in order (as dragged: the rest keep their places)
+    //   ?leg=risk&client=Acorn%20Fund            a field's kept values (all kept: absent)
+    //   ?days=5, or ?from=2026-10-09&to=2026-10-13   the days (the current one: absent)
+    //   ?sort=client:gross:desc                  a field's order, its keys in turn ("label": by its labels)
+    //   ?noTotals=leg                            a field's totals not shown (its Σ off)
+    //   ?totalColumn=first, ?totalRow=first      the grand totals' places
+    //   ?collapsedColumns=risk&collapsedRows=…   groups collapsed, each by its label (a nested one's: its path, "hedge · Binance")
+    //   ?collapsedPnl=true                       Pos PnL as one column (absent: realized and unrealized)
+    //   ?currency=EUR                            the reporting currency (US dollars: absent)
+    // Absent, the default — or, for the values and the totals' places, this browser's settings; given, over them (not kept).
+    // (What's collapsed is the grid's: its script says, and it takes the address's when the page opens.)
+    // The address follows the layout as it changes (in place: no navigation, nor history), so it's always a link to it.
+
+    /// <summary>
+    ///     Perspectives to start from: a name, what it shows, and its layout's address (from the criteria in force: their
+    ///     currency).
+    /// </summary>
+    static readonly (string Name, string Title, Func<PivotCriteria, Dictionary<string, object?>> Layout)[] Perspectives =
+    [
+        ("Risk Warehouse", "Risk the house warehouses: its clients' risk net of its hedges, by underlier and instrument (each underlier's total its asset's net position; instruments don't net one another), the hedges by venue (the Total column first), in units and dollars",
+            now => Layout(new PivotCriteria { Rows = ["underlier", "instrument"], Columns = ["leg", "venue"], ReportingCurrency = now.ReportingCurrency }, ["position", "notional"],
+                new Dictionary<string, List<SortKey>> { ["instrument"] = [new SortKey("notional", true)], ["leg"] = [new SortKey(Labels, true)] }, totalFirst: true, totalRowFirst: null,
+                new Collapsed([], ["risk"], false))),
+        ("Counterparty Margin", "Max gross by client — their margin use — with notional, PnL and balance: clients only, the most used first",
+            now => Layout(new PivotCriteria { Rows = ["client"], Filters = new Dictionary<string, string[]> { ["leg"] = ["risk"] }, ReportingCurrency = now.ReportingCurrency }, ["gross", "notional", "pnl", "balance"],
+                new Dictionary<string, List<SortKey>> { ["client"] = [new SortKey("gross", true)] }, totalFirst: null, totalRowFirst: null, Collapsed.None)),
+        ("Client Activity", "Market share by dealt volume: each region's and client's share of the clients' trading, date by date over the last 5 days — the most active first (the totals across the dates last)",
+            now => Layout(new PivotCriteria { Rows = ["region", "client"], Columns = ["date"], Filters = new Dictionary<string, string[]> { ["leg"] = ["risk"] }, LastDays = 5, ReportingCurrency = now.ReportingCurrency },
+                ["volume", "volume.column"], new Dictionary<string, List<SortKey>> { ["region"] = [new SortKey("volume", true)], ["client"] = [new SortKey("volume", true)] }, totalFirst: false, totalRowFirst: null, Collapsed.None))
+    ];
+
+    /// <summary>A layout's query parameters: every one the layout has (null: absent — removed from the address).</summary>
+    static Dictionary<string, object?> Layout(PivotCriteria c, IReadOnlyList<string> values, IReadOnlyDictionary<string, List<SortKey>> sort, bool? totalFirst, bool? totalRowFirst, Collapsed collapsed)
+    {
+        var areas = c.Rows.Concat(c.Columns).ToArray();
+        var query = new Dictionary<string, object?>
+        {
+            ["rows"] = c.Rows, ["columns"] = c.Columns.Length > 0 ? c.Columns : null, ["values"] = values.Where(e => EntryOf(e) is not null).Distinct().ToArray(),   // (in the grid's order: as it shows them, each value's forms in turn)
+            ["days"] = c.LastDays > 1 ? c.LastDays : null, ["from"] = c.LastDays == 0 ? c.From : null, ["to"] = c.LastDays == 0 ? c.To : null,
+            ["sort"] = areas.Where(f => sort.TryGetValue(f, out var keys) && keys is not [{ By: Labels, Desc: false }] && keys.Count > 0)
+                .SelectMany(f => sort[f].Select(k => $"{f}:{k.By}:{(k.Desc ? "desc" : "asc")}")).ToArray() is { Length: > 0 } sorted ? sorted : null,
+            ["noTotals"] = c.NoTotals.Length > 0 ? c.NoTotals : null,
+            ["totalColumn"] = totalFirst is { } first ? (first ? "first" : "last") : null, ["totalRow"] = totalRowFirst is { } rowFirst ? (rowFirst ? "first" : "last") : null,
+            ["currency"] = c.ReportingCurrency != "USD" ? c.ReportingCurrency : null,
+            ["collapsedRows"] = collapsed.Rows.Length > 0 ? collapsed.Rows : null, ["collapsedColumns"] = collapsed.Columns.Length > 0 ? collapsed.Columns : null,
+            ["collapsedPnl"] = collapsed.PnL ? "true" : null
+        };
+        foreach (var d in Pivot.Dimensions.Where(d => d.Name != "date"))
+            query[d.Name] = c.Kept(d) is var kept && kept.Length != d.Values.Length ? kept : null;
+        return query;
+    }
+
+    /// <summary>
+    ///     Whether a perspective's link is to the pivot shown: its fields, filters, days, values and sort as the link has them
+    ///     — what's collapsed, and the totals' places, aside (looking at it otherwise: still it). A statement of your own:
+    ///     none.
+    /// </summary>
+    bool Shows(Dictionary<string, object?> link)
+    {
+        if (_editing) return false;
+        var shown = Layout(_criteria, [.. Entries(_values)], _sort, _totalFirst, _totalRowFirst, _collapsed);
+        return link.All(p => Aside.Contains(p.Key) || Text(p.Value) == Text(shown.GetValueOrDefault(p.Key)));
+        static string? Text(object? value) => value switch
+        {
+            null => null,
+            string s => s,
+            IEnumerable<string> list => string.Join('\n', list),
+            _ => Convert.ToString(value, CultureInfo.InvariantCulture)
+        };
+    }
+
+    static readonly string[] Aside = ["totalColumn", "totalRow", "collapsedRows", "collapsedColumns", "collapsedPnl"];
+
+    /// <summary>The address kept to the layout shown (in place: the browser's history untouched).</summary>
+    async Task RememberLayout()
+    {
+        if (!_interactive) return;
+        var shown = Layout(_criteria, [.. Entries(_values)], _sort, _totalFirst, _totalRowFirst, _collapsed);
+        try { await JS.InvokeVoidAsync("pivotView.replaceAddress", _cts.Token, Nav.GetUriWithQueryParameters(shown)); }
+        catch (Exception e) when (e is OperationCanceledException or JSDisconnectedException) { }
+    }
+
+    /// <summary>The address's layout, if it has one, over this browser's settings (this time: not kept).</summary>
+    void ReadLayout()
+    {
+        var query = QueryHelpers.ParseQuery(new Uri(Nav.Uri).Query);
+        string[] Get(string key) => query.TryGetValue(key, out var v) ? [.. v.Where(s => !string.IsNullOrWhiteSpace(s)).Select(s => s!.Trim())] : [];
+        static bool IsField(string name) => Pivot.Dimensions.Any(d => d.Name == name);
+        _criteria = PivotCriteria.FromQuery(query, _criteria);
+        if (Get("values").Select(EntryOf).OfType<(string Value, string Form)>().Distinct().ToList() is { Count: > 0 } entries)
+        {
+            var values = entries.Select(e => e.Value).Distinct().ToList();
+            (_order, _values) = (Placed(_order, values), values);       // (in its order: the rest keep their places)
+            foreach (var v in values)                                   // (each as the address shows it)
+                if (Forms.Select(f => f.Form).Where(f => entries.Contains((v, f))).ToArray() is var forms && forms is not ["value"]) _forms[v] = forms;
+                else _forms.Remove(v);
+        }
+        foreach (var hidden in _forms.Keys.Where(v => !_values.Contains(v)).ToList()) _forms.Remove(hidden);   // (a value hidden has no Show as)
+        foreach (var group in Get("sort").Select(s => s.Split(':')).Where(p => p.Length == 3 && IsField(p[0]) && (p[1] == Labels || SortValues.Any(v => v.Key == p[1])) && p[2] is "asc" or "desc").GroupBy(p => p[0]))
+        {
+            var keys = group.Select(p => new SortKey(p[1], p[2] == "desc")).Take(MaxSortKeys).ToList();
+            _sort[group.Key] = keys[0].By == Labels ? [keys[0]] : [.. keys.Where(k => k.By != Labels)];
+        }
+        if (Get("totalColumn").FirstOrDefault() is ("first" or "last") and var column) _totalFirst = column == "first";
+        if (Get("totalRow").FirstOrDefault() is ("first" or "last") and var row) _totalRowFirst = row == "first";
+        _collapsed = new Collapsed([.. Get("collapsedRows").Distinct()], [.. Get("collapsedColumns").Distinct()], bool.TryParse(Get("collapsedPnl").FirstOrDefault(), out var pnl) && pnl);
+    }
+
+    /// <summary>The provider's stats: tapped directly (published by it, not through the service).</summary>
+    async Task KeepStats()
+    {
+        var ct = _cts.Token;
+        try
+        {
+            while (true)
+            {
+                using var tap = Outlet.Tap(Provider.Stats, "pivot-stats", Pivot.Policy);
+                await JS.InvokeVoidAsync("pivotView.attachStats", ct, tap.Binding, _stats);
+                var fault = await tap.Completion.WaitAsync(ct);
+                if (fault is null) return;
+                while (Outlet.FaultOf(Provider.Stats) is not null) await Task.Delay(250, ct);
+            }
+        }
+        catch (Exception e) when (e is OperationCanceledException or JSDisconnectedException) { }
+    }
+
+    /// <summary>The house's drawdown: tapped directly, as the stats are (the provider runs it while someone taps it).</summary>
+    async Task KeepDrawdown()
+    {
+        var ct = _cts.Token;
+        try
+        {
+            while (true)
+            {
+                using var tap = Outlet.Tap(Provider.HouseDrawdown, "house-drawdown", Pivot.Policy);
+                await JS.InvokeVoidAsync("pivotView.attachDrawdown", ct, tap.Binding, _drawdownPanel);
+                var fault = await tap.Completion.WaitAsync(ct);
+                if (fault is null) return;
+                while (Outlet.FaultOf(Provider.HouseDrawdown) is not null) await Task.Delay(250, ct);
+            }
+        }
+        catch (Exception e) when (e is OperationCanceledException or JSDisconnectedException) { }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        _cts.Cancel();
+        _self?.Dispose();
+        if (!_interactive) return;                                    // prerendered: no view to detach
+        try { await JS.InvokeVoidAsync("pivotView.detach", _grid, _stats, _drawdownPanel); }
+        catch (JSDisconnectedException) { }
+    }
+}

@@ -1,0 +1,7 @@
+<Project>
+    <!-- Not published: only the libraries under src/ are packages. -->
+    <PropertyGroup>
+        <IsPackable>false</IsPackable>
+        <WarnOnPackingNonPackableProject>false</WarnOnPackingNonPackableProject>
+    </PropertyGroup>
+</Project>

@@ -1,0 +1,1341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width"/>
+    <base href="/"/>
+    <title>Live positions</title>
+    <style>
+        :root {
+            --ink: #222;
+            --muted: #777;
+            --rule: #e6e6e6;
+            --paper: #fff;
+            --panel: #f7f7f5;
+            --accent: 40, 120, 200;
+            --up: rgba(0, 150, 105, .16);
+            --down: rgba(200, 50, 50, .14);
+            --warn: #8a5a00;
+            --warn-bg: #fff6d6;
+            --total-ink: rgba(80, 100, 130, .045);
+            --fixed: #f4f6f9;
+            --fixed-cell: #f9fafc;
+            --chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5' viewBox='0 0 8 5'%3E%3Cpath d='M.6.6 4 4 7.4.6' fill='none' stroke='%23777' stroke-width='1.2'/%3E%3C/svg%3E")
+        }
+
+        @@media (prefers-color-scheme: dark) {
+            :root {
+                --ink: #ddd;
+                --muted: #8a8a8a;
+                --rule: #2c2c2c;
+                --paper: #161616;
+                --panel: #1d1d1d;
+                --accent: 90, 160, 240;
+                --up: rgba(60, 200, 150, .16);
+                --down: rgba(230, 90, 90, .15);
+                --warn: #f3d77a;
+                --warn-bg: #3a2f0b;
+                --total-ink: rgba(150, 175, 210, .065);
+                --fixed: #1a1c20;
+                --fixed-cell: #18191c;
+                --chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5' viewBox='0 0 8 5'%3E%3Cpath d='M.6.6 4 4 7.4.6' fill='none' stroke='%238a8a8a' stroke-width='1.2'/%3E%3C/svg%3E")
+            }
+        }
+
+        body {
+            font: 14px system-ui, sans-serif;
+            margin: 1.5rem 16px;
+            color: var(--ink);
+            background: var(--paper)
+        }
+
+        p.perspectives {
+            margin: -4px 0 10px;
+            font-size: 13px;
+            color: var(--muted)
+        }
+
+        p.perspectives a {
+            color: rgb(var(--accent))
+        }
+
+        /* (layouts to start from, under the lede) */
+        p.perspectives a.shown {
+            color: var(--ink);
+            font-weight: 600;
+            text-decoration: none;
+            background: rgba(var(--accent), .12);
+            box-shadow: 0 0 0 3px rgba(var(--accent), .12);
+            border-radius: 3px
+        }
+
+        /* (the one shown: a tint around it, the line unmoved) */
+        h3 {
+            margin: 0 0 4px
+        }
+
+        h4 {
+            margin: 0 0 6px;
+            font-size: 13px
+        }
+
+        /* The house's drawdown: a quiet panel, its state's colour on its edge and its pill — clear, breached (confirming),
+           alert (confirmed) — and a meter, the trigger at four fifths of it */
+        section.drawdown {
+            margin: 4px 0 12px;
+            padding: 6px 12px 8px;
+            border: 1px solid var(--rule);
+            border-left: 3px solid var(--rule);
+            border-radius: 4px;
+            background: var(--panel);
+            font-size: 13px;
+            color: var(--muted)
+        }
+
+        section.drawdown p {
+            margin: 2px 0
+        }
+
+        section.drawdown strong {
+            color: var(--ink);
+            font-weight: 600
+        }
+
+        .drawdown-state {
+            margin-left: 4px;
+            padding: 0 6px;
+            border-radius: 3px;
+            color: var(--ink);
+            background: rgba(var(--accent), .1)
+        }
+
+        section.drawdown[data-state="clear"] .drawdown-state {
+            background: var(--up)
+        }
+
+        section.drawdown[data-state="breached"] {
+            border-left-color: var(--warn)
+        }
+
+        section.drawdown[data-state="breached"] .drawdown-state {
+            color: var(--warn);
+            background: var(--warn-bg)
+        }
+
+        section.drawdown[data-state="alert"] {
+            border-left-color: rgb(200, 50, 50)
+        }
+
+        section.drawdown[data-state="alert"] .drawdown-state {
+            font-weight: 600;
+            background: var(--down)
+        }
+
+        .drawdown-meter {
+            position: relative;
+            height: 5px;
+            margin: 6px 0 5px;
+            border-radius: 3px;
+            background: var(--rule);
+            overflow: hidden
+        }
+
+        .drawdown-meter .fill {
+            position: absolute;
+            inset: 0 auto 0 0;
+            background: rgba(var(--accent), .5)
+        }
+
+        section.drawdown[data-state="breached"] .drawdown-meter .fill {
+            background: var(--warn)
+        }
+
+        section.drawdown[data-state="alert"] .drawdown-meter .fill {
+            background: rgb(200, 50, 50)
+        }
+
+        .drawdown-meter .trigger {
+            position: absolute;
+            inset: 0 auto 0 80%;
+            width: 2px;
+            background: var(--ink);
+            opacity: .5
+        }
+
+        .drawdown-episodes .confirmed {
+            color: var(--ink)
+        }
+
+        .lede, .stats, .hint, .status {
+            color: var(--muted)
+        }
+
+        .stats, .hint {
+            font-size: 13px
+        }
+
+        a, button.link {
+            color: inherit
+        }
+
+        button.link {
+            background: none;
+            border: none;
+            padding: 0 4px;
+            text-decoration: underline;
+            cursor: pointer;
+            font: inherit;
+            font-size: 12px
+        }
+
+        code, pre, textarea {
+            font: 12px ui-monospace, Menlo, Consolas, monospace
+        }
+
+
+        .areas {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 6px;
+            margin-bottom: 10px
+        }
+
+        .area {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 6px;
+            min-height: 30px;
+            padding: 4px 8px;
+            border: 1px dashed var(--rule);
+            border-radius: 6px;
+            background: var(--panel)
+        }
+
+        .area.target {
+            border-color: rgb(var(--accent));
+            background: rgba(var(--accent), .06)
+        }
+
+        .area-head {
+            display: inline-flex;
+            align-items: center;
+            min-width: 60px;
+            flex: none
+        }
+
+        /* (its label — the widest, Columns, 59px: the chips aligned across the areas) */
+        .area-name {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: .04em;
+            color: var(--muted)
+        }
+
+        .drop-hint {
+            font-size: 12px;
+            color: var(--muted);
+            font-style: italic
+        }
+
+        .field {
+            position: relative;
+            display: inline-flex;
+            align-items: center;
+            gap: 2px;
+            padding: 2px 4px 2px 8px;
+            border: 1px solid var(--rule);
+            border-radius: 4px;
+            background: var(--paper);
+            font-size: 13px;
+            cursor: grab;
+            user-select: none
+        }
+
+        .field.filtered {
+            border-color: rgba(var(--accent), .55)
+        }
+
+        .field.insert-before::before, .field.insert-after::after {
+            content: '';
+            position: absolute;
+            top: 2px;
+            bottom: 2px;
+            width: 2px;
+            border-radius: 1px;
+            background: rgb(var(--accent))
+        }
+
+        /* (where a dragged field will land) */
+        .field.insert-before::before {
+            left: -5px
+        }
+
+        .field.insert-after::after {
+            right: -5px
+        }
+
+        .field .icon {
+            border: none;
+            background: none;
+            color: var(--muted);
+            padding: 1px 3px;
+            cursor: pointer;
+            font-size: 12px;
+            line-height: 1
+        }
+
+        .field .icon:hover {
+            color: var(--ink)
+        }
+
+        .field .funnel.on {
+            color: rgb(var(--accent))
+        }
+
+        button.field.value {
+            cursor: pointer;
+            padding: 2px 8px;
+            font: inherit;
+            font-size: 13px;
+            color: var(--ink)
+        }
+
+        button.field.value.off {
+            color: var(--muted);
+            border-style: dashed;
+            background: none
+        }
+
+        /* (a Values chip: its name shows or hides it, its % chooses how it shows — Show as) */
+        span.field.value {
+            padding: 2px 8px;
+            color: var(--ink)
+        }
+
+        span.field.value:has(.show-as) {
+            padding-right: 3px
+        }
+
+        span.field.value.off {
+            color: var(--muted);
+            border-style: dashed;
+            background: none
+        }
+
+        span.field.value .name {
+            border: none;
+            background: none;
+            padding: 0;
+            font: inherit;
+            color: inherit;
+            cursor: pointer
+        }
+
+        .field .show-as {
+            visibility: hidden
+        }
+
+        .field.value:hover .show-as, .field .show-as.on, .field .show-as.open, .field .show-as:focus-visible {
+            visibility: visible
+        }
+
+        /* (a value's %: on hover, as a heading's ⚙ — or while it shows a percentage, its total named beside) */
+        .field .show-as.on {
+            color: rgb(var(--accent))
+        }
+
+        @@media (hover: none) {
+            .field .show-as {
+                visibility: visible;
+                opacity: .45
+            }
+
+            .field .show-as.on {
+                opacity: 1
+            }
+        }
+
+        /* (a touch screen has no hover: always shown, faintly) */
+
+        .field .show-as .by {
+            font-size: 11px;
+            margin-left: 1px
+        }
+
+        .popup.show-as-popup {
+            min-width: 230px;
+            max-width: 300px;
+            white-space: normal
+        }
+
+        .show-as-popup .menu-group {    /* a group of its percentages: of the market, of what's shown */
+            margin: 8px 0 2px;
+            font-size: 11px;
+            color: var(--muted)
+        }
+
+        .backdrop {
+            position: fixed;
+            inset: 0;
+            z-index: 9
+        }
+
+        .popup {
+            position: absolute;
+            top: calc(100% + 4px);
+            left: 0;
+            z-index: 10;
+            min-width: 190px;
+            background: var(--paper);
+            border: 1px solid var(--rule);
+            border-radius: 6px;
+            box-shadow: 0 6px 18px rgba(0, 0, 0, .15);
+            padding: 8px;
+            cursor: default
+        }
+
+        .popup .search {
+            width: 100%;
+            box-sizing: border-box;
+            font: inherit;
+            font-size: 13px;
+            margin-bottom: 6px
+        }
+
+        .popup label {
+            display: block;
+            font-size: 13px;
+            padding: 1px 0;
+            white-space: nowrap
+        }
+
+        .popup .all {
+            border-bottom: 1px solid var(--rule);
+            padding-bottom: 4px;
+            margin-bottom: 4px
+        }
+
+        .popup .list {
+            max-height: 220px;
+            overflow-y: auto
+        }
+
+        .popup .buttons {
+            display: flex;
+            gap: 6px;
+            justify-content: flex-end;
+            margin-top: 8px
+        }
+
+        .hint.warn, .stats.warn {
+            color: var(--warn)
+        }
+
+        .info {
+            position: relative;
+            display: inline-flex;
+            color: var(--muted);
+            cursor: help;
+            border-radius: 50%;
+            outline: none
+        }
+
+        .info:hover, .info:focus-visible {
+            color: rgb(var(--accent))
+        }
+
+        .info:focus-visible {
+            box-shadow: 0 0 0 2px rgba(var(--accent), .35)
+        }
+
+        .info .tip {
+            position: absolute;
+            top: calc(100% + 6px);
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 20;
+            width: max-content;
+            max-width: 280px;
+            padding: 6px 9px;
+            border-radius: 6px;
+            background: var(--ink);
+            color: var(--paper);
+            font-size: 12px;
+            line-height: 1.4;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity .12s
+        }
+
+        .info:hover .tip, .info:focus .tip {
+            opacity: 1
+        }
+
+        h4.vitals {
+            margin: 12px 0 2px
+        }
+
+        p.perspectives .disclaimer {
+            margin-left: 12px;
+            font-size: 12px;
+            white-space: nowrap
+        }
+
+        p.perspectives .disclaimer strong {
+            font-weight: 600
+        }
+
+        /* (after the last perspective: quiet, apart from them) */
+        .maintenance-switches {
+            display: inline-flex;
+            align-items: center;
+            gap: 16px;
+            font-size: 12px
+        }
+
+        /* (how the view's maintained: under the grid, after its note, as quiet — IVM, then Low jitter, wrapping as one) */
+        label.maintenance {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--muted);
+            cursor: pointer;
+            white-space: nowrap;
+            transition: opacity .15s, visibility .15s
+        }
+
+        label.maintenance input {
+            appearance: none;
+            -webkit-appearance: none;
+            position: relative;
+            flex: none;
+            width: 30px;
+            height: 18px;
+            margin: 0;
+            border-radius: 9px;
+            background: var(--rule);
+            cursor: pointer;
+            transition: background .15s
+        }
+
+        /* (a switch: its track…) */
+        label.maintenance input::after {
+            content: '';
+            position: absolute;
+            top: 2px;
+            left: 2px;
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            background: #fff;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, .3);
+            transition: transform .15s
+        }
+
+        /* (…and its knob) */
+        label.maintenance input:checked {
+            background: rgb(var(--accent))
+        }
+
+        label.maintenance input:checked::after {
+            transform: translateX(12px)
+        }
+
+        label.maintenance:has([data-maintenance-note]:not([hidden])) input:checked {
+            background: #d4a017
+        }
+
+        /* (asked for, and refused: amber) */
+        label.maintenance .maintenance-note {
+            color: var(--warn)
+        }
+
+        label.maintenance.unseen, label.maintenance:has([data-maintenance-note]:not([hidden])) + label.maintenance {
+            opacity: 0;
+            visibility: hidden
+        }
+
+        /* (Low jitter, the view recomputed — IVM off, or refused: nothing to swap — hidden, its place kept) */
+        label.maintenance input:focus-visible {
+            outline: 2px solid rgba(var(--accent), .5);
+            outline-offset: 2px
+        }
+
+        @@media (prefers-reduced-motion: reduce) {
+            label.maintenance, label.maintenance input, label.maintenance input::after {
+                transition: none
+            }
+        }
+
+        .field .summary {
+            font-size: 11px;
+            color: var(--muted);
+            margin-left: 4px
+        }
+
+        .popup.days {
+            min-width: 300px
+        }
+
+        .popup.days label {
+            margin: 4px 0
+        }
+
+        .popup.days input[type=date] {
+            font: inherit;
+            font-size: 12px
+        }
+
+        @@media (max-width: 760px) {
+            .areas {
+                grid-template-columns: minmax(0, 1fr)
+            }
+        }
+
+        .scroll {
+            overflow: auto;
+            position: relative;
+            min-height: 48px;
+            max-height: calc(100vh - 24px);
+            max-height: calc(100dvh - 24px)
+        }
+
+        /* (at most a screen: it scrolls itself, its headings pinned) */
+        .scroll {
+            width: fit-content;
+            max-width: 100%;
+            min-width: min(100%, 240px);
+            box-sizing: border-box;
+            border: 1px solid var(--rule);
+            border-radius: 6px;
+            margin-bottom: 0
+        }
+
+        /* (the grid's frame, rounded as the page's other boxes: it clips what's inside) */
+        .scroll table {
+            transition: opacity .15s
+        }
+
+        .scroll table.degraded {
+            opacity: .5
+        }
+
+        /* stale or failed: its last state, marked */
+        .scroll.pending table {
+            opacity: .45
+        }
+
+        /* a change asked for: the pivot shown streams on, dimmed, till the new one swaps in */
+        .scroll.pending::after {
+            content: '';
+            position: absolute;
+            top: 12px;
+            left: 10px;
+            width: 14px;
+            height: 14px;
+            border: 2px solid rgba(var(--accent), .25);
+            border-top-color: rgb(var(--accent));
+            border-radius: 50%;
+            animation: spin .8s linear infinite
+        }
+
+        .scroll.pending::before {
+            content: 'applying…';
+            position: absolute;
+            top: 12px;
+            left: 32px;
+            font-size: 12px;
+            color: var(--muted)
+        }
+
+        @@keyframes spin {
+            to {
+                transform: rotate(360deg)
+            }
+        }
+
+        /* Each cell draws its own rules, top and left (the grid's frame, its outer edges): a pinned cell carries them as
+           it sticks, on a whole pixel over the one before — collapsed rules are the table's, left behind as it scrolls, a
+           seam where the grid shows through */
+        table.pivot {
+            border-collapse: separate;
+            border-spacing: 0;
+            font-variant-numeric: tabular-nums;
+            margin: 0;
+            font-size: 13px
+        }
+
+        .pivot th, .pivot td {
+            padding: 4px 10px;
+            text-align: right;
+            border: 0 solid var(--rule);
+            border-width: 1px 0 0 1px;
+            white-space: nowrap
+        }
+
+        .pivot thead th.last {
+            box-shadow: inset 0 -1px 0 var(--rule)
+        }
+
+        .pivot tbody tr:first-child > * {
+            border-top-width: 0
+        }
+
+        /* (the headings' bottom rule: theirs, pinned with them) */
+        .pivot thead tr:first-child > * {
+            border-top-width: 0
+        }
+
+        .pivot th.corner, .pivot tbody th {
+            border-left-width: 0
+        }
+
+        /* (the outer edges: the frame's) */
+        .pivot thead th {
+            font-weight: 500;
+            color: var(--ink);
+            background-color: var(--paper);
+            text-align: center
+        }
+
+        .pivot thead th.corner {
+            text-align: left
+        }
+
+        /* (headings: medium, on white — the figures regular) */
+        .pivot td {
+            font-family: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+            font-size: 12px
+        }
+
+        /* (every glyph one width, in every weight: a bold total lines up with its figures) */
+        .pivot thead th.value {
+            font-size: 12px
+        }
+
+        /* Labels in ink — members (venues, assets, books…), measures (aggregates of actual values), the corner's fields — but
+           "Total", grand or a group's, column or row: muted, as what it names is implied */
+        .pivot thead th.grand, .pivot thead th.subtotal, .pivot tr.grand > th {
+            color: var(--muted)
+        }
+
+        .pivot tbody th {
+            text-align: left;
+            font-weight: 500
+        }
+
+        /* Totals: a slate checkerboard (a blue-grey, barely a hue), its squares translucent — deeper where a total row
+           crosses a total column (two layers); fixed (pinned) cells: a pale slate fill. A texture and a fill, so they
+           compose, and leave colour to the figures (gain, loss) and their flash */
+        .pivot {
+            --checker: conic-gradient(var(--total-ink) 25%, transparent 0 50%, var(--total-ink) 0 75%, transparent 0);
+            --level-indent: 32px
+        }
+
+        /* (a row label's indent, each level: a group's chevron, 17px, and 15px more — a child's label starts further in than
+           its parent's) */
+
+        .pivot tr.subtotal > *, .pivot tr.grand > *, .pivot .total, .pivot thead th.subtotal, .pivot thead th.grand {
+            background-image: var(--checker);
+            background-size: 4px 4px
+        }
+
+        .pivot tr.subtotal > .total, .pivot tr.grand > .total {
+            background-image: var(--checker), var(--checker)
+        }
+
+        /* Pinned as the grid scrolls: the headings (each row's top set by the grid), the row labels — and, first, the grand
+           total's row, below the headings, and its columns, beside the row labels (each's left set by the grid) */
+        .pivot thead th {
+            position: sticky;
+            z-index: 5
+        }
+
+        .pivot thead th.pin {
+            z-index: 6
+        }
+
+        .pivot thead th.corner {
+            left: 0;
+            z-index: 7
+        }
+
+        .pivot tbody th {
+            position: sticky;
+            left: 0;
+            z-index: 2;
+            background-color: var(--paper)
+        }
+
+        /* (the row labels: headings too, semi-bold on white as the column headings are) */
+        .pivot td.pin {
+            position: sticky;
+            z-index: 1;
+            background-color: var(--fixed-cell)
+        }
+
+        .pivot thead th.pin {
+            background-color: var(--fixed)
+        }
+
+        /* (its figures fainter than its headings) */
+        .pivot tr.grand.first > * {
+            position: sticky;
+            z-index: 3;
+            background-color: var(--fixed-cell);
+            border-top-width: 0;
+            border-bottom: 2px solid var(--muted)
+        }
+
+        .pivot tr.grand.first > th {
+            background-color: var(--paper)
+        }
+
+        .pivot tr.grand.first > td.pin, .pivot tr.grand.first > th {
+            z-index: 4
+        }
+
+        .pivot tr.grand.first + tr > * {
+            border-top-width: 0
+        }
+
+        .pivot .pin.edge {
+            border-right: 2px solid var(--muted)
+        }
+
+        .pivot .pin.edge + * {
+            border-left-width: 0
+        }
+
+        .field .sigma {
+            font-weight: 600
+        }
+
+        .field .sigma.on {
+            color: rgb(var(--accent))
+        }
+
+        .field .sigma.off {
+            text-decoration: line-through;
+            opacity: .6
+        }
+
+        .pivot tr.bare th {
+            color: var(--muted)
+        }
+
+        .pivot tr.grand th, .pivot tr.grand td {
+            border-top: 2px solid var(--muted)
+        }
+
+        /* A toggle's chevron, pointing right collapsed: a row group's turned down open, a column group's or PnL's turned left */
+        .pivot button.toggle {
+            border: none;
+            background: none;
+            color: var(--muted);
+            cursor: pointer;
+            padding: 0 2px;
+            display: inline-flex;
+            align-items: center;
+            vertical-align: -1px
+        }
+
+        .pivot button.toggle:hover {
+            color: var(--ink)
+        }
+
+        .pivot button.toggle svg {
+            transition: transform .12s
+        }
+
+        .pivot button.toggle {
+            opacity: .4;
+            transition: opacity .12s
+        }
+
+        .pivot th:hover button.toggle, .pivot button.toggle:focus-visible {
+            opacity: 1
+        }
+
+        /* (faint till its cell's hovered) */
+        @@media (hover: none) {
+            .pivot button.toggle {
+                opacity: .7
+            }
+        }
+
+        /* (a touch screen has no hover: plainer) */
+        .pivot button.toggle.open[data-toggle="row"] svg {
+            transform: rotate(90deg)
+        }
+
+        .pivot button.toggle.open:not([data-toggle="row"]) svg {
+            transform: rotate(180deg)
+        }
+
+        @@media (prefers-reduced-motion: reduce) {
+            .pivot button.toggle, .pivot button.toggle svg {
+                transition: none
+            }
+        }
+
+        /* A heading over a column's values: its ⚙, on hover (or while its menu is open) */
+        .pivot .column-cog {
+            border: none;
+            background: none;
+            color: var(--muted);
+            cursor: pointer;
+            padding: 0 0 0 4px;
+            vertical-align: -1px;
+            visibility: hidden
+        }
+
+        .pivot thead th:hover .column-cog, .pivot tbody tr.grand:hover .column-cog, .pivot .column-cog.open, .pivot .column-cog:focus-visible {
+            visibility: visible
+        }
+
+        .pivot .column-cog:hover, .pivot .column-cog.open {
+            color: var(--ink)
+        }
+
+        /* (a heading's ⚙, and the Total row's: on hover) */
+        .column-menu .first {
+            margin: 2px 0 8px
+        }
+
+        .column-menu .first .hint {
+            margin: 4px 0 0;
+            max-width: 240px
+        }
+
+        @@media (hover: none) {
+            .pivot .column-cog {
+                visibility: visible;
+                opacity: .45
+            }
+        }
+
+        /* (a touch screen has no hover: always shown, faintly) */
+        .grid {
+            width: fit-content;
+            max-width: 100%
+        }
+
+        /* (the grid and the bar under it, as wide as the grid) */
+        .grid-bar {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 2px 12px;
+            margin: 5px 0 8px
+        }
+
+        .grid-bar .amounts-note {
+            margin: 0
+        }
+
+        /* (under the grid: its footnote, and the copy) */
+        .copy-grid {
+            margin-left: auto;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 2px 7px;
+            font: inherit;
+            font-size: 12px;
+            color: var(--muted);
+            background: none;
+            border: 1px solid var(--rule);
+            border-radius: 5px;
+            cursor: pointer
+        }
+
+        .copy-grid:hover, .copy-grid:focus-visible {
+            color: rgb(var(--accent));
+            border-color: rgba(var(--accent), .5);
+            outline: none
+        }
+
+        .copy-grid.done {
+            color: var(--ink)
+        }
+
+        .pivot thead .amount-mark, .pivot thead .form-mark {
+            color: var(--muted)
+        }
+
+        /* (a percentage's heading: its value's name, then its total — "% col" — grey) */
+        .pivot thead .form-mark {
+            font-weight: normal
+        }
+
+        /* (a heading's *: grey, as the note it points to) */
+        .amounts-note {
+            margin: 6px 0 4px;
+            font-size: 12px;
+            color: var(--muted)
+        }
+
+        .amounts-note select {
+            appearance: none;
+            -webkit-appearance: none;
+            padding: 0 12px 0 0;
+            border: 0;
+            border-radius: 3px;
+            background: var(--chevron) no-repeat right 1px center / 8px 5px;
+            color: var(--ink);
+            font: inherit;
+            cursor: pointer
+        }
+
+        .amounts-note select:focus-visible {
+            outline: 2px solid rgba(var(--accent), .5);
+            outline-offset: 2px
+        }
+
+        .amounts-note select option {
+            color: var(--ink);
+            background: var(--paper)
+        }
+
+        /* (each choice in the note: plain, in a figure's ink, a chevron saying it chooses) */
+        .amounts-note .fit {
+            display: inline-grid
+        }
+
+        .amounts-note .fit > * {
+            grid-area: 1 / 1
+        }
+
+        .amounts-note .fit-text {
+            visibility: hidden;
+            padding: 0 12px 0 0;
+            white-space: pre
+        }
+
+        .amounts-note .fit select {
+            width: 0;
+            min-width: 100%
+        }
+
+        /* (the zone as wide as its name: its hidden copy sizes the cell, the select fills it) */
+        .amounts-note .info {
+            vertical-align: -3px;
+            margin-left: 2px
+        }
+
+        .amounts-note .info svg {
+            width: 13px;
+            height: 13px
+        }
+
+        .amounts-note select.currency {
+            transition: color .15s
+        }
+
+        .amounts-note select.currency.pending {
+            color: var(--muted)
+        }
+
+        /* (grey: a change pending) */
+        .pivot td .f {
+            display: inline-block;
+            text-align: left
+        }
+
+        /* (a figure's fraction: its column's width, the points in line) */
+        .pivot-tip {
+            position: fixed;
+            z-index: 30;
+            pointer-events: none;
+            padding: 3px 7px;
+            border-radius: 4px;
+            background: var(--ink);
+            color: var(--paper);
+            font-size: 12px;
+            font-variant-numeric: tabular-nums;
+            white-space: nowrap;
+            box-shadow: 0 1px 4px rgba(0, 0, 0, .25)
+        }
+
+        /* (a cell's figure precisely: the page's own tooltip) */
+        .popup.column-menu {
+            position: fixed;
+            min-width: 200px
+        }
+
+        .menu-title {
+            margin: 0 0 6px;
+            font-size: 12px;
+            color: var(--muted)
+        }
+
+        .column-menu .chips {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-bottom: 8px
+        }
+
+        .column-menu .scope {
+            margin-bottom: 6px
+        }
+
+        button.field.value:disabled {
+            cursor: default
+        }
+
+        .popup button.link {
+            padding: 0
+        }
+
+        .popup button.link:disabled {
+            opacity: .45;
+            cursor: default;
+            text-decoration: none
+        }
+
+        .field .sort .by {
+            font-size: 11px;
+            margin-left: 1px
+        }
+
+        .popup.sort-popup {
+            min-width: 230px;
+            white-space: normal
+        }
+
+        .popup label.disabled {
+            color: var(--muted)
+        }
+
+        .popup.sort-popup {
+            min-width: 300px
+        }
+
+        .sort-popup .sort-key {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            margin: 4px 0
+        }
+
+        .sort-popup .then {
+            width: 30px;
+            font-size: 12px;
+            color: var(--muted)
+        }
+
+        .sort-popup select {
+            font: inherit;
+            font-size: 13px;
+            flex: 1;
+            min-width: 0
+        }
+
+        .sort-popup button.field.value {
+            white-space: nowrap;
+            padding: 2px 8px
+        }
+
+        .sort-popup .remove {
+            border: none;
+            background: none;
+            color: var(--muted);
+            cursor: pointer;
+            padding: 2px 4px
+        }
+
+        .sort-popup .remove:hover {
+            color: var(--ink)
+        }
+
+        .sort-popup > button.link {
+            margin: 4px 0 0 36px
+        }
+
+        .sort-popup .hint {
+            margin: 8px 0 0;
+            max-width: 300px
+        }
+
+        .pivot td.pos {
+            color: #1f7a4d
+        }
+
+        .pivot td.neg {
+            color: #b42318
+        }
+
+        .pivot .empty, .pivot td.none {
+            color: var(--muted)
+        }
+
+        @@media (prefers-color-scheme: dark) {
+            .pivot td.pos {
+                color: #5fd39a
+            }
+
+            .pivot td.neg {
+                color: #ff8a80
+            }
+        }
+
+        /* A cell's flash: an inset shadow, not its background — a pinned cell stays opaque (what scrolls beneath never shows through) */
+        @@keyframes up {
+            from {
+                box-shadow: inset 0 0 0 999px var(--up)
+            }
+        }
+
+        @@keyframes down {
+            from {
+                box-shadow: inset 0 0 0 999px var(--down)
+            }
+        }
+
+        .pivot td.up {
+            animation: up .5s ease-out
+        }
+
+        .pivot td.down {
+            animation: down .5s ease-out
+        }
+
+        .refused {
+            border: 1px solid #d9a400;
+            background: var(--warn-bg);
+            color: var(--warn);
+            border-radius: 6px;
+            padding: 8px 10px;
+            margin: 8px 0
+        }
+
+        .refused .needle {
+            font-size: 12px;
+            margin-top: 4px
+        }
+
+        .sql pre, .sql textarea {
+            width: 100%;
+            box-sizing: border-box;
+            background: var(--panel);
+            color: var(--ink);
+            border: 1px solid var(--rule);
+            border-radius: 6px;
+            padding: 8px;
+            overflow-x: auto;
+            margin: 0
+        }
+
+        .sql h4 button {
+            margin-left: 8px
+        }
+
+        .sql h4 {
+            margin-top: 12px
+        }
+
+        .sql h4 a.reference {
+            margin-left: 12px;
+            font-size: 12px;
+            font-weight: 400;
+            color: var(--muted)
+        }
+
+        .sql h4 a.reference:hover {
+            color: rgb(var(--accent))
+        }
+
+        /* (the dialect's reference, beside its buttons: quieter than they are) */
+        .sql table.bindings {
+            border-collapse: collapse;
+            margin-top: 8px;
+            font-size: 13px
+        }
+
+        .sql table.bindings th {
+            text-align: left;
+            font-weight: 600;
+            color: var(--muted);
+            padding: 2px 16px 2px 0
+        }
+
+        .sql table.bindings td {
+            padding: 2px 16px 2px 0;
+            border-top: 1px solid var(--rule);
+            vertical-align: top
+        }
+
+        /* The SQL, collapsible: a summary with a chevron, pointing right collapsed and down open */
+        details.sql {
+            margin-top: 16px
+        }
+
+        .sql summary {
+            list-style: none;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 13px;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px
+        }
+
+        .sql summary::-webkit-details-marker {
+            display: none
+        }
+
+        .sql summary svg {
+            color: var(--muted);
+            transition: transform .12s
+        }
+
+        .sql summary:hover svg {
+            color: var(--ink)
+        }
+
+        .sql[open] summary svg {
+            transform: rotate(90deg)
+        }
+
+        @@media (prefers-reduced-motion: reduce) {
+            .sql summary svg {
+                transition: none
+            }
+        }
+
+        .sql pre.plan {
+            font-size: 11px;
+            line-height: 1.45;
+            max-height: 480px;
+            overflow: auto;
+            white-space: pre
+        }
+
+        .sql .plan-views button.link {
+            margin-left: 8px;
+            color: var(--muted)
+        }
+
+        .sql .plan-views button.link.on {
+            color: var(--ink);
+            text-decoration: none;
+            font-weight: 600
+        }
+    </style>
+</head>
+<body>
+<Routes/>
+<script src="@Assets["_framework/blazor.web.js"]" autostart="false"></script>
+<script type="module">
+    import {tapline} from './@Assets["_content/Tapline.AspNetCore/tapline.js"]';
+    import {startBlazor} from './@Assets["_content/Tapline.BlazorRealtime/blazor-realtime.js"]';
+    import {createPivotView} from './@Assets["pivot.js"]';
+
+    window.pivotView = createPivotView(tapline);                 // wwwroot/pivot.js: the grid, from the cells the router streams
+    startBlazor(Blazor, tapline);
+</script>
+</body>
+</html>

@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <PackageLicenseExpression>Elastic-2.0</PackageLicenseExpression>
+        <TargetFramework>net10.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <LangVersion>latest</LangVersion>
+        <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+        <IsAotCompatible>true</IsAotCompatible>
+        <PackageId>Tapline.Client</PackageId>
+        <PackageTags>$(PackageTags);client</PackageTags>
+        <Description>Tapline's .NET client, whatever carries its frames: replicas of what it subscribed to — tables (sequence and checksum verified), values, watches, message streams — acknowledged frame by frame, resynced, resumed after a reconnect, out-of-band records fetched, and the router's notices.</Description>
+    </PropertyGroup>
+    <ItemGroup>
+        <ProjectReference Include="../Tapline/Tapline.csproj"/>
+        <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks.Abstractions" Version="10.0.5"/>
+        <InternalsVisibleTo Include="Tapline.Tests"/>
+    </ItemGroup>
+</Project>

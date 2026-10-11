@@ -1,0 +1,23 @@
+[package]
+name = "tapline-opaque"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+publish = false
+description = "OPAQUE (RFC 9807) for Tapline's samples: opaque-ke 4 built for WebAssembly, ristretto255 and Argon2id, behind a plain C ABI"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+opaque-ke = { version = "=4.0.1", default-features = false, features = ["argon2", "ristretto255"] }
+argon2 = { version = "0.5", default-features = false, features = ["alloc"] }
+sha2 = { version = "0.10", default-features = false }
+zeroize = { version = "1.8", default-features = false }
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <LangVersion>latest</LangVersion>
+    </PropertyGroup>
+    <ItemGroup>
+        <!-- The router's side of the link (ProvideRemote): the practice service, reached in its own process. -->
+        <ProjectReference Include="../../src/Tapline.MagicOnion.Providers/Tapline.MagicOnion.Providers.csproj"/>
+        <!-- The pages' transport: the circuits (tapline.js, blazor-realtime.js). -->
+        <ProjectReference Include="../../src/Tapline.BlazorRealtime/Tapline.BlazorRealtime.csproj" />
+        <ProjectReference Include="../ActivityFeed.Contracts/ActivityFeed.Contracts.csproj"/>
+    </ItemGroup>
+    <ItemGroup>
+        <!-- The practice's other processes, spawned when the app runs on its own: built with it, run from their own output. -->
+        <ProjectReference Include="../ActivityFeed.Service/ActivityFeed.Service.csproj" ReferenceOutputAssembly="false"/>
+        <ProjectReference Include="../ActivityFeed.Dispatcher/ActivityFeed.Dispatcher.csproj" ReferenceOutputAssembly="false"/>
+        <AssemblyMetadata Include="ActivityFeed.Service"
+                          Value="$(MSBuildThisFileDirectory)../ActivityFeed.Service/bin/$(Configuration)/$(TargetFramework)/ActivityFeed.Service.dll"/>
+        <AssemblyMetadata Include="ActivityFeed.Dispatcher"
+                          Value="$(MSBuildThisFileDirectory)../ActivityFeed.Dispatcher/bin/$(Configuration)/$(TargetFramework)/ActivityFeed.Dispatcher.dll"/>
+    </ItemGroup>
+</Project>

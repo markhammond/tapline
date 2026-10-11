@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <LangVersion>latest</LangVersion>
+        <!-- ChalkQL's incremental view maintenance (ViewMaintenance.Incremental) is experimental: its behaviour and API may
+             change in any release until it's declared stable. The feeds' views are incremental by default, each checked
+             against a recomputed twin at every update (Practice:Validate). -->
+        <NoWarn>$(NoWarn);CHALK003</NoWarn>
+    </PropertyGroup>
+    <ItemGroup>
+        <!-- The provider's side of the link: its own router and Tapline stream (the topics), and the control stream. -->
+        <ProjectReference Include="../../src/Tapline.MagicOnion.Providers/Tapline.MagicOnion.Providers.csproj"/>
+        <!-- A client's side too, for the write log's signal: the writer's log topic, heard through the app (Practice:Stream). -->
+        <ProjectReference Include="../../src/Tapline.MagicOnion/Tapline.MagicOnion.csproj"/>
+        <ProjectReference Include="../ActivityFeed.Contracts/ActivityFeed.Contracts.csproj"/>
+    </ItemGroup>
+    <ItemGroup>
+        <!-- ChalkQL: the practice's records, under its tenancy policy (the entitlements packages ship in it); its planner,
+             Apache Calcite, runs in a Java 21 sidecar it starts itself. -->
+        <PackageReference Include="ChalkQL" Version="0.6.1"/>
+        <PackageReference Include="ChalkQL.Sources" Version="0.6.1"/>
+        <!-- The write log (Practice:Log): the practice's records, for every instance of the service to replay. -->
+        <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.12"/>
+    </ItemGroup>
+</Project>

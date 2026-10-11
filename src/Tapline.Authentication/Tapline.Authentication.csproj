@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <PackageLicenseExpression>Elastic-2.0</PackageLicenseExpression>
+        <TargetFramework>net10.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <LangVersion>latest</LangVersion>
+        <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+        <IsAotCompatible>true</IsAotCompatible>
+        <PackageId>Tapline.Authentication</PackageId>
+        <PackageTags>$(PackageTags);authentication;passkeys;webauthn</PackageTags>
+        <Description>A realm's authentication service for Tapline routers, composed of modules — passkeys (WebAuthn), passthrough, tickets, your own — each handing a proven user to your backend, which says who they are.</Description>
+    </PropertyGroup>
+    <ItemGroup>
+        <ProjectReference Include="../Tapline/Tapline.csproj"/>
+        <InternalsVisibleTo Include="Tapline.Tests"/>
+    </ItemGroup>
+</Project>

@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <title>Tapline</title>
+  <style>svg:root{color-scheme:light dark;color:#000;color:light-dark(#000,#fff)}</style>
+  <defs>
+    <path id="l0" d="M7 17H24.5C25.3 16.9 26.2 16.9 27 16.5C27.8 16.1 28.7 14.7 29.5 14.5C30.3 14.3 31.2 15.7 32 15.5C32.8 15.3 33.7 13.4 34.5 13.5C35.3 13.6 36.2 15.5 37 16C37.8 16.5 38.7 16.5 39.5 16.7C40.3 16.9 41.2 16.9 42 17H57"/>
+    <path id="l1" d="M7 25H19.5C20.3 24.8 21.2 24.8 22 24C22.8 23.2 23.7 20.2 24.5 20C25.3 19.8 26.2 22.8 27 22.5C27.8 22.2 28.7 18.1 29.5 18C30.3 17.9 31.2 21.9 32 22C32.8 22.1 33.7 18.3 34.5 18.5C35.3 18.7 36.2 22.1 37 23C37.8 23.9 38.7 23.7 39.5 24C40.3 24.3 41.2 24.8 42 25H57"/>
+    <path id="l2" d="M7 33H17C17.8 32.8 18.7 33 19.5 31.5C20.3 30 21.2 24.4 22 24C22.8 23.6 23.7 29.2 24.5 29C25.3 28.8 26.2 23.3 27 23C27.8 22.7 28.7 27.2 29.5 27C30.3 26.8 31.2 21.8 32 22C32.8 22.2 33.7 27.3 34.5 28C35.3 28.7 36.2 25.8 37 26C37.8 26.2 38.7 28.2 39.5 29C40.3 29.8 41.2 30.4 42 31C42.8 31.6 43.7 32.2 44.5 32.5C45.3 32.8 46.2 32.9 47 33H57"/>
+    <path id="l3" d="M7 41H17C17.8 40.7 18.7 40 19.5 39C20.3 38 21.2 37 22 35C22.8 33 23.7 27.3 24.5 27C25.3 26.7 26.2 32.8 27 33C27.8 33.2 28.7 27.8 29.5 28C30.3 28.2 31.2 33.8 32 34C32.8 34.2 33.7 28.8 34.5 29C35.3 29.2 36.2 34.3 37 35C37.8 35.7 38.7 32.5 39.5 33C40.3 33.5 41.2 36.8 42 38C42.8 39.2 43.7 39.5 44.5 40C45.3 40.5 46.2 40.8 47 41H57"/>
+    <path id="l4" d="M7 49H9.5C10.3 48.5 11.2 46 12 46C12.8 46 13.7 48.7 14.5 49C15.3 49 16.2 49 17 48C17.8 46 18.7 38.5 19.5 37C20.3 35.5 21.2 40.5 22 39C22.8 37.5 23.7 28.3 24.5 28C25.3 27.7 26.2 36.3 27 37C27.8 37.7 28.7 31.5 29.5 32C30.3 32.5 31.2 39.3 32 40C32.8 40.7 33.7 35.7 34.5 36C35.3 36.3 36.2 41.2 37 42C37.8 42.8 38.7 40.6 39.5 41C40.3 41.4 41.2 43.6 42 44.5C42.8 45.4 43.7 45.9 44.5 46.5C45.3 47.1 46.2 47.8 47 48.2C47.8 48.6 48.7 48.9 49.5 49H57"/>
+    <mask id="m0" maskUnits="userSpaceOnUse" x="0" y="0" width="64" height="64"><rect width="64" height="64" fill="#fff"/><g fill="#000" stroke="#000" stroke-width="3.15"><use href="#l1"/><rect y="25" width="64" height="39"/><use href="#l2"/><rect y="33" width="64" height="31"/><use href="#l3"/><rect y="41" width="64" height="23"/><use href="#l4"/><rect y="49" width="64" height="15"/></g></mask>
+    <mask id="m1" maskUnits="userSpaceOnUse" x="0" y="0" width="64" height="64"><rect width="64" height="64" fill="#fff"/><g fill="#000" stroke="#000" stroke-width="3.15"><use href="#l2"/><rect y="33" width="64" height="31"/><use href="#l3"/><rect y="41" width="64" height="23"/><use href="#l4"/><rect y="49" width="64" height="15"/></g></mask>
+    <mask id="m2" maskUnits="userSpaceOnUse" x="0" y="0" width="64" height="64"><rect width="64" height="64" fill="#fff"/><g fill="#000" stroke="#000" stroke-width="3.15"><use href="#l3"/><rect y="41" width="64" height="23"/><use href="#l4"/><rect y="49" width="64" height="15"/></g></mask>
+    <mask id="m3" maskUnits="userSpaceOnUse" x="0" y="0" width="64" height="64"><rect width="64" height="64" fill="#fff"/><g fill="#000" stroke="#000" stroke-width="3.15"><use href="#l4"/><rect y="49" width="64" height="15"/></g></mask>
+  </defs>
+  <g fill="none" stroke="currentColor" stroke-width="1.45" stroke-linecap="round" stroke-linejoin="round">
+    <use href="#l0" stroke-opacity="0.30" mask="url(#m0)"/>
+    <use href="#l1" stroke-opacity="0.47" mask="url(#m1)"/>
+    <use href="#l2" stroke-opacity="0.65" mask="url(#m2)"/>
+    <use href="#l3" stroke-opacity="0.82" mask="url(#m3)"/>
+    <use href="#l4"/>
+  </g>
+</svg>

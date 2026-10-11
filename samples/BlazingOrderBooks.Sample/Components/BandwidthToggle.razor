@@ -1,0 +1,37 @@
+@inject Outlet Outlet
+@inject Microsoft.Extensions.Options.IOptions<BlazorRealtime.BlazorRealtimeOptions> Options
+
+@*
+    This connection's Streaming cap, toggled live — as ?bwlimit= sets it when the page opens (KiB/s, rsync's --bwlimit:
+    1 is 8 kbit/s): lower only than the server's own cap, its burst a second's worth. The books keep up at the lower rate,
+    each update carrying everything since the last.
+*@
+<span class="shape">
+    bwlimit
+    @foreach (var kib in Limits)
+    {
+        <button aria-pressed="@(Current == kib ? "true" : "false")"
+                title="@(kib == 0 ? "the server's own cap" : $"{kib} KiB/s ({kib * 8} kbit/s)")"
+                @onclick="() => Cap(kib)">@(kib == 0 ? "none" : $"{kib}")</button>
+    }
+    <small>KiB/s</small>
+</span>
+
+@code {
+    /// <summary>The caps offered, in KiB/s (0: the server's own).</summary>
+    static readonly int[] Limits = [0, 4, 1];
+
+    /// <summary>The cap in force, in KiB/s, if it's one of those offered (0: the server's own, or none).</summary>
+    int Current => Outlet.StreamingBytesPerSecond == Options.Value.StreamingBytesPerSecond
+        ? 0
+        : (int)(Outlet.StreamingBytesPerSecond / 1024);
+
+    void Cap(int kib)
+    {
+        var server = Options.Value.StreamingBytesPerSecond; // (0: uncapped)
+        long rate = kib == 0 ? server : server > 0 ? Math.Min(kib * 1024L, server) : kib * 1024L; // lower only
+        var burst = Options.Value.StreamingBurstBytes;
+        Outlet.SetStreamingRate(rate, rate > 0 ? Math.Min(rate, burst) : burst); // (uncapped: the burst unused, still valid)
+    }
+
+}

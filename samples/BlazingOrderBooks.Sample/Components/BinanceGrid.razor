@@ -1,0 +1,331 @@
+@page "/"
+@page "/binance"
+@rendermode InteractiveServer
+@implements IAsyncDisposable
+@using BlazingOrderBooks.Sample.Binance
+@inject Outlet Outlet
+@inject Publisher Publisher
+@inject BinanceFeed Feed
+@inject IJSRuntime Js
+
+@*
+    Binance's most traded crypto perpetuals, live: a tile each. A tile subscribes only while it's on screen — the page's
+    IntersectionObserver says when it scrolls in or out, and it subscribes or lets go — and, collapsed, only to its micro
+    price: a last value of eight bytes instead of a book. Each tile shows the raw book or the accelerated one. Letting go
+    is the client's alone: the feed keeps an instrument's streams for its grace period (Binance:GraceSeconds) after its
+    last listener has gone, so scrolling back is instant; after that, it unsubscribes from Binance.
+*@
+
+<h2 class="market-title">Blazing Order Books</h2>
+<p class="market-tagline">Streaming order books with delta-based conflation</p>
+<h3>Binance perpetuals <small><a href="simulated">the simulated book →</a></small></h3>
+@if (Feed.Universe.Unavailable is { } why)
+{
+    <p>The grid has no instruments: @why.</p>
+}
+else
+{
+    <p>
+        <button @onclick="() => All(collapse: true)">collapse all</button>
+        <button @onclick="() => All(collapse: false)">expand all</button>
+        <button @onclick="() => All(accelerated: false)">all raw</button>
+        <button @onclick="() => All(accelerated: true)">all accelerated</button>
+        <small>Tiles stream only while on screen; collapsed, just the micro price.</small>
+    </p>
+    <p class="shape">
+        depth
+        @foreach (var depth in BookShape.Depths.Append(0))
+        {
+            <button aria-pressed="@(_shape.Depth == depth ? "true" : "false")" @onclick="() => Reshape(_shape with { Depth = depth })">@(depth > 0 ? depth : "all")</button>
+        }
+        · group
+        @foreach (var group in BookShape.Groups)
+        {
+            <button aria-pressed="@(_shape.Group == group ? "true" : "false")" title="@group of the instrument's ticks a level"
+                    @onclick="() => Reshape(_shape with { Group = group })">×@group</button>
+        }
+        · <button aria-pressed="@(_shape.Vwap ? "true" : "false")" title="cumulative: each level the size from the best price down to it, at the average price of filling it all"
+                  @onclick="() => Reshape(_shape with { Vwap = !_shape.Vwap })">VWAP</button>
+        · <BandwidthToggle/>
+        <br/><small>Ticks a level; each shape a topic of its own, shaped by the feed and shared by the tiles asking alike; a
+            VWAP book's sums kept by the router, its averages alone sent.</small>
+    </p>
+    <div class="market-grid" @ref="_grid">
+        @foreach (var tile in _tiles)
+        {
+            <div class="market-tile@(tile.Collapsed ? " collapsed" : "")" data-symbol="@tile.Symbol" @key="tile.Symbol">
+                <div class="market-head">
+                    <b>@tile.Symbol</b>
+                    <span class="micro" title="micro price" @ref="tile.MicroEl"></span>
+                    <span class="controls">
+                        <button title="show the raw or the accelerated book" @onclick="() => Toggle(tile, accelerated: !tile.Accelerated)">
+                            @(tile.Accelerated ? "accelerated" : "raw")
+                        </button>
+                        <button title="@(tile.Collapsed ? "show the book" : "the micro price alone")" @onclick="() => Toggle(tile, collapse: !tile.Collapsed)">
+                            @(tile.Collapsed ? "▸" : "▾")
+                        </button>
+                    </span>
+                </div>
+                <table @ref="tile.BookEl"></table>
+                @if (tile.Status.Length > 0)
+                {
+                    <small class="status">@tile.Status</small>
+                }
+            </div>
+        }
+    </div>
+}
+<p class="market-status">
+    Displaying @_tiles.Count(t => t.Book is not null) books<br/>
+    @Feed.Instruments.Active active, @Feed.Instruments.Warm warm Binance instruments
+</p>
+<details class="market-telemetry">
+    <summary>Feed handler telemetry</summary>
+    <p>Binance: @Feed.Connections.Open of @Feed.Connections.Of connections open (opened as their instruments are wanted) ·
+        @_tiles.Count(t => t.Micro is not null) micro prices subscribed by this page</p>
+    <p>@Feed.Stats.Line()</p>
+    <p>Flow control: min RTT @Outlet.MinRtt.TotalMilliseconds.ToString("F2") ms ·
+        delivered @((Outlet.DeliveryRate / 1024.0).ToString("F1")) KB/s · in
+        flight @Outlet.InflightBytes.ToString("N0") of @Outlet.InflightLimit.ToString("N0") B ·
+        <span id="rate"></span></p>
+</details>
+
+@code {
+    readonly CancellationTokenSource _cts = new();
+    readonly List<Tile> _tiles = [];
+    BookShape _shape = new(10, 1); // the books' depth and grouping, every tile's
+    ElementReference _grid;
+    DotNetObjectReference<BinanceGrid>? _self;
+
+    protected override void OnInitialized()
+    {
+        foreach (var instrument in Feed.Universe.Instruments) _tiles.Add(new Tile(instrument.Symbol));
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || _tiles.Count == 0) return; // interactive only (not during prerender)
+        _self = DotNetObjectReference.Create(this);
+        await Js.InvokeVoidAsync("marketGrid.observe", _cts.Token, _self, _grid);
+        _ = Refresh();
+    }
+
+    /// <summary>The status line and telemetry, every 2 s: grace periods end without anything on the page changing.</summary>
+    async Task Refresh()
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(2));
+        try
+        {
+            while (await timer.WaitForNextTickAsync(_cts.Token)) await InvokeAsync(StateHasChanged);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    /// <summary>The page's IntersectionObserver: a tile scrolled into view (or near it), or out.</summary>
+    [JSInvokable]
+    public Task Visibility(string symbol, bool visible)
+    {
+        var tile = _tiles.Find(t => t.Symbol == symbol);
+        if (tile is null || tile.Visible == visible) return Task.CompletedTask;
+        tile.Visible = visible;
+        return Sync(tile);
+    }
+
+    Task Toggle(Tile tile, bool? collapse = null, bool? accelerated = null)
+    {
+        tile.Collapsed = collapse ?? tile.Collapsed;
+        tile.Accelerated = accelerated ?? tile.Accelerated;
+        return Sync(tile);
+    }
+
+    /// <summary>Every tile's book shaped anew: each tile on screen subscribes to its new shape and lets go of its last.</summary>
+    Task Reshape(BookShape shape)
+    {
+        if (shape == _shape) return Task.CompletedTask;
+        _shape = shape;
+        return Task.WhenAll(_tiles.Select(Sync));
+    }
+
+    async Task All(bool? collapse = null, bool? accelerated = null)
+    {
+        foreach (var tile in _tiles)
+        {
+            tile.Collapsed = collapse ?? tile.Collapsed;
+            tile.Accelerated = accelerated ?? tile.Accelerated;
+        }
+
+        await Task.WhenAll(_tiles.Select(Sync));
+    }
+
+    /// <summary>
+    ///     Brings a tile's subscriptions to what it shows: its book (raw or accelerated) while it's on screen and
+    ///     expanded, its micro price while it's on screen; nothing off screen. One change at a time a tile.
+    /// </summary>
+    async Task Sync(Tile tile)
+    {
+        var ct = _cts.Token;
+        try
+        {
+            await tile.Gate.WaitAsync(ct);
+            try
+            {
+                var book = tile.Visible && !tile.Collapsed
+                    ? $"{(tile.Accelerated ? "book-accelerated" : "book")}:{tile.Symbol}?{_shape.Query}" // (its shape: a topic of its own)
+                    : null;
+                var micro = tile.Visible ? $"micro:{tile.Symbol}" : null;
+                if (tile.Book?.Topic != book)
+                {
+                    await Unbind(tile.Book);
+                    tile.Book = book is null ? null : await Bind(tile, book, "marketGrid.bindBook", tile.BookEl, ct);
+                }
+
+                if (tile.Micro?.Topic != micro)
+                {
+                    await Unbind(tile.Micro);
+                    tile.Micro = micro is null ? null : await Bind(tile, micro, "marketGrid.bindMicro", tile.MicroEl, ct);
+                }
+            }
+            finally
+            {
+                tile.Gate.Release();
+            }
+
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (Exception e) when (e is OperationCanceledException or JSDisconnectedException or ObjectDisposedException)
+        {
+        }
+    }
+
+    /// <summary>
+    ///     Step 1 through the <c>binance</c> service, then the view activates it (step 2) with the price and size scales
+    ///     the provider declared in its format. A tap that ends in a fault is let go, and the tile synced again once the
+    ///     source has recovered.
+    /// </summary>
+    async Task<Bound?> Bind(Tile tile, string topic, string attach, ElementReference element, CancellationToken ct)
+    {
+        Tap? tap;
+        try
+        {
+            tap = await Publisher.SubscribeAsync(Outlet, BinanceFeed.Service, topic, Market.ForEyes, ct); // (20 a second)
+        }
+        catch (ServiceUnavailableException)
+        {
+            tile.Status = "Binance feed unavailable";
+            return null;
+        }
+
+        if (tap is null)
+        {
+            tile.Status = $"{topic} refused";
+            return null;
+        }
+
+        tile.Status = "";
+        var source = tap.Source; // (a shape's: a topic of its own)
+        var (price, size, extra) = Scales(source);
+        if (topic.StartsWith("micro:", StringComparison.Ordinal)) // shown to the book's precision: its prices' places
+            size = Feed.Universe.Find(tile.Symbol)?.PriceScale ?? price;
+        var bound = new Bound(topic, tap, element);
+        await Js.InvokeVoidAsync(attach, ct, tap.Binding, element, price, size, _shape.Depth, extra); // (a book's rows a side)
+        _ = Watch(tile, bound, source);
+        return bound;
+    }
+
+    /// <summary>A tap's end: a fault shown on the tile, and the tile synced again when its source recovers.</summary>
+    async Task Watch(Tile tile, Bound bound, Source source)
+    {
+        var ct = _cts.Token;
+        try
+        {
+            var fault = await bound.Tap.Completion.WaitAsync(ct);
+            if (fault is null) return; // closed: the tile let go of it
+            tile.Status = $"{fault.Code} (last good v{fault.Version}) — subscribing again after recovery";
+            await InvokeAsync(StateHasChanged);
+            while (Outlet.FaultOf(source) is not null) await Task.Delay(250, ct);
+            await tile.Gate.WaitAsync(ct);
+            try
+            {
+                if (tile.Book == bound) tile.Book = null;
+                if (tile.Micro == bound) tile.Micro = null;
+                await Js.InvokeVoidAsync("marketGrid.unbind", ct, bound.Element);
+                bound.Tap.Dispose();
+            }
+            finally
+            {
+                tile.Gate.Release();
+            }
+
+            tile.Status = "";
+            await Sync(tile);
+        }
+        catch (Exception e) when (e is OperationCanceledException or JSDisconnectedException or ObjectDisposedException)
+        {
+        }
+    }
+
+    /// <summary>Lets go of a subscription: the view drops it (the client closes the tap), and the server's handle goes.</summary>
+    async Task Unbind(Bound? bound)
+    {
+        if (bound is null) return;
+        try
+        {
+            await Js.InvokeVoidAsync("marketGrid.unbind", _cts.Token, bound.Element);
+        }
+        finally
+        {
+            bound.Tap.Dispose();
+        }
+    }
+
+    /// <summary>
+    ///     The decimal places of a source's prices and sizes, as its provider declared them in step 1 — and, for a VWAP
+    ///     book, how many of its prices' places are past its levels' (its row's <c>vwap</c> over its key's <c>price</c>):
+    ///     shown only where they carry digits.
+    /// </summary>
+    static (int Price, int Size, int Extra) Scales(Source source)
+    {
+        var format = source.Format;
+        var level = format?.KeyLayout?.Fields.FirstOrDefault(f => f.Name == "price");
+        var vwap = format?.Layout?.Fields.FirstOrDefault(f => f.Name == "vwap"); // (a VWAP book's prices: its rows')
+        var price = vwap ?? level ?? format?.Layout?.Fields.FirstOrDefault();
+        var size = format?.KeyLayout is null ? null : format.Layout?.Fields.FirstOrDefault(f => f.Name == "size");
+        var extra = vwap is null || level is null ? 0 : Math.Max(0, vwap.Scale - level.Scale);
+        return (price?.Scale ?? 2, size?.Scale ?? 0, extra);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        _cts.Cancel();
+        try
+        {
+            if (_self is not null) await Js.InvokeVoidAsync("marketGrid.unobserve", _grid);
+            foreach (var tile in _tiles)
+            foreach (var bound in new[] { tile.Book, tile.Micro })
+                if (bound is not null)
+                {
+                    await Js.InvokeVoidAsync("marketGrid.unbind", bound.Element);
+                    bound.Tap.Dispose();
+                }
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+
+        _self?.Dispose();
+    }
+
+    sealed class Tile(string symbol)
+    {
+        public readonly SemaphoreSlim Gate = new(1, 1);
+        public readonly string Symbol = symbol;
+        public bool Accelerated, Collapsed, Visible;
+        public Bound? Book, Micro;
+        public ElementReference BookEl, MicroEl;
+        public string Status = "";
+    }
+
+    sealed record Bound(string Topic, Tap Tap, ElementReference Element);
+}

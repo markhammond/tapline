@@ -1,0 +1,97 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  build-test:
+    name: Build, test and pack
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      # The JS tests, and the Opaque tests' client, run on Node's own modules: nothing to install.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/Directory.Build.props') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      - name: Build
+        run: dotnet build Tapline.slnx -c Release
+
+      # The C# suite writes the frames the JS suite reads (tests/js/fixtures), so it runs first.
+      - name: Test (Tapline)
+        run: dotnet run -c Release --no-build --project tests/Tapline.Tests
+
+      - name: Test (JS)
+        run: node tests/js/test.mjs
+
+      - name: Test (PivotTable)
+        run: dotnet run -c Release --no-build --project tests/PivotTable.Tests
+
+      - name: Test (Opaque)
+        run: dotnet run -c Release --no-build --project tests/Opaque.Tests
+
+      - name: Test (opaque.wasm, in Node)
+        run: node src/Tapline.Authentication.Opaque/wasm/test.mjs
+
+      - name: Pack
+        run: dotnet pack Tapline.slnx -c Release --no-build -o artifacts
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: packages
+          path: artifacts/
+          if-no-files-found: error
+
+  practice:
+    name: ActivityFeed, end to end
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      # ChalkQL's planner, which the practice service starts.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/Directory.Build.props') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      # Spawns the practice (the service, the app and the dispatcher), checks every feed against the policy, runs the
+      # demo, blue/green and a kill; exits 0 if nothing failed.
+      - name: Verify
+        run: dotnet run -c Release --project samples/ActivityFeed.Headless -- --verify 30

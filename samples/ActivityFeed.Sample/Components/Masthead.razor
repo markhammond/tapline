@@ -1,0 +1,29 @@
+@inject IConfiguration Configuration
+@inject NavigationManager Nav
+
+<header class="masthead">
+    <h1><a href="">Northgate Practice</a></h1>
+    <span class="links">
+        activity feeds, live · <a href="">the board</a> · <a href="audit">the audit</a> ·
+        <a href="@Viewer" target="_blank" rel="noopener">the router's viewer</a>
+    </span>
+</header>
+<p class="lede">
+    Synthetic people, synthetic visits. Each feed is its person's own topic, from the practice service in a process of
+    its own, reached by this app's router over the provider link. ChalkQL's policy decides what each person is shown of
+    each activity: who the patient is, what for, and nothing at all, as their role and their patients allow.
+</p>
+
+@code {
+    /// <summary>The router's viewer: on the ops port (this machine only), or on this one for a stated reason.</summary>
+    string Viewer
+    {
+        get
+        {
+            var here = new Uri(Nav.BaseUri);
+            return Configuration["SharedOps"] is { Length: > 0 }
+                ? new Uri(here, "ops/realtime").ToString()
+                : new UriBuilder(here) { Port = Configuration.GetValue<int?>("OpsPort") ?? 5951, Path = "ops/realtime" }.Uri.ToString();
+        }
+    }
+}

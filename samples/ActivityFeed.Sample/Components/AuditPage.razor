@@ -1,0 +1,62 @@
+@page "/audit"
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@implements IDisposable
+@inject Practice Practice
+
+<Masthead/>
+@if (_people is null)
+{
+    <p class="hint">@(_problem ?? "Asking the practice service who's who…")</p>
+}
+else
+{
+    @* The log in a frame of its own: its connection signed in as the reader chosen, and read as them. *@
+    <p class="hint">
+        Read the access log as
+        <select @bind="ReaderId">
+            @foreach (var person in Readers)
+            {
+                <option value="@person.Id">@person.Name (@person.Role)</option>
+            }
+        </select>
+        — the frame below signs its own connection in as them (passthrough), and the service reads the log as whoever it's
+        signed in as: the auditor sees each line, anyone else none.
+    </p>
+    <iframe @key="ReaderId" class="panel-frame audit-frame" src="@($"audit/as/{ReaderId}?embed=true")"
+            title="The access log, as read by @(Readers.FirstOrDefault(p => p.Id == ReaderId)?.Name)"></iframe>
+}
+
+@code {
+    readonly CancellationTokenSource _cts = new();
+    Persona[]? _people;
+    string? _problem;
+
+    /// <summary>Who reads it: the practice's auditors first, then one of reception, a GP and the manager (the policy shows them no line).</summary>
+    IEnumerable<Persona> Readers => (_people ?? []).Where(p => p.Role == "auditor")
+        .Concat(((string[])["reception", "clinician", "manager"]).Select(role => (_people ?? []).FirstOrDefault(p => p.Role == role))
+            .OfType<Persona>());
+
+    int ReaderId { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        for (var delay = 500;; delay = Math.Min(delay * 2, 4000))
+            try
+            {
+                _people = await Practice.PersonasAsync(_cts.Token);
+                ReaderId = Readers.FirstOrDefault()?.Id ?? 0;
+                _problem = ReaderId == 0 ? "Nobody at the practice audits." : null;
+                return;
+            }
+            catch (Exception e) when (e is Grpc.Core.RpcException or HttpRequestException)
+            {
+                _problem = $"The practice service isn't answering at {string.Join(" or ", Practice.Addresses.Select(a => a.ToString()))} yet: asking again shortly.";
+                StateHasChanged();
+                try { await Task.Delay(delay, _cts.Token); }
+                catch (OperationCanceledException) { return; }
+            }
+            catch (OperationCanceledException) { return; }
+    }
+
+    public void Dispose() => _cts.Cancel();
+}

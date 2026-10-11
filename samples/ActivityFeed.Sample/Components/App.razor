@@ -1,0 +1,702 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width"/>
+    <base href="/"/>
+    <title>Northgate Practice</title>
+    <style>
+        :root {
+            --ink: #222;
+            --muted: #6f6f6f;
+            --rule: #e6e6e6;
+            --paper: #fff;
+            --panel: #f7f7f5;
+            --accent: 40, 120, 200;
+            --ok: #1d7a52;
+            --warn: #8a5a00;
+            --warn-bg: #fff6d6;
+            --held: #6b5a8a;
+            --held-bg: rgba(110, 90, 150, .1);
+            --screen: #0f1720;
+            --screen-ink: #e8eef5
+        }
+
+        @@media (prefers-color-scheme: dark) {
+            :root {
+                --ink: #ddd;
+                --muted: #8a8a8a;
+                --rule: #2c2c2c;
+                --paper: #161616;
+                --panel: #1d1d1d;
+                --accent: 90, 160, 240;
+                --ok: #5fd39b;
+                --warn: #f3d77a;
+                --warn-bg: #3a2f0b;
+                --held: #b9a8dc;
+                --held-bg: rgba(170, 150, 220, .12);
+                --screen: #0b1118
+            }
+        }
+
+        body {
+            font: 14px system-ui, sans-serif;
+            margin: 1.5rem 16px;
+            color: var(--ink);
+            background: var(--paper)
+        }
+
+        a {
+            color: rgb(var(--accent))
+        }
+
+        header.masthead {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: baseline;
+            gap: 4px 14px;
+            margin-bottom: 4px
+        }
+
+        header.masthead h1 {
+            margin: 0;
+            font-size: 20px
+        }
+
+        header.masthead h1 a {
+            color: inherit;
+            text-decoration: none
+        }
+
+        header.masthead .links {
+            font-size: 13px;
+            color: var(--muted)
+        }
+
+        .lede {
+            margin: 0 0 12px;
+            max-width: 80ch;
+            color: var(--muted);
+            font-size: 13px
+        }
+
+        .hint {
+            color: var(--muted)
+        }
+
+        .hint.legend {
+            margin: -6px 0 14px;
+            font-size: 12.5px
+        }
+
+        nav.who {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px 18px;
+            margin: 0 0 14px
+        }
+
+        nav.who .group {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 6px
+        }
+
+        nav.who .group > span {
+            color: var(--muted);
+            font-size: 11.5px;
+            text-transform: uppercase;
+            letter-spacing: .04em
+        }
+
+        a.chip {
+            border: 1px solid var(--rule);
+            border-radius: 999px;
+            padding: 2px 10px;
+            text-decoration: none;
+            color: var(--ink);
+            font-size: 13px
+        }
+
+        a.chip.on {
+            background: rgba(var(--accent), .12);
+            border-color: rgba(var(--accent), .45)
+        }
+
+        .board {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(min(100%, 430px), 1fr));
+            gap: 14px;
+            align-items: start
+        }
+
+        section.panel {
+            border: 1px solid var(--rule);
+            border-radius: 8px;
+            background: var(--panel);
+            min-width: 0
+        }
+
+        section.panel > header {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            gap: 8px;
+            padding: 10px 12px 2px
+        }
+
+        section.panel h3 {
+            margin: 0;
+            font-size: 15px
+        }
+
+        section.panel h3 .role {
+            color: var(--muted);
+            font-weight: 400;
+            font-size: 13px
+        }
+
+        section.panel > header a {
+            text-decoration: none;
+            font-size: 13px
+        }
+
+        .panel .about {
+            margin: 0 12px 4px;
+            color: var(--muted);
+            font-size: 12.5px
+        }
+
+        .panel .meta, .panel .status {
+            margin: 0 12px 8px;
+            color: var(--muted);
+            font-size: 12px
+        }
+
+        .panel .status {
+            color: var(--warn)
+        }
+
+        .dot {
+            display: inline-block;
+            width: 7px;
+            height: 7px;
+            margin-right: 6px;
+            border-radius: 50%;
+            background: var(--ok);
+            vertical-align: 1px
+        }
+
+        .dot.stale {
+            background: var(--warn)
+        }
+
+        .feed {
+            max-height: 460px;
+            overflow: auto;
+            border-top: 1px solid var(--rule);
+            background: var(--paper);
+            border-radius: 0 0 8px 8px
+        }
+
+        section.panel.alone {
+            max-width: 1100px
+        }
+
+        /* the board: each panel a page of its own (/as/{id}?embed=true), its own connection, signed in as its person */
+        iframe.panel-frame {
+            width: 100%;
+            height: 640px;
+            border: 0;
+            border-radius: 8px;
+            background: var(--panel)
+        }
+
+        body.embed {
+            margin: 0
+        }
+
+        section.panel + section.panel {
+            margin-top: 10px
+        }
+
+        body.embed section.panel.manager .feed {
+            max-height: 190px
+        }
+
+        iframe.audit-frame {
+            max-width: 1100px;
+            height: 760px
+        }
+
+        .audit h4 {
+            margin: 14px 12px 6px;
+            font-size: 13px
+        }
+
+        .audit table.log {
+            margin: 0 0 6px
+        }
+
+        .audit select, .audit input {
+            font: inherit;
+            font-size: 12.5px
+        }
+
+        .audit input {
+            width: 9ch
+        }
+
+        .alone .feed {
+            max-height: none
+        }
+
+        .feed .empty, .feed .more {
+            margin: 10px 12px;
+            color: var(--muted);
+            font-size: 13px
+        }
+
+        .feed .banner {
+            margin: 0;
+            padding: 6px 12px;
+            background: var(--warn-bg);
+            color: var(--warn);
+            font-size: 12.5px
+        }
+
+        .feed .note {
+            margin: 0;
+            padding: 6px 12px;
+            font-size: 12.5px;
+            border-bottom: 1px solid var(--rule)
+        }
+
+        .feed .note.ok {
+            color: var(--ok)
+        }
+
+        .feed .note.refused {
+            color: var(--warn)
+        }
+
+        table.visits, table.log {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px
+        }
+
+        table.visits td, table.log td, table.log th {
+            padding: 5px 8px;
+            border-bottom: 1px solid var(--rule);
+            vertical-align: top;
+            text-align: left
+        }
+
+        table.log th {
+            color: var(--muted);
+            font-weight: 500;
+            font-size: 12px
+        }
+
+        td.time, .mine .time {
+            color: var(--muted);
+            font-variant-numeric: tabular-nums;
+            white-space: nowrap
+        }
+
+        td.who .born {
+            color: var(--muted);
+            font-size: 12px
+        }
+
+        td.why .by {
+            margin-top: 2px;
+            color: var(--muted);
+            font-size: 12px
+        }
+
+        td.state {
+            white-space: nowrap;
+            text-align: right
+        }
+
+        td.state .action {
+            margin-top: 4px
+        }
+
+        .detail {
+            margin-top: 2px;
+            color: var(--muted);
+            font-size: 12px
+        }
+
+        .withheld {
+            display: inline-block;
+            padding: 0 6px;
+            border-radius: 4px;
+            background: var(--held-bg);
+            color: var(--held);
+            font-size: 12px;
+            white-space: nowrap;
+            cursor: help
+        }
+
+        .basis {
+            display: inline-block;
+            margin-left: 4px;
+            padding: 0 5px;
+            border: 1px dashed var(--rule);
+            border-radius: 4px;
+            color: var(--muted);
+            font-size: 11px;
+            white-space: nowrap;
+            cursor: help
+        }
+
+        .basis.emergency {
+            border-color: var(--warn);
+            color: var(--warn)
+        }
+
+        .withheld::before {
+            content: "⦸ ";
+            opacity: .7
+        }
+
+        .step {
+            display: inline-block;
+            padding: 1px 7px;
+            border-radius: 999px;
+            font-size: 12px;
+            background: rgba(127, 127, 127, .12)
+        }
+
+        .step.arrived {
+            background: rgba(var(--accent), .14)
+        }
+
+        .step.called {
+            background: rgba(29, 122, 82, .16);
+            color: var(--ok)
+        }
+
+        .step.seen {
+            color: var(--muted)
+        }
+
+        button.act {
+            font: inherit;
+            font-size: 12px;
+            padding: 2px 10px;
+            border-radius: 6px;
+            border: 1px solid rgba(var(--accent), .5);
+            background: rgba(var(--accent), .1);
+            color: rgb(var(--accent));
+            cursor: pointer
+        }
+
+        button.act:disabled {
+            opacity: .6;
+            cursor: progress
+        }
+
+        ul.messages {
+            margin: 0;
+            padding: 6px 12px;
+            list-style: none;
+            border-bottom: 1px solid var(--rule);
+            font-size: 13px
+        }
+
+        ul.messages li {
+            padding: 3px 0
+        }
+
+        ul.messages li.head {
+            color: var(--muted);
+            font-size: 11.5px;
+            text-transform: uppercase;
+            letter-spacing: .04em
+        }
+
+        ul.messages li.task {
+            font-weight: 600
+        }
+
+        details.why {
+            padding: 6px 12px 10px;
+            font-size: 12.5px
+        }
+
+        details.why summary {
+            color: var(--muted);
+            cursor: pointer
+        }
+
+        details.why h5 {
+            margin: 8px 0 2px;
+            font-size: 12.5px
+        }
+
+        details.why code {
+            font-size: 11.5px;
+            word-break: break-word
+        }
+
+        details.why ul {
+            margin: 2px 0 6px;
+            padding-left: 18px
+        }
+
+        .reply-line {
+            margin: 2px 0 0 12px;
+            color: var(--muted)
+        }
+
+        form.reply {
+            margin: 4px 0 2px 12px
+        }
+
+        section.stats {
+            padding: 6px 12px 10px;
+            border-bottom: 1px solid var(--rule)
+        }
+
+        section.stats h4 {
+            margin: 4px 0;
+            font-size: 13px;
+            font-weight: 600
+        }
+
+        table.hours {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+            font-variant-numeric: tabular-nums
+        }
+
+        table.hours th, table.hours td {
+            padding: 3px 6px;
+            border-bottom: 1px solid var(--rule);
+            text-align: right
+        }
+
+        table.hours th {
+            color: var(--muted);
+            font-weight: 500;
+            font-size: 12px
+        }
+
+        table.hours th:first-child, table.hours td:first-child {
+            text-align: left
+        }
+
+        section.stats .counted {
+            margin: 8px 0 4px;
+            color: var(--muted);
+            font-size: 12px
+        }
+
+        ul.reasons {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px 12px;
+            margin: 0;
+            padding: 0;
+            list-style: none;
+            font-size: 13px
+        }
+
+        .unread {
+            color: var(--warn)
+        }
+
+        .read, .ack.done {
+            color: var(--ok)
+        }
+
+        .result {
+            margin-top: 2px;
+            font-size: 12px
+        }
+
+        .ack {
+            margin-top: 2px;
+            color: var(--muted);
+            font-size: 12px
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 0 6px;
+            border-radius: 999px;
+            background: var(--warn-bg);
+            color: var(--warn);
+            font-weight: 600
+        }
+
+        details.sharing {
+            margin: 0;
+            padding: 6px 12px 8px;
+            border-bottom: 1px solid var(--rule);
+            font-size: 13px
+        }
+
+        details.sharing summary {
+            color: var(--muted);
+            cursor: pointer
+        }
+
+        details.sharing ul {
+            margin: 4px 0;
+            padding-left: 16px
+        }
+
+        details.sharing .offers {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px
+        }
+
+        button.act.small {
+            padding: 1px 8px;
+            font-size: 11.5px
+        }
+
+        button.act.glass {
+            border-color: rgba(200, 80, 60, .5);
+            background: rgba(200, 80, 60, .08);
+            color: #c0503c
+        }
+
+        .feed .banner.emergency {
+            background: rgba(200, 80, 60, .12);
+            color: #c0503c
+        }
+
+        form.write {
+            display: flex;
+            gap: 6px;
+            margin: 8px 12px
+        }
+
+        form.write input {
+            flex: 1;
+            min-width: 0;
+            font: inherit;
+            font-size: 13px;
+            padding: 3px 8px;
+            border: 1px solid var(--rule);
+            border-radius: 6px;
+            background: var(--paper);
+            color: var(--ink)
+        }
+
+        tr.changed td, li.changed {
+            animation: changed 1.4s ease-out
+        }
+
+        @@keyframes changed {
+            from {
+                background: rgba(var(--accent), .2)
+            }
+            to {
+                background: transparent
+            }
+        }
+
+        ul.mine {
+            margin: 0;
+            padding: 4px 12px 10px;
+            list-style: none
+        }
+
+        ul.mine li {
+            padding: 6px 0;
+            border-bottom: 1px solid var(--rule)
+        }
+
+        details.log {
+            margin: 12px 0 0;
+            border-top: 1px solid var(--rule)
+        }
+
+        details.log summary {
+            padding: 8px 12px;
+            color: var(--muted);
+            font-size: 13px;
+            cursor: pointer
+        }
+
+        .flag {
+            display: inline-block;
+            width: 14px;
+            text-align: center;
+            border-radius: 3px;
+            font-size: 10px;
+            font-weight: 600;
+            background: rgba(127, 127, 127, .14)
+        }
+
+        .flag.redacted {
+            background: var(--held-bg);
+            color: var(--held)
+        }
+
+        .screen .feed {
+            background: var(--screen);
+            color: var(--screen-ink)
+        }
+
+        .screen .feed .empty {
+            color: #9fb0c0
+        }
+
+        .tickets {
+            display: grid;
+            gap: 6px;
+            padding: 12px 16px
+        }
+
+        .ticket {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            font-variant-numeric: tabular-nums
+        }
+
+        .ticket.called {
+            font-size: 22px;
+            font-weight: 600;
+            color: #7ee2b8
+        }
+
+        .ticket.waiting {
+            font-size: 15px;
+            color: #b9c6d3
+        }
+
+        .alone .ticket.called {
+            font-size: 34px
+        }
+
+        .alone .ticket.waiting {
+            font-size: 20px
+        }
+    </style>
+</head>
+<body>
+<Routes/>
+<script src="@Assets["_framework/blazor.web.js"]" autostart="false"></script>
+<script type="module">
+    import {tapline} from './@Assets["_content/Tapline.AspNetCore/tapline.js"]';
+    import {startBlazor} from './@Assets["_content/Tapline.BlazorRealtime/blazor-realtime.js"]';
+    import {createPracticeView} from './@Assets["practice.js"]';
+
+    window.practiceView = createPracticeView(tapline);           // wwwroot/practice.js: each person's feed, from the rows the router streams
+    startBlazor(Blazor, tapline);
+</script>
+</body>
+</html>
