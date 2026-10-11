@@ -1,0 +1,63 @@
+@page "/as/{Id:int}"
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@implements IDisposable
+@inject Practice Practice
+@inject IJSRuntime JS
+
+@if (!Embed)
+{
+    <Masthead/>
+}
+@if (_person is null)
+{
+    <p class="hint">@(_problem ?? "Asking the practice service who's who…")</p>
+}
+else
+{
+    <FeedPanel @key="_person.Id" Persona="_person" People="_people!" Alone="!Embed" Embedded="Embed"/>
+    @if (_person.Role == "manager") // (and their statistics: a feed of its own)
+    {
+        <FeedPanel @key="-_person.Id" Persona="_person" People="_people!" Feed="stats" Alone="!Embed" Embedded="Embed"/>
+    }
+}
+
+@code {
+    readonly CancellationTokenSource _cts = new();
+    Persona? _person;
+    Persona[]? _people;
+    string? _problem;
+
+    [Parameter]
+    public int Id { get; set; }
+
+    /// <summary>In a frame on the board: the panel alone, as the board shows it (?embed=true).</summary>
+    [SupplyParameterFromQuery]
+    public bool Embed { get; set; }
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (firstRender && Embed) _ = JS.InvokeVoidAsync("practiceView.embedded").AsTask();
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        for (var delay = 500;; delay = Math.Min(delay * 2, 4000))
+            try
+            {
+                _people = await Practice.PersonasAsync(_cts.Token);
+                _person = _people.FirstOrDefault(p => p.Id == Id);
+                _problem = _person is null ? $"Nobody at the practice is {Id}." : null;
+                return;
+            }
+            catch (Exception e) when (e is Grpc.Core.RpcException or HttpRequestException)
+            {
+                _problem = $"The practice service isn't answering at {string.Join(" or ", Practice.Addresses.Select(a => a.ToString()))} yet: asking again shortly.";
+                StateHasChanged();
+                try { await Task.Delay(delay, _cts.Token); }
+                catch (OperationCanceledException) { return; }
+            }
+            catch (OperationCanceledException) { return; }
+    }
+
+    public void Dispose() => _cts.Cancel();
+}

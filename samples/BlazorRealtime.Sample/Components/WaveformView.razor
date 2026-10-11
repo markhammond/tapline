@@ -1,0 +1,866 @@
+@using BlazorRealtime.Sample.Waveform
+@using Microsoft.AspNetCore.WebUtilities
+@implements IAsyncDisposable
+@inject Outlet Outlet
+@inject WaveformDeployment Stations
+@inject Publisher Publisher
+@inject GcStats Gc
+@inject IJSRuntime JS
+@inject NavigationManager Nav
+@inject TaglineFont Tagline
+
+<div class="waveform">
+    <canvas @ref="_canvas"></canvas>
+    <div class="waveform-hdr-anchor"
+         aria-hidden="true"></div> @* Chromium on a Mac: keeps the canvas composited (CSS) *@
+    <svg class="waveform-label" role="img"
+         aria-label="Tapline — Blazor realtime data">   @* one label, not the glow's copies *@
+        <defs></defs>
+        <g class="waveform-glow"></g> @* the CRT's glow: widening, blurred copies of the caption (waveform.js) *@
+        <text
+            data-label="TAPLINE // BLAZOR REALTIME DATA"></text> @* laid out by waveform.js: under the ridges, | between lines *@
+    </svg>
+    <div class="waveform-hover"
+         aria-hidden="true"></div> @* what hovering is over (CSS): the page less a margin, so a pointer at an edge hides the text *@
+    <div class="waveform-veil">
+        <div class="waveform-text">
+            <p><i>A sensory experience streamed in realtime.</i></p>
+            <p class="waveform-meta">
+                <i>Unknown Pleasures</i> — Joy Division (1979), cover by Peter Saville ·
+                <i>@Station.Title</i>@(Station.Credit is { } credit ? $" — {credit} (NOTICE.md) · " : " — a MIDI file of this server's · ")
+                ridges after Book of Shapes' Joy Division (Nikolaj Sokolowski)
+            </p>
+            @* The rate cap is read as the circuit opens: target="_top" makes these a full page load (a new circuit) — Blazor
+               would otherwise navigate in place, the URL changing, the cap not. *@
+            <p class="waveform-meta">
+                p pause · t theme · f font · o occlusion · h HDR · i stats ·
+                @if (BandwidthLimit is { } limit)
+                {
+                    <a href="@Nav.GetUriWithQueryParameter("bwlimit", (string?)null)" target="_top">no limit</a>
+                    @($" (now bwlimit={limit})")
+                }
+                else
+                {
+                    <a href="@Nav.GetUriWithQueryParameter("bwlimit", "16")" target="_top">?bwlimit=16</a>
+                    @(" a slow link")
+                }
+            </p>
+            <div class="waveform-details">
+                <pre @ref="_details"></pre>
+                <pre @ref="_status"></pre>
+            </div> @* i: the full stats *@
+        </div>
+    </div>
+    <div
+        class="waveform-dock">                                           @* on hover, the figures; under them, the buttons: centred *@
+        <span class="waveform-rate" @ref="_hud"></span> @* frames a second, data rate (waveform.js) *@
+        <div class="waveform-buttons">
+            <button class="waveform-button waveform-pause" @ref="_pause" title="Pause (p)" aria-label="Pause"
+                    aria-pressed="false">   @* flat icons: pause while streaming, play while paused *@
+                <svg class="waveform-off" viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M7 5h3.5v14H7zM13.5 5H17v14h-3.5z"/>
+                </svg>
+                <svg class="waveform-on" viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M8 5l11 7-11 7z"/>
+                </svg>
+            </button>
+            <button class="waveform-button waveform-sound" @ref="_sound" title="Sound on/off" aria-label="Sound"
+                    aria-pressed="false">   @* flat icons: muted, on *@
+                <svg class="waveform-off" viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M3 9h4l5-4v14l-5-4H3z"/>
+                    <path class="waveform-stroke" d="M16 9.5l5 5M21 9.5l-5 5"/>
+                </svg>
+                <svg class="waveform-on" viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M3 9h4l5-4v14l-5-4H3z"/>
+                    <path class="waveform-stroke" d="M15.5 9.5a3.5 3.5 0 0 1 0 5M18 7a7 7 0 0 1 0 10"/>
+                </svg>
+            </button>
+        </div>
+    </div>
+</div>
+
+<style>
+    /* Themes, cycled every 30 s (waveform.js; t takes over, a theme a press) — the page's data-waveform-theme, kept in
+       local storage with whether it cycles, so a reload (a ?bwlimit link) resumes there (App.razor sets it before paint). A phosphor CRT: a dark tube, the lines in the
+       phosphor's colour, glowing, fading briefly, adding up where they cross, bleeding into the caption (drawn by waveform.js,
+       which reads all of these), behind scanlines and the tube's vignette — amber, then green. Then plain: retro, a
+       gunmetal page and lime-yellow lines; paper, black on a warm white. Then the grid: the four at once, a quadrant each (each
+       quadrant a .waveform-pane carrying its theme: the rules below take a theme from the page, or from a pane). */
+    .waveform {
+        --waveform-bg: #1b1510;
+        --waveform-ink: #ffbc26;
+        --waveform-text: #d29a33;
+        --waveform-glow: .45;
+        --waveform-afterglow: 16;
+        --waveform-overdraw: 1;
+        --waveform-bleed: 1;
+        position: fixed;
+        inset: 0;
+        z-index: 10;
+        background: var(--waveform-bg);
+        overflow: hidden;
+        pointer-events: none; /* hovered only over these: the page less a margin, the buttons, the text once shown — */
+    }
+
+    /* a pointer pushed to an edge (full screen) hides it all */
+    .waveform-hover {
+        position: absolute;
+        inset: 5vmin;
+        pointer-events: auto;
+    }
+
+    .waveform-button, .waveform:hover .waveform-text {
+        pointer-events: auto;
+    }
+
+    [data-waveform-theme="green"] .waveform, .waveform-pane[data-waveform-theme="green"] {
+        --waveform-bg: #0e1912;
+        --waveform-ink: #39ff6a;
+        --waveform-text: #2fb85a;
+    }
+
+    [data-waveform-theme="retro"] .waveform, .waveform-pane[data-waveform-theme="retro"] {
+        --waveform-bg: #2a3439;
+        --waveform-ink: #d9f24c;
+        --waveform-text: #9a9a9a;
+        --waveform-caption: var(--waveform-ink); /* the caption in the lines' own lime, full */
+    }
+
+    [data-waveform-theme="paper"] .waveform, .waveform-pane[data-waveform-theme="paper"] {
+        --waveform-bg: #fffcf7;
+        --waveform-ink: #000000;
+        --waveform-text: #555555;
+        --waveform-line-width: .15; /* finer lines: crisp, as print */
+        --waveform-bg-light: .5; /* the page itself in HDR white, past SDR's (waveform.js) */
+    }
+
+    [data-waveform-theme="retro"] .waveform, [data-waveform-theme="paper"] .waveform, .waveform-pane:is([data-waveform-theme="retro"], [data-waveform-theme="paper"]) {
+        --waveform-glow: 0;
+        --waveform-afterglow: 0;
+        --waveform-overdraw: 0;
+        --waveform-bleed: 0;
+    }
+
+    .waveform-pane {
+        position: relative;
+        overflow: hidden;
+        background: var(--waveform-bg);
+    }
+
+    /* (amber: .waveform's own) */
+    .waveform-grid {
+        position: absolute;
+        inset: 0;
+        z-index: 0;
+        display: grid;
+        grid-template: 1fr 1fr / 1fr 1fr;
+    }
+
+    /* its own layer: its panes' scanlines under the hover text */
+    :root:not([data-waveform-theme="grid"]) .waveform-grid, [data-waveform-theme="grid"] .waveform > canvas, [data-waveform-theme="grid"] .waveform > .waveform-label {
+        display: none;
+    }
+
+    .waveform::after, .waveform-pane::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        z-index: 1;
+        pointer-events: none; /* over all but the speaker */
+        background: repeating-linear-gradient(to bottom, rgba(0, 0, 0, .3) 0 1px, transparent 1px 3px),
+        radial-gradient(ellipse at center, transparent 55%, rgba(0, 0, 0, .6) 100%);
+    }
+
+    .waveform canvas {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        display: block;
+        opacity: 0;
+        transition: opacity 1.5s ease-in;
+    }
+
+    .waveform.waveform-live canvas {
+        opacity: 1;
+    }
+
+    /* faded in as the first frame lands (waveform.js) */
+    /* Chromium on a Mac, once nothing else on the page needs compositing (the pointer still a few seconds), hands an fp16
+       extended-range canvas straight to the system compositor, which misreads it: the HDR goes flat, oversaturated. A
+       backdrop filter, however small, keeps the canvas in Chrome's own compositing pass: a 1-pixel one in the corner, over
+       the page's plain colour. (After github.com/MONZikWasTaken/Framegen/issues/19.) */
+    .waveform-hdr-anchor {
+        display: none;
+    }
+
+    .waveform.waveform-chromium .waveform-hdr-anchor {
+        display: block;
+        position: absolute;
+        right: 0;
+        bottom: 0;
+        width: 1px;
+        height: 1px;
+        z-index: 3;
+        pointer-events: none;
+        backdrop-filter: blur(1px);
+        -webkit-backdrop-filter: blur(1px);
+    }
+
+    .waveform.waveform-live:hover canvas {
+        opacity: .5;
+        transition: opacity .6s ease;
+    }
+
+    /* hovered: the ridges behind the text, dimmed, frosted (the veil) */
+    /* The caption under the ridges, over the whole page (laid out by waveform.js). */
+    .waveform-label {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        overflow: visible;
+        pointer-events: none;
+        opacity: 0;
+        transition: opacity 1.5s ease-in;
+    }
+
+    @@font-face {
+        /* IBM Plex Mono, bundled (SIL OFL 1.1: wwwroot/fonts): Bold, and SemiBold */
+        font-family: "IBM Plex Mono";
+        font-weight: 700;
+        font-display: block;
+        src: url("fonts/IBMPlexMono-Bold.otf") format("opentype");
+    }
+
+    @@font-face {
+        font-family: "IBM Plex Mono";
+        font-weight: 600;
+        font-display: block;
+        src: url("fonts/IBMPlexMono-SemiBold.otf") format("opentype");
+    }
+
+    @@font-face {
+        /* Ioskeley Mono, bundled (SIL OFL 1.1: wwwroot/fonts): Bold — on trial for the caption (f) */
+        font-family: "Ioskeley Mono";
+        font-weight: 700;
+        font-display: block;
+        src: url("fonts/IoskeleyMono-Bold.woff2") format("woff2");
+    }
+
+    @@font-face {
+        /* Iosevka Slab, bundled (SIL OFL 1.1: wwwroot/fonts): Bold — on trial for the caption (f) */
+        font-family: "Iosevka Slab";
+        font-weight: 700;
+        font-display: block;
+        src: url("fonts/IosevkaSlab-Bold.woff2") format("woff2");
+    }
+
+    /* The caption's font: its theme's own — IBM Plex Mono (retro and paper; a tagline font's fallback), VT323 (the CRTs) —
+       or one on trial, in every theme: the page's data-waveform-font, which f cycles (waveform.js), kept in local storage as
+       the theme is. On the CRTs, a font on trial isn't a pixel font: spaced and softened as any, in its Bold. */
+    :root {
+        --waveform-mono: "IBM Plex Mono";
+        --waveform-crt: "VT323";
+    }
+
+    :root:is([data-waveform-font="ioskeley"], [data-waveform-font="iosevka-slab"]) {
+        --waveform-crt-pixels: 0;
+        --waveform-crt-soften: .03;
+        --waveform-crt-weight: 700;
+    }
+
+    :root[data-waveform-font="ioskeley"] {
+        --waveform-mono: "Ioskeley Mono";
+        --waveform-crt: "Ioskeley Mono";
+    }
+
+    :root[data-waveform-font="iosevka-slab"] {
+        --waveform-mono: "Iosevka Slab";
+        --waveform-crt: "Iosevka Slab";
+    }
+
+    .waveform-label text {
+        font-family: var(--waveform-mono), ui-monospace, Menlo, monospace;
+        font-weight: 700;
+    }
+
+    /* retro and paper: the caption's monospace, Bold (waveform.js draws in the same) */
+    @@font-face {
+        /* VT323, bundled (SIL OFL 1.1: wwwroot/fonts): DEC's VT320 terminal glyphs, a pixel 1/25 em */
+        font-family: "VT323";
+        font-weight: 400;
+        font-display: block;
+        src: url("fonts/VT323-Regular.ttf") format("truetype");
+    }
+
+    :is([data-waveform-theme="amber"], [data-waveform-theme="green"]) .waveform-label { /* the CRTs: a terminal's pixels — spaced as such, softened a quarter as much (waveform.js) */
+        --waveform-caption-pixels: var(--waveform-crt-pixels, 25);
+        --waveform-caption-soften: var(--waveform-crt-soften, .0075);
+    }
+
+    :is([data-waveform-theme="amber"], [data-waveform-theme="green"]) .waveform-label text {
+        font-family: var(--waveform-crt), var(--waveform-mono), ui-monospace, Menlo, monospace;
+        font-weight: var(--waveform-crt-weight, 400);
+        font-synthesis: none; /* its one weight, never emboldened */
+    }
+
+    @@font-face {
+        /* Jigga jigga, bundled (its terms: wwwroot/fonts/JiggaJigga-license.txt): the name */
+        font-family: "Jigga Jigga";
+        font-weight: 400;
+        font-display: block;
+        src: url("fonts/JiggaJigga.ttf") format("truetype");
+    }
+
+    .waveform-label {
+        --waveform-name-font: "Jigga Jigga";
+    }
+
+    /* the name (TAPLINE) in a font of its own, in every theme (waveform.js) */
+    .waveform-label {
+        --waveform-caption-split: 1;
+    }
+
+    /* split, the page's and the grid's quadrants' alike: the name below the field, two-thirds its width, the tagline beneath as wide (a quadrant's display: none — no caption, its field centred) */
+    .waveform-label .waveform-name {
+        font-family: var(--waveform-name-font);
+        font-weight: 400;
+        font-synthesis: none;
+    }
+
+    .waveform-glow {
+        opacity: .4;
+    }
+
+    /* the caption glows in the phosphor's colour… */
+    .waveform-glow text {
+        fill: var(--waveform-bleed-paint) var(--waveform-ink);
+        stroke: var(--waveform-bleed-paint) var(--waveform-ink);
+        stroke-linejoin: round;
+    }
+
+    /* (its pane's gradient: waveform.js) */
+    .waveform-label > text { /* …in the ridges' light, brighter beneath their peaks (the bleed: waveform.js), a soft black glow round each letter (WebGPU's: HALO) */
+        fill: var(--waveform-bleed-paint) var(--waveform-ink);
+        stroke: rgba(0, 0, 0, .75);
+        stroke-width: .16em;
+        stroke-linejoin: round;
+        paint-order: stroke;
+        filter: blur(calc(var(--waveform-caption-soften, .03) * 1em)) drop-shadow(0 0 .14em rgba(0, 0, 0, .75)); /* softened a little, as a CRT's spot (WebGPU's: SOFTEN; a theme's --waveform-caption-soften) */
+    }
+
+    .waveform-label > text .waveform-break {
+        stroke: var(--waveform-bleed-paint) var(--waveform-ink);
+        stroke-width: var(--stroke);
+    }
+
+    /* the //, heavier (waveform.js) */
+    .waveform-gpu-caption > .waveform-label > * {
+        opacity: 0;
+    }
+
+    /* drawn by WebGPU instead, white-hot in HDR (waveform.js) */
+    :is([data-waveform-theme="retro"], [data-waveform-theme="paper"], [data-waveform-theme="grid"]) .waveform::after,
+    .waveform-pane:is([data-waveform-theme="retro"], [data-waveform-theme="paper"])::after,
+    :is([data-waveform-theme="retro"], [data-waveform-theme="paper"]) .waveform-glow {
+        display: none;
+    }
+
+    [data-waveform-theme="paper"] .waveform-label > text {
+        fill: var(--waveform-ink);
+        stroke: none;
+        filter: none;
+    }
+
+    /* plain */
+    [data-waveform-theme="paper"] .waveform-label > text .waveform-break {
+        stroke: var(--waveform-ink);
+    }
+
+    [data-waveform-theme="retro"] .waveform-label > text, [data-waveform-theme="retro"] .waveform-label > text .waveform-break { /* outlined outside, as wide as the ridges (waveform.js): */
+        fill: var(--waveform-bg);
+        stroke: var(--waveform-caption);
+        stroke-width: calc(2 * var(--waveform-line, 2px)); /* stroked twice as wide, the fill (the page's colour) */
+        stroke-linejoin: round;
+        paint-order: stroke;
+        filter: none; /* over its inner half: the letters' own shape left open */
+    }
+
+    [data-waveform-theme="retro"] .waveform > .waveform-label > text {
+        stroke-width: calc(1.5 * var(--waveform-line, 2px));
+    }
+
+    /* the page's own: a little finer, three-quarters of the ridges' width */
+    [data-waveform-theme="retro"] .waveform-label > text > .waveform-name {
+        fill: var(--waveform-caption);
+        stroke: none;
+    }
+
+    /* the name (TAPLINE): solid */
+    .waveform.waveform-live .waveform-label {
+        opacity: 1;
+    }
+
+    .waveform.waveform-live:hover .waveform-label {
+        opacity: .5;
+        transition: opacity .6s ease;
+    }
+
+    .waveform-veil {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        overflow-y: hidden;
+        padding: 1.5rem 2em 4.5rem;
+        color: var(--waveform-text);
+        font: clamp(14px, 3vmin, 24px)/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+        text-shadow: 0 0 .15em color-mix(in srgb, var(--waveform-ink) 45%, transparent), 0 0 .1em #000, 0 0 .3em #000, 0 0 .7em #000; /* a black halo: legible over the ridges */
+        transition: background-color .6s ease, backdrop-filter .6s ease, -webkit-backdrop-filter .6s ease;
+        pointer-events: none;
+    }
+
+    [data-waveform-theme="paper"] .waveform .waveform-veil, [data-waveform-theme="paper"] .waveform .waveform-rate {
+        text-shadow: 0 0 .1em var(--waveform-bg), 0 0 .3em var(--waveform-bg), 0 0 .7em var(--waveform-bg);
+    }
+
+    /* the page's white, on paper */
+    .waveform:hover .waveform-veil { /* shown: its links work, and it scrolls if it must */
+        overflow-y: auto; /* (its text takes the pointer: the glass passes it on) */
+        background-color: color-mix(in srgb, var(--waveform-bg) 35%, transparent); /* frosted glass, tinted the page's colour, over the whole page, */
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px); /* blurring what's behind (under the scanlines)… */
+    }
+
+    .waveform-text {
+        opacity: 0;
+        transition: opacity .3s ease;
+    }
+
+    /* …the text on it once it has frosted (and gone first) */
+    .waveform:hover .waveform-text {
+        opacity: 1;
+        transition: opacity .4s ease .3s;
+    }
+
+    .waveform-text {
+        margin: auto;
+        max-width: 60ch;
+    }
+
+    /* centred; in a window too short for it, from the top (auto margins give way) */
+    .waveform-veil i, .waveform-veil a {
+        color: var(--waveform-ink);
+    }
+
+    .waveform-veil p {
+        margin: 0 0 .8em;
+    }
+
+    .waveform-meta {
+        font-size: .7em;
+    }
+
+    .waveform-details {
+        display: none;
+        font-size: .5em;
+        margin-bottom: 1.4em;
+    }
+
+    /* i: the full stats (waveform.js) */
+    .waveform-detailed .waveform-details {
+        display: block;
+    }
+
+    .waveform-veil pre {
+        margin: 0 0 .5em;
+        font: inherit;
+        white-space: pre-wrap;
+    }
+
+    .waveform-dock { /* above the scanlines, centred at the foot */
+        position: absolute;
+        z-index: 2;
+        left: 50%;
+        bottom: 1rem;
+        transform: translateX(-50%);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: .3rem;
+    }
+
+    .waveform-buttons {
+        display: flex;
+        gap: .75rem;
+    }
+
+    .waveform-button {
+        background: none;
+        border: 0;
+        padding: .25rem;
+        color: var(--waveform-ink);
+        line-height: 0;
+        cursor: pointer;
+        opacity: .55;
+        transition: opacity .4s, filter .4s;
+    }
+
+    .waveform-button svg {
+        width: 1.75rem;
+        height: 1.75rem;
+        fill: currentColor;
+    }
+
+    .waveform-button .waveform-stroke {
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 2;
+        stroke-linecap: round;
+    }
+
+    .waveform-button .waveform-on, .waveform-button[aria-pressed="true"] .waveform-off {
+        display: none;
+    }
+
+    .waveform-button[aria-pressed="true"] .waveform-on {
+        display: inline;
+    }
+
+    .waveform:hover .waveform-button {
+        opacity: 1;
+        filter: drop-shadow(0 0 .1rem #000) drop-shadow(0 0 .35rem #000);
+    }
+
+    /* on hover, the text's black halo */
+    [data-waveform-theme="paper"] .waveform:hover .waveform-button {
+        filter: drop-shadow(0 0 .1rem var(--waveform-bg)) drop-shadow(0 0 .35rem var(--waveform-bg));
+    }
+
+    /* (the page's white, on paper) */
+    .waveform-sound[aria-pressed="true"], .waveform-pause:not([aria-pressed="true"]) {
+        opacity: .22;
+    }
+
+    /* as it should be (playing, streaming): quieter… */
+    .waveform:hover .waveform-sound[aria-pressed="true"], .waveform:hover .waveform-pause:not([aria-pressed="true"]) {
+        opacity: .7;
+    }
+
+    /* …muted, paused: brighter, an invitation */
+    @@media (hover: hover) {
+        /* the grid: nothing over its four but the pictures — the buttons on hover alone */
+        [data-waveform-theme="grid"] .waveform:not(:hover) .waveform-button {
+            opacity: 0;
+        }
+    }
+
+    .waveform-rate { /* on hover, centred over the speaker */
+        color: var(--waveform-text);
+        font: calc(clamp(14px, 3vmin, 24px) * .7)/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+        white-space: nowrap;
+        text-shadow: 0 0 .1em #000, 0 0 .3em #000;
+        opacity: 0;
+        transition: opacity .6s ease;
+        pointer-events: none;
+    }
+
+    .waveform:hover .waveform-rate {
+        opacity: 1;
+        transition: opacity .4s ease .3s;
+    }
+
+    /* with the text, after the glass */
+</style>
+@if (Tagline.FilePath is not null && Tagline.Themes.Length > 0)
+{
+    @* The caption in a font of this machine's (TaglineFont: not bundled), in the themes it is for, over theirs — served to
+       this machine only: elsewhere its request 404s, and the caption stays in its theme's font. Not a pixel font: spaced
+       and softened as any. *@
+    var themes = string.Join(", ", Tagline.Themes.Select(t => $"[data-waveform-theme=\"{t}\"]"));
+    <style>
+        @@font-face { font-family: "Waveform Tagline"; font-weight: 100 900; font-display: block; src: url("@Tagline.Url") format("@Tagline.Format"); }
+
+        :is(@themes) .waveform-label {
+            --waveform-caption-pixels: 0;
+            --waveform-caption-soften: .03;
+        }
+
+        :is(@themes) .waveform-label text {
+            font-family: "Waveform Tagline", var(--waveform-mono), ui-monospace, Menlo, monospace;
+        }
+    </style>
+}
+
+@code {
+    ElementReference _canvas, _sound, _pause, _hud, _details, _status;
+    Tap? _sceneTap, _musicTap;
+    DotNetObjectReference<WaveformView>? _self;
+    Timer? _refresh;
+    Tier _tier = Tier.Tiny; // until the path shows it can carry more
+    string _why = " (starting)";
+    DateTime _upgradeAfter, _upgradedAt; // backoff: a move up that didn't hold waits longer next time
+    TimeSpan _backoff = TimeSpan.FromSeconds(5);
+    int _below; // consecutive seconds the budget called for a lower tier
+    bool _priority = true; // the music on High; ?priority=off: in Streaming, with the ridges
+
+    /// <summary>The page's ?bwlimit (the circuit's Streaming cap, read as it opened: BlazorRealtimeOptions), if any.</summary>
+    string? BandwidthLimit => QueryHelpers.ParseQuery(new Uri(Nav.Uri).Query).TryGetValue("bwlimit", out var v)
+                              && v.ToString() is { Length: > 0 } s && s != "0"
+        ? s
+        : null;
+
+    enum Tier
+    {
+        Full,
+        Lite,
+        Tiny
+    } // larger: smaller frames
+
+    // The ridges this circuit can carry: lite under ~40 full frames a second (40 KiB/s; all 60 take ~60), tiny under ~9
+    // lite frames a second (6 KiB/s) — what its path delivers when flow control is pacing it, or what ?bwlimit caps its
+    // Streaming class at. All three draw the same lines (Ridges): a change softens or sharpens the detail. Every viewer starts tiny (a
+    // larger frame would hold a slow path longer before it could be measured), first checked 0.4 s in; down at once, back
+    // up with twice the headroom — unpaced counts as unlimited once it has delivered that much. A client that can't keep
+    // up (decoding, say) looks unlimited on the smaller frames it can: after a move up that falls back within 30 s, the
+    // next try waits twice as long (5 s, up to 2 min) — no flapping. And down only after 3 seconds in a row that call for
+    // it: a moment's stall in the browser isn't a slower path.
+    const double LiteBelow = 40 * 1024, TinyBelow = 6 * 1024;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return; // interactive only (not during prerender)
+        _priority = !(QueryHelpers.ParseQuery(new Uri(Nav.Uri).Query).TryGetValue("priority", out var p) && p == "off");
+        _self = DotNetObjectReference.Create(this);
+        _sceneTap = await SubscribeRidges() ?? throw new InvalidOperationException("The station refused the ridges."); // step 1; the view activates it (step 2)
+        await JS.InvokeVoidAsync("waveformView.attach", _sceneTap.Binding, _canvas, _hud, _details, _status, _sound, _pause, _self);
+        _refresh = new Timer(_ => InvokeAsync(Tick), null, 400, 1000);
+    }
+
+    /// <summary>The server's side of the full stats (i) — fetched by the view while they are shown, not rendered every second.</summary>
+    [JSInvokable]
+    public string Status()
+    {
+        return ServerLine() + "\n" + Gc.Line() + "\n" + FlowLine();
+    }
+
+    /// <summary>
+    ///     Sound on: bind the music's rolling window and hand the binding to the view, which activates it. Off: close it. The
+    ///     tap rides the High class: it must not wait behind the ridges' frames (nor count against ?bwlimit, which caps
+    ///     Streaming), and on a slow path the ridges, in Streaming, make way for it — they take what is left. ?priority=off
+    ///     binds it in Streaming instead, alongside the ridges: the difference, to hear.
+    /// </summary>
+    [JSInvokable]
+    public async Task<TapBinding?> Listen(bool on)
+    {
+        _musicTap?.Dispose();
+        _musicTap = null;
+        if (!on) return null;
+        try
+        {
+            _musicTap = await Publisher.SubscribeAsync(Outlet, "waveform", "notes", _priority ? Lane.High : null);
+        }
+        catch (ServiceUnavailableException)
+        {
+            return null;
+        } // no station serving: the page is told when one is up
+
+        return _musicTap?.Binding;
+    }
+
+    /// <summary>
+    ///     The ridges unsubscribed (pause) or subscribed again (play), at this circuit's tier — through the station (step 1;
+    ///     the view activates the new route). Unsubscribed, the station learns of it from its next frame's answer (202 once
+    ///     no route is left) and stops producing that tier.
+    /// </summary>
+    [JSInvokable]
+    public async Task<TapBinding?> Ridges(bool on)
+    {
+        _sceneTap?.Dispose();
+        _sceneTap = null;
+        if (!on) return null;
+        try
+        {
+            _sceneTap = await SubscribeRidges();
+        }
+        catch (ServiceUnavailableException)
+        {
+            return null;
+        } // no station serving: the page is told when one is up
+
+        return _sceneTap?.Binding;
+    }
+
+    /// <summary>
+    ///     Make before break — the station draining (the page told to move): the ridges subscribed again, onto whichever
+    ///     station takes subscribers now, while the old subscription keeps streaming — the page lets it go once the new one
+    ///     does (or the router closes it when its grace runs out). Not while paused: nothing to move.
+    /// </summary>
+    [JSInvokable]
+    public async Task<TapBinding?> MoveRidges()
+    {
+        if (_sceneTap is null) return null;
+        Tap? next;
+        try
+        {
+            next = await SubscribeRidges();
+        }
+        catch (ServiceUnavailableException)
+        {
+            return null;
+        } // no station taking subscribers: the old one's grace holds, then up
+
+        if (next is null) return null;
+        _sceneTap = next; // (the old one: the page lets it go)
+        return next.Binding;
+    }
+
+    /// <summary>The same for the music (on, and not paused).</summary>
+    [JSInvokable]
+    public async Task<TapBinding?> MoveMusic()
+    {
+        if (_musicTap is null) return null;
+        Tap? next;
+        try
+        {
+            next = await Publisher.SubscribeAsync(Outlet, "waveform", "notes", _priority ? Lane.High : null);
+        }
+        catch (ServiceUnavailableException)
+        {
+            return null;
+        }
+
+        if (next is null) return null;
+        _musicTap = next;
+        return next.Binding;
+    }
+
+    /// <summary>The station on air — during a deploy, the new one (its predecessor draining).</summary>
+    WaveformStation Station => Stations.Current;
+
+    /// <summary>The deployment, for the stats: no station's name — the page knows none — just how many, and how it goes.</summary>
+    string StationsLine()
+    {
+        return Stations.Previous is { } previous
+            ? $"stations: a deploy — the new one on air, the old draining ({previous.Routes} routes left)"
+            : $"stations: one on air{(Stations.Deploys > 0 ? $" · {Stations.Deploys} deploy{(Stations.Deploys > 1 ? "s" : "")}" : "")}";
+    }
+
+    /// <summary>Step 1 with the station: the ridges at this circuit's tier (a shared topic; resumed from the next frame).</summary>
+    ValueTask<Tap?> SubscribeRidges()
+    {
+        return Publisher.SubscribeAsync(Outlet, "waveform", _tier switch { Tier.Full => "full", Tier.Lite => "lite", _ => "tiny" });
+    }
+
+    /// <summary>
+    ///     What the browser can show: its display's refresh (null: not yet measured), 0 while the page isn't painted (hidden,
+    ///     or throttled by the browser). Slower than the station, or not painted, the circuit's frames are capped to it — 1 a
+    ///     second while hidden, so the ridges are fresh when it comes back; otherwise uncapped. The music, on High, isn't held
+    ///     to it.
+    /// </summary>
+    [JSInvokable]
+    public void Display(int? hz)
+    {
+        Outlet.SetMaxFramesPerSecond(hz is null ? 0 : hz <= 0 ? 1 : hz < WaveformStation.SceneRate * 9 / 10 ? hz.Value : 0);
+    }
+
+    /// <summary>
+    ///     Once a second: the ridges' tier for this circuit. (Nothing is re-rendered: on a slow path a render batch a
+    ///     second would be a good part of the link, and outside the stream's flow control.)
+    /// </summary>
+    async Task Tick()
+    {
+        if (Outlet.MaxFramesPerSecond is > 0 and <= 5)
+        {
+            _below = 0;
+            return;
+        } // the page isn't shown (Display): what it gets says nothing of the path
+
+        if (_sceneTap is null)
+        {
+            _below = 0;
+            return;
+        } // paused: the ridges unsubscribed
+
+        double delivered = Outlet.DeliveryRate;
+        var path = Outlet.PacingRate > 0 || delivered < 2 * TinyBelow ? delivered : double.PositiveInfinity; // unpaced: the path isn't the limit
+        var cap = Outlet.StreamingBytesPerSecond > 0 ? Outlet.StreamingBytesPerSecond : double.PositiveInfinity;
+        var budget = Math.Min(path, cap);
+        var down = budget < TinyBelow ? Tier.Tiny : budget < LiteBelow ? Tier.Lite : Tier.Full;
+        var up = budget < 2 * TinyBelow ? Tier.Tiny : budget < 2 * LiteBelow ? Tier.Lite : Tier.Full;
+        var now = DateTime.UtcNow;
+        _below = down > _tier ? _below + 1 : 0;
+        var tier = down > _tier ? _below >= 3 ? down : _tier : up < _tier && now >= _upgradeAfter ? up : _tier;
+        if (tier != _tier && _sceneTap is not null)
+        {
+            if (tier < _tier) _upgradedAt = now; // up
+            else // down: if soon after going up, back off
+            {
+                _backoff = now - _upgradedAt < TimeSpan.FromSeconds(30) ? TimeSpan.FromTicks(Math.Min(_backoff.Ticks * 2, TimeSpan.FromMinutes(2).Ticks)) : TimeSpan.FromSeconds(5);
+                _upgradeAfter = now + _backoff;
+            }
+
+            _tier = tier;
+            var old = _sceneTap;
+            var next = await SubscribeRidges(); // the other tier's topic, through the station
+            if (next is null || !ReferenceEquals(_sceneTap, old))
+            {
+                next?.Dispose();
+                return;
+            } // refused, or paused meanwhile
+
+            _sceneTap = next;
+            try
+            {
+                await JS.InvokeVoidAsync("waveformView.retune", next.Binding);
+            }
+            catch (Exception e) when (e is JSDisconnectedException or TaskCanceledException)
+            {
+            }
+
+            old.Dispose();
+        }
+
+        _why = _tier == Tier.Full ? ""
+            : cap <= path ? $" (bwlimit {cap / 1024:F0} KiB/s)"
+            : double.IsFinite(path) ? $" (path {path / 1024:F1} KiB/s)" : $" (trying more in {(_upgradeAfter - now).TotalSeconds:F0} s)";
+    }
+
+    string ServerLine()
+    {
+        return $"server   ridges {Station.ScenesPerSecond:F1} frames/s, computed and encoded once for all viewers " +
+               $"in {Station.ComputeMs:F2} ms · full {Station.SceneBytes / 1024:F2} / lite {Station.LiteSceneBytes / 1024:F2} / tiny {Station.TinySceneBytes / 1024:F2} KiB · " +
+               $"this viewer: {_tier.ToString().ToLowerInvariant()}{_why}{(_sceneTap is null ? " · paused (unsubscribed)" : "")} · {Station.TopicsLine()} · {StationsLine()}\n" +
+               $"         music as notes · {Station.NoteBytesPerSecond / 1024:F2} KiB/s · window {MidiProgram.Window} rows" +
+               (_priority ? " · on High, the ridges making way" : " · in Streaming with the ridges (?priority=off)") +
+               $" · {Station.Title}, bar {Station.Bar}/{Station.Bars}{(Station.Starts > 1 ? $" (play {Station.Starts})" : "")}";
+    }
+
+    string FlowLine()
+    {
+        return $"circuit  min RTT {Outlet.MinRtt.TotalMilliseconds:F2} ms · delivered {Outlet.DeliveryRate / 1024.0:F1} KiB/s · " +
+               $"in flight {Outlet.InflightBytes:N0} of {Outlet.InflightLimit:N0} B · " +
+               (Outlet.PacingRate > 0 ? $"paced at {Outlet.PacingRate / 1024.0:F1} KiB/s" : "unpaced (the station is the limit)") +
+               (Outlet.StreamingBytesPerSecond > 0 ? $" · bwlimit {Outlet.StreamingBytesPerSecond / 1024.0:F1} KiB/s" : "") +
+               (Outlet.MaxFramesPerSecond > 0 ? $" · frames capped at {Outlet.MaxFramesPerSecond}/s (what the page can show)" : "");
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        _refresh?.Dispose();
+        _sceneTap?.Dispose();
+        _musicTap?.Dispose();
+        if (_self is null) return; // never interactive (prerendered): nothing attached
+        try
+        {
+            await JS.InvokeVoidAsync("waveformView.detach");
+        }
+        catch (Exception e) when (e is JSDisconnectedException or TaskCanceledException)
+        {
+        }
+
+        _self.Dispose();
+    }
+
+}

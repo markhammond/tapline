@@ -1,0 +1,95 @@
+@implements IAsyncDisposable
+@inject Outlet Outlet
+@inject Publisher Publisher
+@inject IJSRuntime Js
+
+<h2>Sign in — passkeys and passwords (OPAQUE)</h2>
+<p style="max-width: 46rem">
+    Realm <code>demo</code>, kept in memory: everything here is forgotten when the sample stops. A name no one has
+    claimed is yours by creating a passkey or setting a password for it; signed in, you can add the other. The password
+    never leaves this page — it's stretched here (Argon2id) and proved by OPAQUE; the router relays bytes it can't read.
+    Passkeys belong to <code>localhost</code>: open this page as http://localhost:…, not 127.0.0.1.
+</p>
+
+@* Not bound to Blazor: what's typed here stays in the page, never sent over the circuit — the page's script reads it. *@
+<form @ref="_form" autocomplete="on" style="display: grid; grid-template-columns: max-content 16rem; gap: 6px 10px; align-items: center">
+    <label for="signin-user">Name</label>
+    <input id="signin-user" name="user" autocomplete="username webauthn" spellcheck="false"/>
+    <label for="signin-password">Password</label>
+    <input id="signin-password" name="password" type="password" autocomplete="current-password"/>
+    <span></span>
+    <span style="display: flex; gap: 6px; flex-wrap: wrap">
+        <button type="button" data-action="passkey">Sign in with a passkey</button>
+        <button type="button" data-action="passkey-register">Create a passkey</button>
+        <button type="button" data-action="password">Sign in with the password</button>
+        <button type="button" data-action="password-register">Set the password</button>
+    </span>
+    <pre class="log" style="grid-column: 1 / 3; color: #555; min-height: 4em; white-space: pre-wrap; margin: 6px 0"></pre>
+</form>
+
+<p>The router knows this connection as: <b>@IdentityLine()</b>
+    @if (Outlet.Identity is not null)
+    {
+        <button type="button" @onclick="SignOut" style="margin-left: 8px">Sign out</button>
+    }
+</p>
+
+<h3>Members only</h3>
+<p>The <code>members</code> service requires a sign-in to <code>demo</code>: the router refuses anyone else before its
+    provider is asked.</p>
+<p><button type="button" @onclick="Members">Subscribe to members</button> <span @ref="_membersEl">@_members</span></p>
+
+@code {
+    ElementReference _form, _membersEl;
+    string _members = "";
+    Timer? _refresh;
+
+    string IdentityLine()
+    {
+        if (Outlet.Identity is not { } id) return "anonymous";
+        var lapses = id.ExpiresAt is { } at ? $", lapses {at.ToLocalTime():HH:mm:ss}" : "";
+        return $"{id.UserId} in realm {id.Realm}, by {id.Module}{(id.Insecure ? " (insecure)" : "")}{lapses} · renewal {Outlet.SessionPolicy.Renewal.ToString().ToLowerInvariant()}";
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        await Js.InvokeVoidAsync("signInView.attach", _form);
+        _refresh = new Timer(_ => InvokeAsync(StateHasChanged), null, 500, 500); // (the router's view, as it changes)
+    }
+
+    async Task Members()
+    {
+        try
+        {
+            var tap = await Publisher.SubscribeAsync(Outlet, "members");
+            if (tap is null)
+            {
+                _members = "refused";
+                return;
+            }
+
+            _members = "";
+            await Js.InvokeVoidAsync("signInView.attachMembers", tap.Binding, _membersEl);
+        }
+        catch (SubscriptionRefusedException e)
+        {
+            _members = $"refused — {e.Refusal.Kind}: {e.Refusal.Reason}";
+        }
+        catch (ServiceUnavailableException)
+        {
+            _members = "unavailable: try again shortly";
+        }
+    }
+
+    async Task SignOut()
+    {
+        Outlet.SetIdentity(null); // (the app's own say: the subscriptions shown the identity end)
+        await Js.InvokeVoidAsync("signInView.signedOut");
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_refresh is not null) await _refresh.DisposeAsync();
+    }
+}

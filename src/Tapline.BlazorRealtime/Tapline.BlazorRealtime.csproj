@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+    <PropertyGroup>
+        <PackageLicenseExpression>EPL-2.0</PackageLicenseExpression>
+        <TargetFramework>net10.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <LangVersion>latest</LangVersion>
+        <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+        <PackageId>Tapline.BlazorRealtime</PackageId>
+        <PackageTags>$(PackageTags);blazor;blazor-server;signalr</PackageTags>
+        <Description>Realtime streaming to Blazor Server clients over the circuit's own SignalR connection, built on Tapline.</Description>
+        <RootNamespace>BlazorRealtime</RootNamespace>
+    </PropertyGroup>
+    <ItemGroup>
+        <FrameworkReference Include="Microsoft.AspNetCore.App"/>
+        <ProjectReference Include="../Tapline/Tapline.csproj"/>
+        <ProjectReference Include="../Tapline.AspNetCore/Tapline.AspNetCore.csproj"/>
+        <InternalsVisibleTo Include="Tapline.Tests"/>
+    </ItemGroup>
+</Project>

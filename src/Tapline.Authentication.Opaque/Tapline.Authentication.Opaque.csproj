@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+    <!-- Copyright 2026 Mark Hammond. Licensed under the Apache License, Version 2.0 (see LICENSE). -->
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <LangVersion>latest</LangVersion>
+        <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+        <PackageId>Tapline.Authentication.Opaque</PackageId>
+        <PackageTags>$(PackageTags);authentication;opaque;rfc9807;password;pake;webassembly</PackageTags>
+        <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+        <!-- (wasm/: opaque.wasm's Rust source and its build output, not the project's) -->
+        <DefaultItemExcludes>$(DefaultItemExcludes);wasm/**</DefaultItemExcludes>
+        <Description>OPAQUE (RFC 9807) password sign-in for Tapline: a module of Tapline.Authentication, the password never leaving the client — opaque-ke 4 (ristretto255, Argon2id) as WebAssembly, run by Wasmtime on the server and a headless client, and by the browser (opaque.mjs, tapline-opaque.mjs).</Description>
+    </PropertyGroup>
+    <ItemGroup>
+        <ProjectReference Include="../Tapline.Authentication/Tapline.Authentication.csproj"/>
+        <ProjectReference Include="../Tapline.Client/Tapline.Client.csproj"/>
+        <PackageReference Include="Wasmtime" Version="48.0.2"/>
+        <EmbeddedResource Include="wwwroot/opaque.wasm" LogicalName="opaque.wasm"/>
+        <None Include="LICENSE;THIRD-PARTY-NOTICES.md" Pack="true" PackagePath="/"/>
+        <InternalsVisibleTo Include="Tapline.Tests"/>
+    </ItemGroup>
+</Project>

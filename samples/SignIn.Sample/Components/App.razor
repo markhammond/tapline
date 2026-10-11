@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8"/>
+    <base href="/"/>
+    <title>Tapline sign-in sample</title>
+    <style>body {
+            font: 14px system-ui;
+            margin: 2rem
+        }</style>
+</head>
+<body>
+<Routes/>
+<script src="@Assets["_framework/blazor.web.js"]" autostart="false"></script>
+<script type="module">
+    import {tapline} from './@Assets["_content/Tapline.AspNetCore/tapline.js"]';
+    import {startBlazor} from './@Assets["_content/Tapline.BlazorRealtime/blazor-realtime.js"]';
+    import {createSignIn} from './@Assets["signin.js"]';
+    import * as passwords from './@Assets["_content/Tapline.Authentication.Opaque/tapline-opaque.mjs"]';
+
+    window.signInView = createSignIn(tapline, passwords);           // wwwroot/signin.js
+    startBlazor(Blazor, tapline);
+</script>
+</body>
+</html>

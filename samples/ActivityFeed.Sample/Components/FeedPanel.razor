@@ -1,0 +1,369 @@
+@implements IAsyncDisposable
+@inject Outlet Outlet
+@inject Publisher Publisher
+@inject Practice Practice
+@inject IJSRuntime JS
+
+<section class="panel @Persona.Role @(Alone ? "alone" : "")">
+    <header>
+        <h3>@Persona.Name <span class="role">@RoleLine</span></h3>
+        @if (!Alone)
+        {
+            <a href="as/@Persona.Id" target="@(Embedded ? "_top" : null)"
+               title="@(Persona.Name) alone, with every activity as it was sent">open ↗</a>
+        }
+    </header>
+    <p class="about">@Persona.About</p>
+    <p class="meta" @ref="_meta"></p>
+    @if (_status is { Length: > 0 })
+    {
+        <p class="status">@_status</p>
+    }
+    <div class="feed" @ref="_feed"></div>
+</section>
+
+@code {
+    readonly CancellationTokenSource _cts = new();
+    ElementReference _feed, _meta;
+    DotNetObjectReference<FeedPanel>? _self;
+    string? _status;
+    TaskCompletionSource? _move; // (the held tap's instance draining: moved, make before break)
+    uint _tapId; // (the held tap's)
+    readonly byte[] _sender = Guid.CreateVersion7().ToByteArray(); // (this panel, as its commands' sender: their order its own)
+    readonly Dictionary<string, long> _numbered = []; // (its commands' last number, by ordering key)
+
+    /// <summary>
+    ///     Whose feed: the person this page signs its connection in as, by passthrough (<see cref="PracticeSignIn" />) —
+    ///     the id taken as given, this demo's; the practice service serves a connection its own person's feed alone.
+    /// </summary>
+    [Parameter, EditorRequired]
+    public Persona Persona { get; set; } = default!;
+
+    /// <summary>The practice's people: clinicians' names, for the rows that name them by id.</summary>
+    [Parameter, EditorRequired]
+    public IReadOnlyList<Persona> People { get; set; } = [];
+
+    /// <summary>Which of the person's feeds: none, their own topic; <c>"stats"</c>, a manager's statistics.</summary>
+    [Parameter]
+    public string? Feed { get; set; }
+
+    /// <summary>The step-1 parameters: the person, and which of their feeds.</summary>
+    string Parameters => Feed is null ? $"{{\"person\":{Persona.Id}}}" : $"{{\"person\":{Persona.Id},\"feed\":\"{Feed}\"}}";
+
+    /// <summary>On a page of its own: every visit, and every activity as it was sent.</summary>
+    [Parameter]
+    public bool Alone { get; set; }
+
+    /// <summary>In a frame on the board: its link opens the person's page in place of the board.</summary>
+    [Parameter]
+    public bool Embedded { get; set; }
+
+    /// <summary>This page's connection, signed in as this panel's person: what the commands are sent as.</summary>
+    bool SignedIn => Outlet.Identity is { Realm: PracticeSignIn.Realm } who && who.UserId == PracticeSignIn.UserOf(Persona.Id);
+
+    string RoleLine => Persona.Role switch
+    {
+        "clinician" => $"GP, {Persona.Site}",
+        "reception" => $"reception, {Persona.Site}",
+        "manager" => Feed == "stats" ? "practice manager, statistics" : "practice manager, the schedule",
+        "patient" => $"patient, {Persona.Site}",
+        "screen" => "waiting-room screen",
+        _ => Persona.Role
+    };
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (!firstRender) return;
+        _self = DotNetObjectReference.Create(this);
+        _ = HoldAsync(_cts.Token);
+    }
+
+    /// <summary>
+    ///     The person's feed: step 1 here, through the "practice" service (the person in its parameters), then handed to the
+    ///     page's script, which subscribes (step 2) and shows it. Held until this panel goes; its instance draining
+    ///     (blue/green), moved to another, make before break. Ended by a fault (the provider gone, say), it's asked for again
+    ///     once that clears; while the service isn't up, again shortly; refused, the reason shown, with its correlation id.
+    ///     The page out of reach meanwhile — a tab the browser froze or suspended (its feed stalled, or overflowed, while
+    ///     it slept), its circuit disconnected — asked for again until the page answers: back, it shows its feed again by
+    ///     itself, no reload needed.
+    /// </summary>
+    async Task HoldAsync(CancellationToken ct)
+    {
+        var delay = 250;
+        try
+        {
+            while (true)
+            {
+                if (!SignedIn) // (signed in by the page's script — passthrough: the handshake through the router)
+                {
+                    SignInAnswer signIn;
+                    try
+                    {
+                        signIn = await JS.InvokeAsync<SignInAnswer>("practiceView.signIn", ct, PracticeSignIn.Realm,
+                            PracticeSignIn.UserOf(Persona.Id));
+                    }
+                    catch (Exception e) when (Away(e, ct))
+                    {
+                        delay = await AwayAsync(delay, ct);
+                        continue;
+                    }
+
+                    if (!signIn.Accepted)
+                    {
+                        await Say($"Not signed in: {signIn.Reason}");
+                        await Task.Delay(2000, ct);
+                        continue;
+                    }
+                }
+
+                Tap? tap;
+                try
+                {
+                    tap = await Publisher.SubscribeAsync(Outlet, Practice.Service, Parameters, cancellationToken: ct);
+                }
+                catch (SubscriptionRefusedException e)
+                {
+                    await Say($"Refused: {e.Refusal.Reason} (correlation {e.Refusal.CorrelationId})");
+                    return;
+                }
+                catch (ServiceUnavailableException)
+                {
+                    await Say("The practice service isn't up yet: subscribing again shortly.");
+                    await Task.Delay(delay, ct);
+                    delay = Math.Min(delay * 2, 2000);
+                    continue;
+                }
+                catch (Exception e) when (e is not (OperationCanceledException or JSDisconnectedException or ObjectDisposedException))
+                {
+                    await Say($"Not subscribed ({e.Message}): again shortly."); // (its step 1 failed: the service coming back, say)
+                    await Task.Delay(delay, ct);
+                    delay = Math.Min(delay * 2, 2000);
+                    continue;
+                }
+
+                if (tap is null)
+                {
+                    await Say("Refused (no reason given).");
+                    return;
+                }
+
+                try
+                {
+                    await JS.InvokeVoidAsync("practiceView.attach", ct, tap.Binding, _feed, _meta, Options(), _self);
+                    delay = 250; // (the page answered: shown)
+                    await Say(null);
+                    while (true) // (held; its instance draining, moved, unless no other takes it yet)
+                    {
+                        var move = _move = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+                        _tapId = tap.Binding.TapId;
+                        if (await Task.WhenAny(tap.Completion, move.Task).WaitAsync(ct) != move.Task) break;
+                        if (await MovedAsync(tap, ct) is not { } moved) continue;
+                        tap.Dispose(); // (the page let it go once the new one streamed)
+                        tap = moved;
+                    }
+
+                    var fault = await tap.Completion;
+                    if (fault is null) return;
+                    await Say($"{fault.Message ?? fault.Code.ToString()}: subscribing again once it recovers.");
+                    for (var i = 0; i < 20 && Outlet.FaultOf(tap.Source) is not null; i++) await Task.Delay(500, ct);
+                    await Task.Delay(500, ct); // (not at once: a fault each time would spin)
+                }
+                catch (Exception e) when (Away(e, ct)) // (the tap let go below: a fresh one once the page answers)
+                {
+                    delay = await AwayAsync(delay, ct);
+                }
+                finally
+                {
+                    tap.Dispose();
+                }
+            }
+        }
+        catch (Exception e) when (e is OperationCanceledException or JSDisconnectedException or ObjectDisposedException)
+        {
+        }
+    }
+
+    /// <summary>
+    ///     The page out of reach, not gone: its circuit disconnected, or too frozen to answer a call within the interop
+    ///     timeout (a canceled call this panel didn't cancel). Gone, the panel's disposed, and its own token says so.
+    /// </summary>
+    static bool Away(Exception e, CancellationToken ct) =>
+        !ct.IsCancellationRequested && e is JSDisconnectedException or OperationCanceledException;
+
+    /// <summary>Waits a while for the page to come back (backing off to 5 s); the next wait.</summary>
+    async Task<int> AwayAsync(int delay, CancellationToken ct)
+    {
+        await Say("The page was out of reach (a suspended tab, say): subscribing again once it's back.");
+        await Task.Delay(delay, ct);
+        return Math.Min(delay * 2, 5000);
+    }
+
+    /// <summary>
+    ///     The feed moved off its draining instance: step 1 again (the router's goes to another), then the page's script
+    ///     swaps it in, make before break. Null if none takes it yet: the old one holds on until the drain lets it go.
+    /// </summary>
+    async Task<Tap?> MovedAsync(Tap old, CancellationToken ct)
+    {
+        Tap? tap;
+        try
+        {
+            tap = await Publisher.SubscribeAsync(Outlet, Practice.Service, Parameters, cancellationToken: ct);
+        }
+        catch (Exception e) when (e is not (OperationCanceledException or JSDisconnectedException or ObjectDisposedException))
+        {
+            return null; // (refused, or none up: it ends with the drain, and is asked for again then)
+        }
+
+        if (tap is null) return null;
+        try
+        {
+            await JS.InvokeVoidAsync("practiceView.move", ct, _feed, old.Binding.TapId, tap.Binding);
+            return tap;
+        }
+        catch
+        {
+            tap.Dispose();
+            throw;
+        }
+    }
+
+    /// <summary>The page's script: the held tap's instance is draining (blue/green), so it's moved to another.</summary>
+    [JSInvokable]
+    public void Move(uint tapId)
+    {
+        if (tapId == _tapId) _move?.TrySetResult();
+    }
+
+    /// <summary>What the page's script needs: who's looking, the rows' layout, the clinicians' and sites' names, the reasons counted.</summary>
+    object Options() => new
+    {
+        person = Persona.Id, role = Persona.Role, feed = Feed, name = Persona.Name, room = Persona.Room, alone = Alone,
+        site = Persona.Site switch { "North" => 1, "South" => 2, _ => 0 },
+        names = People.Where(p => p.Role == "clinician").ToDictionary(p => p.Id.ToString(), p => p.Name),
+        tags = Persona.Tags ?? [],
+        gps = People.Where(p => p.Role == "clinician" && p.Site == Persona.Site).Select(p => new { id = p.Id, name = p.Name }),
+        sites = new Dictionary<string, string> { ["1"] = "North", ["2"] = "South" },
+        reasons = StatsRow.Reasons,
+        offsets = new { key = FeedKey.Offsets, feed = FeedRow.Offsets, screen = ScreenRow.Offsets, stats = StatsRow.Offsets }
+    };
+
+    /// <summary>
+    ///     A command from the page, as this panel's person (this page's connection signed in as them: checked), forwarded to the practice
+    ///     service with the page's correlation id: its rendezvous is the page's to await.
+    /// </summary>
+    [JSInvokable]
+    public async Task<CommandAnswer> Act(string act, long id, string correlation, string? text, int patient)
+    {
+        if (!SignedIn) return new CommandAnswer { Refused = $"This page isn't signed in as {Persona.Name}." };
+        try
+        {
+            var correlationId = Convert.FromHexString(correlation);
+            // Its order, in this panel's commands with its key (numbered once: its retries keep it): a visit's steps by its
+            // booking, a thread's messages by its patient. An acknowledgement, and the rest, in no order but their arrival's.
+            var order = act switch
+            {
+                "arrive" or "call" => Order($"visit:{id}"),
+                "message" => Order($"thread:{Persona.Id}"),
+                "reply" => Order($"thread:{patient}"),
+                _ => null
+            };
+            Func<IPracticeCommands, MagicOnion.UnaryResult<CommandAnswer>>? command = act switch
+            {
+                "arrive" => c => c.ArriveAsync(Persona.Id, id, correlationId, order),
+                "call" => c => c.CallAsync(Persona.Id, id, Persona.Room ?? "", correlationId, order),
+                "acknowledge" => c => c.AcknowledgeAsync(Persona.Id, id, correlationId),
+                "message" => c => c.MessageAsync(Persona.Id, text ?? "", correlationId, order),
+                "reply" => c => c.ReplyAsync(Persona.Id, id, text ?? "", correlationId, order),
+                "share" => c => c.ShareAsync(Persona.Id, (int)id, text ?? "", correlationId),
+                "withdraw" => c => c.WithdrawAsync(Persona.Id, id, correlationId),
+                "breakglass" => c => c.BreakGlassAsync(Persona.Id, (int)id, correlationId),
+                "release" => c => c.ReleaseAsync(Persona.Id, id, correlationId),
+                "revokecarer" => c => c.RevokeCarerAsync(Persona.Id, (int)id, correlationId),
+                "notice" => c => c.NoticeAsync(Persona.Id, (int)id, text ?? "", correlationId),
+                _ => null
+            };
+            return command is null
+                ? new CommandAnswer { Refused = $"No such command: {act}." }
+                : await Practice.CommandAsync(command, _cts.Token); // (to the instance that writes)
+        }
+        catch (Grpc.Core.RpcException e)
+        {
+            return new CommandAnswer { Refused = $"the practice service didn't answer ({e.StatusCode})" };
+        }
+    }
+
+    /// <summary>This panel's next command with <paramref name="key" />, numbered: one after its last (<see cref="CommandOrder" />).</summary>
+    CommandOrder Order(string key)
+    {
+        return new CommandOrder { Key = key, Sender = _sender, Seq = _numbered[key] = _numbered.GetValueOrDefault(key) + 1 };
+    }
+
+    /// <summary>What the policy shows this panel's person, and why (ChalkQL's explanation of their statements).</summary>
+    [JSInvokable]
+    public async Task<Explanation> Explain()
+    {
+        if (!SignedIn) return new Explanation { Refused = $"This page isn't signed in as {Persona.Name}." };
+        try
+        {
+            return await Practice.AnyAsync(c => c.ExplainAsync(Persona.Id), _cts.Token);
+        }
+        catch (Grpc.Core.RpcException e)
+        {
+            return new Explanation { Refused = $"the practice service didn't answer ({e.StatusCode})" };
+        }
+    }
+
+    /// <summary>A section's note in full, as this panel's person may read it.</summary>
+    [JSInvokable]
+    public async Task<NoteAnswer> Note(long section)
+    {
+        if (!SignedIn) return new NoteAnswer { Refused = $"This page isn't signed in as {Persona.Name}." };
+        try
+        {
+            return await Practice.AnyAsync(c => c.NoteAsync(Persona.Id, section), _cts.Token);
+        }
+        catch (Grpc.Core.RpcException e)
+        {
+            return new NoteAnswer { Refused = $"the practice service didn't answer ({e.StatusCode})" };
+        }
+    }
+
+    /// <summary>What the page has shown this panel's person: the messages they've now read (no rendezvous awaited).</summary>
+    [JSInvokable]
+    public async Task<CommandAnswer> Seen(long[] activities, string correlation)
+    {
+        if (!SignedIn) return new CommandAnswer { Refused = $"This page isn't signed in as {Persona.Name}." };
+        try
+        {
+            return await Practice.CommandAsync(c => c.SeenAsync(Persona.Id, activities, Convert.FromHexString(correlation)), _cts.Token);
+        }
+        catch (Grpc.Core.RpcException e)
+        {
+            return new CommandAnswer { Refused = $"the practice service didn't answer ({e.StatusCode})" };
+        }
+    }
+
+    /// <summary>The page's sign-in, as its script answers.</summary>
+    sealed record SignInAnswer(bool Accepted, string? Reason);
+
+    async Task Say(string? status)
+    {
+        if (status == _status) return;
+        _status = status;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        await _cts.CancelAsync();
+        try
+        {
+            await JS.InvokeVoidAsync("practiceView.detach", _feed);
+        }
+        catch (Exception e) when (e is JSDisconnectedException or OperationCanceledException or InvalidOperationException)
+        {
+        }
+
+        _self?.Dispose();
+    }
+}

@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8"/>
+    <base href="/"/>
+    <title>Blazing Order Books · Tapline</title>
+    <style>body {
+            font: 14px system-ui;
+            margin: 2rem
+        }
+
+        td, th {
+            padding: 2px 10px;
+            text-align: right
+        }
+
+        .bid {
+            color: #0a7
+        }
+
+        .ask {
+            color: #c33
+        }
+
+        td.spread-ask, th.spread-ask { /* the ask side against the spread, as the bid side is: a column's spare room outside */
+            text-align: left
+        }
+
+        .market-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr));
+            gap: 0.75rem
+        }
+
+        .market-tile {
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            padding: 0.4rem 0.5rem;
+            min-height: 11.5rem; /* (a tile filled: no jump when its book arrives) */
+            font: 12px ui-monospace, Menlo, Consolas, monospace;
+            font-variant-numeric: tabular-nums;
+            transition: opacity 0.25s
+        }
+
+        .market-tile[data-faded] { /* no tick yet since it (re)subscribed, off screen, or none lately: what it shows is stale */
+            opacity: 0.45
+        }
+
+        .ladder {
+            table-layout: fixed;
+            border-spacing: 0;
+            font-variant-numeric: tabular-nums
+        }
+
+        .market-tile table {
+            table-layout: fixed;
+            border-spacing: 0;
+            margin: 0 auto /* centred: with mirrored columns, bids meet asks under the micro price */
+        }
+
+        .ladder td, .market-tile td { /* (a column is its sticky width: text never widens it, nor moves the centre) */
+            white-space: nowrap;
+            overflow: hidden
+        }
+
+        .ladder td[colspan], .market-tile td[colspan] { /* (a banner or the seq line may be wider than the book: clipped) */
+            text-overflow: ellipsis
+        }
+
+        .market-title {
+            margin-bottom: 0.2rem
+        }
+
+        .market-tagline {
+            margin-top: 0;
+            color: #666
+        }
+
+        .market-status {
+            font-size: 15px
+        }
+
+        .market-telemetry {
+            color: #888;
+            font-size: 12px
+        }
+
+        .market-tile.collapsed {
+            min-height: 0
+        }
+
+        .market-tile.collapsed table {
+            display: none
+        }
+
+        .market-tile td, .market-tile th {
+            padding: 0 6px
+        }
+
+        .market-head { /* symbol | micro price, centred on the tile | controls: the sides always equal */
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+            gap: 0.5rem;
+            align-items: baseline
+        }
+
+        .market-head .micro {
+            text-align: center
+        }
+
+        .market-head .controls {
+            justify-self: end;
+            white-space: nowrap
+        }
+
+        .shape button[aria-pressed="true"] {
+            font-weight: 600
+        }
+
+        .market-head button {
+            font-size: 11px
+        }
+
+        @@media (prefers-color-scheme: dark) {
+            body {
+                background: #161616;
+                color: #ddd
+            }
+
+            .market-tile {
+                border-color: #444
+            }
+
+            a {
+                color: #8ab4f8
+            }
+        }</style>
+</head>
+<body>
+<Routes/>
+<script src="@Assets["_framework/blazor.web.js"]" autostart="false"></script>
+<script type="module">
+    import {tapline} from './@Assets["_content/Tapline.AspNetCore/tapline.js"]';
+    import {startBlazor} from './@Assets["_content/Tapline.BlazorRealtime/blazor-realtime.js"]';
+
+    // Domain-agnostic library: this view decodes Level (u8 side, i64 price) keys and i64 quantity rows; a price's
+    // decimal places (scale) are the provider's, from its format, passed in by the component.
+    // subscribe() registers the handlers, then activates the tap (step 2) — nothing streams before that.
+    // On a fault the server sends the degraded state (best bid/ask, size 0) and an error; the component then binds a
+    // new tap once the feed recovers and calls attach again, which replaces this subscription. The server out of reach
+    // (the connection lost), the page shows the same stale state itself — the policy's module, run here — till it's back.
+    const views = new Map();                                       // element → unsubscribe
+    const replace = (el, off) => {
+        views.get(el)?.();
+        views.set(el, off);
+    };
+    const text = bytes => new TextDecoder().decode(bytes);
+    // A VWAP's places past its levels' (`extra` of them) take room only as a book needs them: `shown` of them, the most
+    // any of its prices has used so far (sticky, as the columns are), so a book whose averages sit on ticks (groups of one
+    // level) is laid out as its plain prices are. Within those, trailing zeros become figure spaces, a digit wide, so
+    // decimal points stay aligned.
+    const placesUsed = (units, extra) => {                   // of a price's last `extra` places, how many carry digits
+        let k = extra;
+        while (k > 0 && units % 10 === 0) {
+            units /= 10;
+            k--;
+        }
+        return k;
+    };
+    const placesOf = new WeakMap();                              // table → the extra places it shows, kept across subscriptions
+    const priceText = (units, scale, extra = 0, shown = 0) => {
+        const s = (units / 10 ** scale).toFixed(scale);
+        if (extra <= 0) return s;
+        const kept = s.length - (extra - shown);                 // its places, and the extra ones the book uses
+        let end = kept;
+        while (end > kept - shown && s[end - 1] === '0') end--;
+        let head = s.slice(0, end);
+        if (head.endsWith('.')) head = head.slice(0, -1) + '\u2007'; // (a price of whole units: no bare point)
+        return head + '\u2007'.repeat(kept - end);
+    };
+    // The extra places a table shows now: as many as any of its prices has used, never fewer than before.
+    const placesFor = (table, prices, extra) => {
+        let used = placesOf.get(table) ?? 0;
+        if (extra > 0)
+            for (const units of prices) used = Math.max(used, placesUsed(units, extra));
+        placesOf.set(table, used);
+        return used;
+    };
+    // A book's columns never narrow: each is as wide as the widest text it has had to hold, in pixels as its font draws
+    // it, over the whole book sent, not just the rows shown — mirrored, bid size as ask size and bid price as ask price,
+    // so the spread stays centred — kept for the page's life per table and key (an instrument, plain or VWAP): a book
+    // converges in its first few updates.
+    // A text is measured by its shape — its digits as 0s, as tabular digits are one width — once per font: a book's few
+    // shapes measured once, then looked up.
+    const widthsOf = new WeakMap();                               // table → key → its columns' widths (px), kept across subscriptions
+    const shapes = new Map();                                     // font → {probe, widths: shape → px}
+    const measurer = table => {
+        const style = getComputedStyle(table);                   // (by its longhands: the computed shorthand may be empty)
+        const font = [style.fontStyle, style.fontWeight, style.fontStretch, style.fontSize, style.fontFamily,
+            style.fontVariantNumeric, style.letterSpacing].join('|');
+        let m = shapes.get(font);
+        if (!m) {
+            const probe = document.createElement('span');         // (on the body, not in a tile: the tiles are Blazor's)
+            probe.style.cssText = 'position: absolute; visibility: hidden; white-space: pre; left: -9999px; top: 0';
+            probe.style.fontStyle = style.fontStyle;
+            probe.style.fontWeight = style.fontWeight;
+            probe.style.fontStretch = style.fontStretch;
+            probe.style.fontSize = style.fontSize;
+            probe.style.fontFamily = style.fontFamily;
+            probe.style.fontVariantNumeric = style.fontVariantNumeric;
+            probe.style.letterSpacing = style.letterSpacing;
+            document.body.appendChild(probe);
+            shapes.set(font, m = {probe, widths: new Map()});
+        }
+        return text => {
+            const shape = text.replace(/[0-9]/g, '0');
+            let w = m.widths.get(shape);
+            if (w === undefined) {
+                m.probe.textContent = shape;
+                m.widths.set(shape, w = Math.ceil(m.probe.getBoundingClientRect().width));
+            }
+            return w;
+        };
+    };
+    try { // (widths the page once kept in this browser, gone: they're the page's alone now)
+        for (const k of Object.keys(localStorage)) if (k.startsWith('tapline.orderBooks.widths.')) localStorage.removeItem(k);
+    } catch {
+    }
+    const sticky = (table, key, padding) => {              // padding: a cell's, both sides, in px
+        const byKey = widthsOf.get(table) ?? new Map();
+        widthsOf.set(table, byKey);
+        const widths = byKey.get(key) ?? [0, 0, 0, 0];
+        byKey.set(key, widths);
+        const measure = measurer(table);
+        return {
+            widen(c, text) {
+                const w = measure(text);
+                if (w > widths[c]) widths[c] = widths[3 - c] = w;
+            },
+            colgroup() {
+                // The table exactly its columns' width — fixed layout takes a table's width as given, so text never
+                // widens a column — and centred by it: the spread on the centre line, whatever the values.
+                table.style.width = `${widths.reduce((a, w) => a + w, 0) + 4 * padding}px`;
+                return `<colgroup>${widths.map(w => `<col style="width: ${w + padding}px">`).join('')}</colgroup>`;
+            },
+        };
+    };
+    window.bookView = {
+        attachBook(binding, table, scale = 2, depth = 12, extra = 0) {   // depth: rows a side (0: all); extra: a VWAP's places
+            const unit = 10 ** scale;
+            // (both books: the same instrument, columns aligned; a VWAP book's prices are other text, widths of their own)
+            const columns = sticky(table, extra > 0 ? 'BTC-PERP:vwap' : 'BTC-PERP', 20);
+            let book, banner = '', stale = '', pending = false;
+            const levels = () => {
+                const bids = [], asks = [];
+                for (const {key, row} of book.rows.values()) {
+                    const price = Number(new DataView(key.buffer, key.byteOffset).getBigInt64(1, true));
+                    const qty = Number(new DataView(row.buffer, row.byteOffset).getBigInt64(0, true));
+                    // a VWAP book's row: its size, then its average price (shown, at its own scale); its key, the order
+                    const shown = row.byteLength >= 16 ? Number(new DataView(row.buffer, row.byteOffset).getBigInt64(8, true)) : price;
+                    (key[0] === 0 ? bids : asks).push([price, qty, shown]);
+                }
+                return [bids.sort((x, y) => y[0] - x[0]), asks.sort((x, y) => x[0] - y[0])];
+            };
+            let used = 0;                                         // (the extra places shown: placesFor)
+            const row = (b, a) => `<tr><td class="bid">${b?.[1] ?? ''}</td><td class="bid">${b ? priceText(b[2], scale, extra, used) : ''}</td>` +
+                `<td class="ask spread-ask">${a ? priceText(a[2], scale, extra, used) : ''}</td><td class="ask spread-ask">${a?.[1] ?? ''}</td></tr>`;
+            const render = () => {
+                pending = false;
+                if (!book) return;
+                const [bids, asks] = levels();
+                used = placesFor(table, [...bids, ...asks].map(l => l[2]), extra);
+                for (const [, size, shown] of bids) columns.widen(0, String(size)), columns.widen(1, priceText(shown, scale, extra, used));
+                for (const [, size, shown] of asks) columns.widen(3, String(size)), columns.widen(2, priceText(shown, scale, extra, used));
+                table.style.opacity = book.degraded ? 0.5 : 1;
+                table.innerHTML = columns.colgroup() + (extra > 0                    // (a VWAP book: cumulative)
+                        ? '<tr><th>Σ size</th><th>bid VWAP</th><th class="spread-ask">ask VWAP</th><th class="spread-ask">Σ size</th></tr>'
+                        : '<tr><th>size</th><th>bid</th><th class="spread-ask">ask</th><th class="spread-ask">size</th></tr>') +
+                    Array.from({length: depth || Math.max(bids.length, asks.length)}, (_, i) => row(bids[i], asks[i])).join('') +
+                    `<tr><td colspan="4">${banner || stale || `seq ${book.seq} ${book.verified ? '✓ checksum' : '✗ resyncing'}`}</td></tr>`;
+            };
+            const schedule = () => {
+                if (!pending) {
+                    pending = true;
+                    requestAnimationFrame(render);
+                }
+            };
+            const off = tapline.subscribe(binding,
+                (t, _id, meta) => {
+                    book = t;
+                    stale = meta?.stale ? '⚠ server out of reach: the top of the book, sizes zero' : '';
+                    schedule();
+                },
+                (error, last) => {
+                    book = last ?? book;
+                    banner = `⚠ ${text(error.payload)} (code ${error.code}, last good v${error.version})`;
+                    schedule();
+                });
+            replace(table, () => {
+                off();
+                tapline.drop(binding.tapId);
+            });
+        },
+        attachMark(binding, el, scale = 2) {
+            const off = tapline.subscribe(binding,
+                v => {
+                    el.textContent = `mark ${(Number(new DataView(v.buffer, v.byteOffset).getBigInt64(0, true)) / 10 ** scale).toFixed(scale)}`;
+                    el.style.opacity = 1;
+                    el.title = '';
+                },
+                error => {
+                    el.style.opacity = 0.4;
+                    el.title = text(error.payload);
+                });
+            replace(el, () => {
+                off();
+                tapline.drop(binding.tapId);
+            });
+        },
+        attachAlerts(binding, el) {                               // a message topic: each alert handed over in turn
+            const off = tapline.subscribe(binding,
+                (message, _id, {seq}) => {
+                    el.textContent = `${text(message)} (#${seq})`;
+                    el.style.opacity = 1;
+                    el.title = "";
+                },
+                error => {
+                    el.style.opacity = 0.4;
+                    el.title = text(error.payload);
+                });
+            replace(el, () => {
+                off();
+                tapline.drop(binding.tapId);
+            });
+        },
+        detach(...elements) {
+            for (const el of elements) {
+                views.get(el)?.();
+                views.delete(el);
+            }
+        },
+    };
+
+    // The Binance grid's tiles: each subscribes while it's on screen (or near it: a margin, so scrolling finds it ready)
+    // — the observer tells the component, which subscribes or lets go — and shows a book or, collapsed, a micro price.
+    const observers = new Map();                                   // grid → IntersectionObserver
+    const fixed = (units, scale) => (units / 10 ** scale).toFixed(scale);
+    // A tile is live (data-live: an attribute, as Blazor rewrites the class) once every view bound to it has had a tick;
+    // until then — just subscribed, or let go off screen — it shows what it last had, faded once that has lasted 250 ms
+    // (a quick first tick: no flicker). Live and quiet a second, it asks the router whether it is up to date on each of
+    // its subscriptions (tapline.sync: Tap.Sync) — answered at once for a quiet book, only once delivered for one whose
+    // changes its cap holds back. Answered, it's fresh: no fade, and it asks again after another quiet second. Not
+    // answered within SYNC_GRACE_MS, it fades once its wait is late for its pace too — STALE_FACTOR times its usual wait
+    // between ticks (smoothed), a second at least — so a capped connection ticking steadily doesn't fade between ticks.
+    // A tick, or the router's answer, cancels the fade at once.
+    const FADE_UNLIVE_MS = 250, FADE_STALE_MS = 1000, STALE_FACTOR = 6, SYNC_GRACE_MS = 250;
+    // tile → {bound, waiting, taps, at: its last tick, gap: its usual wait, since: not live since, fresh: last known up to
+    // date (a tick, or the router's answer), syncing: when it asked (0: not asking)}
+    const tiles = new Map();
+    const settle = tile => {
+        const s = tiles.get(tile);
+        const live = s && s.bound > 0 && s.waiting === 0;
+        if (live) tile.dataset.live = '';
+        else if (tile.dataset.live !== undefined) {
+            delete tile.dataset.live;
+            s.since = performance.now();
+        }
+    };
+    // Asks whether a tile is up to date on all its subscriptions; answered (or given up after 10 s), it says so.
+    const sync = s => {
+        const asked = s.syncing = performance.now();
+        Promise.all([...s.taps].map(tapId => tapline.sync(tapId, {signal: AbortSignal.timeout(10000)}))).then(
+            () => {
+                if (s.syncing !== asked) return;
+                s.syncing = 0;
+                s.fresh = performance.now();                      // up to date as of the ask: quiet, not stale
+            },
+            () => {
+                if (s.syncing === asked) s.syncing = 0;            // (ended, or no answer: asked again next quiet second)
+            });
+    };
+    const firstSeen = new WeakMap();                              // a tile never bound: since when it's been on the page
+    setInterval(() => {
+        const now = performance.now();
+        for (const tile of document.querySelectorAll('.market-tile')) {
+            const s = tiles.get(tile);
+            const live = tile.dataset.live !== undefined;
+            let faded;
+            if (!live) faded = now - (s?.since ?? firstSeen.get(tile) ?? (firstSeen.set(tile, now), now)) >= FADE_UNLIVE_MS;
+            else {
+                const quiet = now - Math.max(s.at, s.fresh);
+                if (quiet >= FADE_STALE_MS && !s.syncing) sync(s);
+                faded = s.syncing > 0 && now - s.syncing >= SYNC_GRACE_MS && quiet >= Math.max(FADE_STALE_MS, STALE_FACTOR * s.gap);
+            }
+            if (faded !== (tile.dataset.faded !== undefined)) faded ? tile.dataset.faded = '' : delete tile.dataset.faded;
+        }
+    }, 100);
+    const track = (el, tapId) => {
+        const tile = el.closest('.market-tile');
+        if (!tile) return {ticked() {}, done() {}};
+        const s = tiles.get(tile) ?? {bound: 0, waiting: 0, taps: new Set(), at: 0, gap: 0, since: performance.now(), fresh: 0, syncing: 0};
+        tiles.set(tile, s);
+        s.bound++;
+        s.waiting++;
+        s.taps.add(tapId);
+        settle(tile);
+        let first = true;
+        return {
+            ticked() {
+                const now = performance.now();                    // (every tick: the tile's freshest, and its pace)
+                if (s.at > 0) s.gap = s.gap > 0 ? s.gap + (now - s.at - s.gap) / 4 : now - s.at;
+                s.at = now;
+                if (tile.dataset.faded !== undefined) delete tile.dataset.faded; // (back at once)
+                if (!first) return;
+                first = false;
+                s.waiting--;
+                settle(tile);
+            },
+            done() {
+                s.bound--;
+                s.taps.delete(tapId);
+                if (first) s.waiting--;
+                first = false;
+                settle(tile);
+            },
+        };
+    };
+    window.marketGrid = {
+        observe(component, grid) {
+            const observer = new IntersectionObserver(entries => {
+                for (const e of entries) component.invokeMethodAsync('Visibility', e.target.dataset.symbol, e.isIntersecting);
+            }, {rootMargin: '200px 0px'});
+            for (const tile of grid.querySelectorAll('[data-symbol]')) observer.observe(tile);
+            observers.set(grid, observer);
+        },
+        unobserve(grid) {
+            observers.get(grid)?.disconnect();
+            observers.delete(grid);
+        },
+        bindBook(binding, table, priceScale = 2, sizeScale = 0, depth = 10, extra = 0) {   // depth: rows a side (0: all); extra: a VWAP's places
+            let book, banner = '', pending = false, closed = false;
+            const symbol = table.closest('.market-tile')?.dataset.symbol ?? '';
+            const columns = sticky(table, extra > 0 ? `${symbol}:vwap` : symbol, 12); // (per instrument; VWAP's own)
+            const live = track(table, binding.tapId);
+            const render = () => {
+                pending = false;
+                if (!book || closed) return;              // (a frame asked for before it was let go)
+                const bids = [], asks = [];
+                for (const {key, row} of book.rows.values()) {
+                    const price = Number(new DataView(key.buffer, key.byteOffset).getBigInt64(1, true));
+                    const size = Number(new DataView(row.buffer, row.byteOffset).getBigInt64(0, true));
+                    // a VWAP book's row: its size, then its average price — shown in place of its key's, which orders it
+                    const shown = row.byteLength >= 16 ? Number(new DataView(row.buffer, row.byteOffset).getBigInt64(8, true)) : price;
+                    (key[0] === 0 ? bids : asks).push([shown, size, price]);
+                }
+                bids.sort((x, y) => y[2] - x[2]);
+                asks.sort((x, y) => x[2] - y[2]);
+                const rows = depth || Math.max(bids.length, asks.length);
+                const used = placesFor(table, [...bids, ...asks].map(l => l[0]), extra); // (the extra places shown)
+                const cells = Array.from({length: rows}, (_, i) => [
+                    bids[i] ? fixed(bids[i][1], sizeScale) : '', bids[i] ? priceText(bids[i][0], priceScale, extra, used) : '',
+                    asks[i] ? priceText(asks[i][0], priceScale, extra, used) : '', asks[i] ? fixed(asks[i][1], sizeScale) : '']);
+                for (const [price, size] of bids) columns.widen(0, fixed(size, sizeScale)), columns.widen(1, priceText(price, priceScale, extra, used));
+                for (const [price, size] of asks) columns.widen(2, priceText(price, priceScale, extra, used)), columns.widen(3, fixed(size, sizeScale));
+                const side = c => c < 2 ? 'bid' : 'ask';           // (every level held counts, shown or not)
+                table.style.opacity = book.degraded ? 0.5 : 1;
+                table.innerHTML = columns.colgroup() +
+                    cells.map(row => `<tr>${row.map((t, c) => `<td class="${side(c)}${c >= 2 ? ' spread-ask' : ''}">${t}</td>`).join('')}</tr>`).join('') +
+                    (banner ? `<tr><td colspan="4">${banner}</td></tr>` : '');
+                if (!book.degraded) live.ticked();                // drawn: the tile shows its book as it is
+            };
+            const off = tapline.subscribe(binding,
+                t => {
+                    book = t;
+                    banner = '';
+                    if (!pending) {
+                        pending = true;
+                        requestAnimationFrame(render);
+                    }
+                },
+                (error, last) => {
+                    book = last ?? book;
+                    banner = `⚠ ${text(error.payload)} (code ${error.code})`;
+                    render();
+                });
+            replace(table, () => {
+                closed = true;
+                off();
+                tapline.drop(binding.tapId);
+                live.done();                                      // (what it last drew stays, faded, till it's bound again)
+            });
+        },
+        bindMicro(binding, el, scale = 2, places = scale) {   // its own scale; shown to the book prices' places
+            const live = track(el, binding.tapId);
+            const off = tapline.subscribe(binding,
+                v => {
+                    live.ticked();
+                    el.textContent = (Number(new DataView(v.buffer, v.byteOffset).getBigInt64(0, true)) / 10 ** scale).toFixed(places);
+                    el.style.opacity = 1;
+                    el.title = 'micro price';
+                },
+                error => {
+                    el.style.opacity = 0.4;
+                    el.title = text(error.payload);
+                });
+            replace(el, () => {
+                off();
+                tapline.drop(binding.tapId);
+                live.done();
+            });
+        },
+        unbind(el) {
+            views.get(el)?.();
+            views.delete(el);
+        },
+    };
+
+    startBlazor(Blazor, tapline);
+    setInterval(() => {                                           // the stream as this page receives it (inflated payload bytes),
+        const rate = document.getElementById('rate');            // wherever a page shows it: with its telemetry
+        if (rate) rate.textContent = `received ${(tapline.transferRate / 1024).toFixed(2)} KiB/s (2 s smoothing)`;
+    }, 500);
+</script>
+</body>
+</html>

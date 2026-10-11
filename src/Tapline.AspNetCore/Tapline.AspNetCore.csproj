@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+    <PropertyGroup>
+        <PackageLicenseExpression>EPL-2.0</PackageLicenseExpression>
+        <TargetFramework>net10.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <LangVersion>latest</LangVersion>
+        <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+        <PackageId>Tapline.AspNetCore</PackageId>
+        <PackageTags>$(PackageTags);aspnetcore</PackageTags>
+        <Description>Hosts a Tapline router in ASP.NET Core, whatever the transport: its services, identity and heartbeats; the out-of-band fetch and stale-data module endpoints; the ops port and the router's viewer; and the browser client.</Description>
+    </PropertyGroup>
+    <ItemGroup>
+        <FrameworkReference Include="Microsoft.AspNetCore.App"/>
+        <ProjectReference Include="../Tapline/Tapline.csproj"/>
+        <InternalsVisibleTo Include="Tapline.Tests"/>
+    </ItemGroup>
+</Project>

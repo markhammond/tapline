@@ -1,0 +1,14 @@
+{
+  "profiles": {
+    "sample": {
+      "commandName": "Project"
+    },
+    "shared-port": {
+      "commandName": "Project",
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "Tapline__Ops__SharedPortReason": "non-production demo"
+      }
+    }
+  }
+}

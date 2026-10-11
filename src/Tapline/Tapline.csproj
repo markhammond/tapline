@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <PackageLicenseExpression>EPL-2.0</PackageLicenseExpression>
+        <TargetFramework>net10.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <LangVersion>latest</LangVersion>
+        <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+        <IsAotCompatible>true</IsAotCompatible>
+        <PackageId>Tapline</PackageId>
+        <Description>Prioritised, conflated, ack-clocked fan-out of shared state to many clients: last-value streams, transactional replicated keyed tables with custom folds, message topics and mailboxes with ordering after state, data providers with stale-data policies, router-owned resume. Transport-agnostic.</Description>
+    </PropertyGroup>
+    <ItemGroup>
+        <InternalsVisibleTo Include="Tapline.Tests"/>
+    </ItemGroup>
+</Project>

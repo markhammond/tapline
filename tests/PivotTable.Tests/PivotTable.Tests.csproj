@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <OutputType>Exe</OutputType>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <LangVersion>latest</LangVersion>
+    </PropertyGroup>
+    <ItemGroup>
+        <ProjectReference Include="../../samples/PivotTable.Contracts/PivotTable.Contracts.csproj"/>
+    </ItemGroup>
+    <ItemGroup>
+        <!-- what the page derives, made by make-fixture.mjs with the page's own code (node tests/PivotTable.Tests/make-fixture.mjs) -->
+        <None Include="show-as.fixture.json" CopyToOutputDirectory="PreserveNewest"/>
+    </ItemGroup>
+</Project>

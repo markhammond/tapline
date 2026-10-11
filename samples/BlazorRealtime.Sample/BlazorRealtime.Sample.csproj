@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+    </PropertyGroup>
+    <ItemGroup>
+        <ProjectReference Include="../../src/Tapline.BlazorRealtime/Tapline.BlazorRealtime.csproj"/>
+    </ItemGroup>
+    <ItemGroup>
+        <!-- Resonance (HOME), oni's MIDI arrangement: the waveform's default music. See NOTICE.md for licensing. -->
+        <EmbeddedResource Include="Waveform/Music/resonance-oni.mid" LogicalName="Waveform.Music.resonance-oni.mid"/>
+    </ItemGroup>
+</Project>

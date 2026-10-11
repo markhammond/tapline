@@ -1,0 +1,9574 @@
+{
+ "about": "Show as: cells, and what the reference (reference.mjs deriveAll: the page's derivation, of what's shown) derives of them — made by make-fixture.mjs",
+ "separator": " · ",
+ "layouts": [
+  {
+   "name": "dates across, rows region › client: every form, a client without a cell on one date",
+   "rows": [
+    "region",
+    "client"
+   ],
+   "columns": [
+    "date"
+   ],
+   "cells": [
+    {
+     "row": "Americas · Cedar Trust",
+     "column": "2026-10-13",
+     "figures": {
+      "q": "-25437414296",
+      "n": "10098222205415",
+      "r": "1560552209848",
+      "u": "-1323181304614",
+      "b": "26879591038450",
+      "v": "3446530063000000",
+      "t": "153300000000",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "Americas · Cedar Trust",
+     "column": "2026-10-14",
+     "figures": {
+      "q": "31801261240",
+      "n": "436527403071",
+      "r": "-1514078351901",
+      "u": "147618870250",
+      "b": "-22595215570181",
+      "v": "2607467766000000",
+      "t": "82000000000",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "Americas · Cedar Trust",
+     "column": "2026-10-15",
+     "figures": {
+      "q": "-9381751809",
+      "n": "11203405214473",
+      "r": "270803374005",
+      "u": "-4439627352403",
+      "b": "17355225600767",
+      "v": "4392796352000000",
+      "t": "351400000000",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "Americas · Damson LP",
+     "column": "2026-10-13",
+     "figures": {
+      "q": "5136687075",
+      "n": "-418611266650",
+      "r": "-3155421509873",
+      "u": "-3449382560793",
+      "b": "27021502365823",
+      "v": "2991920862000000",
+      "t": "188900000000",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "Americas · Damson LP",
+     "column": "2026-10-14",
+     "figures": {
+      "q": "-2465697145",
+      "n": "482733156532",
+      "r": "-374550101114",
+      "u": "-4193156736437",
+      "b": "11400877246633",
+      "v": "1631025718000000",
+      "t": "455500000000",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "Americas · Damson LP",
+     "column": "2026-10-15",
+     "figures": {
+      "q": "14649918314",
+      "n": "10549738220870",
+      "r": "4993988712085",
+      "u": "1441140472888",
+      "b": "-24983274419791",
+      "v": "384356793000000",
+      "t": "232400000000",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "EMEA · Fern Partners",
+     "column": "2026-10-13",
+     "figures": {
+      "q": "-45639860979",
+      "n": "193020952865",
+      "r": "1333575957687",
+      "u": "-3959329493809",
+      "b": "-9704445374663",
+      "v": "2221340296000000",
+      "t": "22400000000",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "EMEA · Fern Partners",
+     "column": "2026-10-14",
+     "figures": {
+      "q": "13667145965",
+      "n": "-13147206259891",
+      "r": "-114323029993",
+      "u": "3448857101611",
+      "b": "-27704874537885",
+      "v": "4812986686000000",
+      "t": "53900000000",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "EMEA · Fern Partners",
+     "column": "2026-10-15",
+     "figures": {
+      "q": "-47498648928",
+      "n": "1074843769893",
+      "r": "-2775882044807",
+      "u": "-2410550420172",
+      "b": "22177877887152",
+      "v": "1254741522000000",
+      "t": "106000000000",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "EMEA · Laurel & Co",
+     "column": "2026-10-13",
+     "figures": {
+      "q": "-1853372424",
+      "n": "-6563528832048",
+      "r": "1321886971127",
+      "u": "4417443145066",
+      "b": "2842730437405",
+      "v": "3649342495000000",
+      "t": "422500000000",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "EMEA · Laurel & Co",
+     "column": "2026-10-14",
+     "figures": {
+      "q": "18720503221",
+      "n": "-4025156386196",
+      "r": "-1191734524909",
+      "u": "-1299600005149",
+      "b": "-28791686408221",
+      "v": "4032278637000000",
+      "t": "190300000000",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "EMEA · Laurel & Co",
+     "column": "2026-10-15",
+     "figures": {
+      "q": "44299617083",
+      "n": "-3267847499810",
+      "r": "-369751771213",
+      "u": "3826955079566",
+      "b": "4607601498719",
+      "v": "2798721105000000",
+      "t": "18600000000",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "APAC · Acorn Fund",
+     "column": "2026-10-13",
+     "figures": {
+      "q": "46517977770",
+      "n": "10603284272365",
+      "r": "-3014689498813",
+      "u": "-2672427562065",
+      "b": "-15480513358488",
+      "v": "4930023988000000",
+      "t": "425000000000",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "APAC · Acorn Fund",
+     "column": "2026-10-15",
+     "figures": {
+      "q": "-1801548979",
+      "n": "18430581088177",
+      "r": "-4506099959835",
+      "u": "1006134700728",
+      "b": "-20424487281125",
+      "v": "2337389367000000",
+      "t": "309900000000",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "Americas · Cedar Trust",
+     "column": "",
+     "figures": {
+      "q": null,
+      "n": null,
+      "r": "317277231952",
+      "u": null,
+      "b": null,
+      "v": "10446794181000000",
+      "t": "586700000000",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "Americas · Damson LP",
+     "column": "",
+     "figures": {
+      "q": null,
+      "n": null,
+      "r": "1464017101098",
+      "u": null,
+      "b": null,
+      "v": "5007303374000000",
+      "t": "876800000000",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "EMEA · Fern Partners",
+     "column": "",
+     "figures": {
+      "q": null,
+      "n": null,
+      "r": "-1556629117113",
+      "u": null,
+      "b": null,
+      "v": "8289068503000000",
+      "t": "182300000000",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "EMEA · Laurel & Co",
+     "column": "",
+     "figures": {
+      "q": null,
+      "n": null,
+      "r": "-239599324995",
+      "u": null,
+      "b": null,
+      "v": "10480342238000000",
+      "t": "631400000000",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "APAC · Acorn Fund",
+     "column": "",
+     "figures": {
+      "q": null,
+      "n": null,
+      "r": "-7520789458648",
+      "u": null,
+      "b": null,
+      "v": "7267413355000000",
+      "t": "734900000000",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "Americas",
+     "column": "2026-10-13",
+     "figures": {
+      "q": null,
+      "n": "9679610938765",
+      "r": "-1594869300025",
+      "u": "-4772563865407",
+      "b": "53901093404273",
+      "v": "6438450925000000",
+      "t": "342200000000",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "Americas",
+     "column": "2026-10-14",
+     "figures": {
+      "q": null,
+      "n": "919260559603",
+      "r": "-1888628453015",
+      "u": "-4045537866187",
+      "b": "-11194338323548",
+      "v": "4238493484000000",
+      "t": "537500000000",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "Americas",
+     "column": "2026-10-15",
+     "figures": {
+      "q": null,
+      "n": "21753143435343",
+      "r": "5264792086090",
+      "u": "-2998486879515",
+      "b": "-7628048819024",
+      "v": "4777153145000000",
+      "t": "583800000000",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "EMEA",
+     "column": "2026-10-13",
+     "figures": {
+      "q": null,
+      "n": "-6370507879183",
+      "r": "2655462928814",
+      "u": "458113651257",
+      "b": "-6861714937258",
+      "v": "5870682792000000",
+      "t": "444900000000",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "EMEA",
+     "column": "2026-10-14",
+     "figures": {
+      "q": null,
+      "n": "-17172362646087",
+      "r": "-1306057554902",
+      "u": "2149257096462",
+      "b": "-56496560946106",
+      "v": "8845265323000000",
+      "t": "244200000000",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "EMEA",
+     "column": "2026-10-15",
+     "figures": {
+      "q": null,
+      "n": "-2193003729917",
+      "r": "-3145633816020",
+      "u": "1416404659394",
+      "b": "26785479385871",
+      "v": "4053462627000000",
+      "t": "124600000000",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "APAC",
+     "column": "2026-10-13",
+     "figures": {
+      "q": null,
+      "n": "10603284272365",
+      "r": "-3014689498813",
+      "u": "-2672427562065",
+      "b": "-15480513358488",
+      "v": "4930023988000000",
+      "t": "425000000000",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "APAC",
+     "column": "2026-10-15",
+     "figures": {
+      "q": null,
+      "n": "18430581088177",
+      "r": "-4506099959835",
+      "u": "1006134700728",
+      "b": "-20424487281125",
+      "v": "2337389367000000",
+      "t": "309900000000",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "Americas",
+     "column": "",
+     "figures": {
+      "q": null,
+      "n": null,
+      "r": "1781294333050",
+      "u": null,
+      "b": null,
+      "v": "15454097554000000",
+      "t": "1463500000000",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "EMEA",
+     "column": "",
+     "figures": {
+      "q": null,
+      "n": null,
+      "r": "-1796228442108",
+      "u": null,
+      "b": null,
+      "v": "18769410741000000",
+      "t": "813700000000",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "APAC",
+     "column": "",
+     "figures": {
+      "q": null,
+      "n": null,
+      "r": "-7520789458648",
+      "u": null,
+      "b": null,
+      "v": "7267413354000000",
+      "t": "734900000000",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "",
+     "column": "2026-10-13",
+     "figures": {
+      "q": null,
+      "n": "13912387331947",
+      "r": "-1954095870024",
+      "u": "-6986877776215",
+      "b": "31558865108527",
+      "v": "17239157704000000",
+      "t": "1212100000000",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "",
+     "column": "2026-10-14",
+     "figures": {
+      "q": null,
+      "n": "-16253102086484",
+      "r": "-3194686007917",
+      "u": "-1896280769725",
+      "b": "-67690899269654",
+      "v": "13083758808000000",
+      "t": "781700000000",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "",
+     "column": "2026-10-15",
+     "figures": {
+      "q": null,
+      "n": "37990720793603",
+      "r": "-2386941689765",
+      "u": "-575947519393",
+      "b": "-1267056714278",
+      "v": "11168005139000000",
+      "t": "1018300000000",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "",
+     "column": "",
+     "figures": {
+      "q": null,
+      "n": null,
+      "r": "-7535723567706",
+      "u": null,
+      "b": null,
+      "v": "41490921651000000",
+      "t": "3012100000000",
+      "g": null,
+      "m": null
+     }
+    }
+   ],
+   "entries": [
+    "volume.row",
+    "volume.column",
+    "volume.total",
+    "trades.row",
+    "trades.column",
+    "trades.total",
+    "pnl.row",
+    "pnl.column",
+    "pnl.total",
+    "notional.row",
+    "notional.column",
+    "notional.total",
+    "position.row",
+    "position.column",
+    "position.total",
+    "balance.row",
+    "balance.column",
+    "balance.total",
+    "volume.running",
+    "trades.running"
+   ],
+   "derived": [
+    [
+     "Americas · Cedar Trust",
+     "2026-10-13",
+     "volume.row",
+     "0.3299127"
+    ],
+    [
+     "Americas · Cedar Trust",
+     "2026-10-13",
+     "volume.column",
+     "0.1999245"
+    ],
+    [
+     "Americas · Cedar Trust",
+     "2026-10-13",
+     "volume.total",
+     "0.08306709"
+    ],
+    [
+     "Americas · Cedar Trust",
+     "2026-10-13",
+     "trades.row",
+     "0.26129197"
+    ],
+    [
+     "Americas · Cedar Trust",
+     "2026-10-13",
+     "trades.column",
+     "0.12647471"
+    ],
+    [
+     "Americas · Cedar Trust",
+     "2026-10-13",
+     "trades.total",
+     "0.05089472"
+    ],
+    [
+     "Americas · Cedar Trust",
+     "2026-10-13",
+     "pnl.row",
+     "0.74814982"
+    ],
+    [
+     "Americas · Cedar Trust",
+     "2026-10-13",
+     "pnl.column",
+     "-0.02654866"
+    ],
+    [
+     "Americas · Cedar Trust",
+     "2026-10-13",
+     "pnl.total",
+     "-0.03149942"
+    ],
+    [
+     "Americas · Cedar Trust",
+     "2026-10-13",
+     "notional.row",
+     null
+    ],
+    [
+     "Americas · Cedar Trust",
+     "2026-10-13",
+     "notional.column",
+     "0.72584395"
+    ],
+    [
+     "Americas · Cedar Trust",
+     "2026-10-13",
+     "notional.total",
+     null
+    ],
+    [
+     "Americas · Cedar Trust",
+     "2026-10-13",
+     "position.row",
+     null
+    ],
+    [
+     "Americas · Cedar Trust",
+     "2026-10-13",
+     "position.column",
+     null
+    ],
+    [
+     "Americas · Cedar Trust",
+     "2026-10-13",
+     "position.total",
+     null
+    ],
+    [
+     "Americas · Cedar Trust",
+     "2026-10-13",
+     "balance.row",
+     null
+    ],
+    [
+     "Americas · Cedar Trust",
+     "2026-10-13",
+     "balance.column",
+     "0.8517287"
+    ],
+    [
+     "Americas · Cedar Trust",
+     "2026-10-13",
+     "balance.total",
+     null
+    ],
+    [
+     "Americas · Cedar Trust",
+     "2026-10-13",
+     "volume.running",
+     "34465300.63"
+    ],
+    [
+     "Americas · Cedar Trust",
+     "2026-10-13",
+     "trades.running",
+     "1533"
+    ],
+    [
+     "Americas · Cedar Trust",
+     "2026-10-14",
+     "volume.row",
+     "0.24959502"
+    ],
+    [
+     "Americas · Cedar Trust",
+     "2026-10-14",
+     "volume.column",
+     "0.19929042"
+    ],
+    [
+     "Americas · Cedar Trust",
+     "2026-10-14",
+     "volume.total",
+     "0.0628443"
+    ],
+    [
+     "Americas · Cedar Trust",
+     "2026-10-14",
+     "trades.row",
+     "0.13976479"
+    ],
+    [
+     "Americas · Cedar Trust",
+     "2026-10-14",
+     "trades.column",
+     "0.10489958"
+    ],
+    [
+     "Americas · Cedar Trust",
+     "2026-10-14",
+     "trades.total",
+     "0.02722353"
+    ],
+    [
+     "Americas · Cedar Trust",
+     "2026-10-14",
+     "pnl.row",
+     "-4.3068312"
+    ],
+    [
+     "Americas · Cedar Trust",
+     "2026-10-14",
+     "pnl.column",
+     "0.26840864"
+    ],
+    [
+     "Americas · Cedar Trust",
+     "2026-10-14",
+     "pnl.total",
+     "0.18133089"
+    ],
+    [
+     "Americas · Cedar Trust",
+     "2026-10-14",
+     "notional.row",
+     null
+    ],
+    [
+     "Americas · Cedar Trust",
+     "2026-10-14",
+     "notional.column",
+     "-0.0268581"
+    ],
+    [
+     "Americas · Cedar Trust",
+     "2026-10-14",
+     "notional.total",
+     null
+    ],
+    [
+     "Americas · Cedar Trust",
+     "2026-10-14",
+     "position.row",
+     null
+    ],
+    [
+     "Americas · Cedar Trust",
+     "2026-10-14",
+     "position.column",
+     null
+    ],
+    [
+     "Americas · Cedar Trust",
+     "2026-10-14",
+     "position.total",
+     null
+    ],
+    [
+     "Americas · Cedar Trust",
+     "2026-10-14",
+     "balance.row",
+     null
+    ],
+    [
+     "Americas · Cedar Trust",
+     "2026-10-14",
+     "balance.column",
+     "0.3337999"
+    ],
+    [
+     "Americas · Cedar Trust",
+     "2026-10-14",
+     "balance.total",
+     null
+    ],
+    [
+     "Americas · Cedar Trust",
+     "2026-10-14",
+     "volume.running",
+     "60539978.29"
+    ],
+    [
+     "Americas · Cedar Trust",
+     "2026-10-14",
+     "trades.running",
+     "2353"
+    ],
+    [
+     "Americas · Cedar Trust",
+     "2026-10-15",
+     "volume.row",
+     "0.42049228"
+    ],
+    [
+     "Americas · Cedar Trust",
+     "2026-10-15",
+     "volume.column",
+     "0.3933376"
+    ],
+    [
+     "Americas · Cedar Trust",
+     "2026-10-15",
+     "volume.total",
+     "0.10587367"
+    ],
+    [
+     "Americas · Cedar Trust",
+     "2026-10-15",
+     "trades.row",
+     "0.59894324"
+    ],
+    [
+     "Americas · Cedar Trust",
+     "2026-10-15",
+     "trades.column",
+     "0.34508495"
+    ],
+    [
+     "Americas · Cedar Trust",
+     "2026-10-15",
+     "trades.total",
+     "0.11666279"
+    ],
+    [
+     "Americas · Cedar Trust",
+     "2026-10-15",
+     "pnl.row",
+     "-13.13937326"
+    ],
+    [
+     "Americas · Cedar Trust",
+     "2026-10-15",
+     "pnl.column",
+     "1.40701312"
+    ],
+    [
+     "Americas · Cedar Trust",
+     "2026-10-15",
+     "pnl.total",
+     "0.55320819"
+    ],
+    [
+     "Americas · Cedar Trust",
+     "2026-10-15",
+     "notional.row",
+     null
+    ],
+    [
+     "Americas · Cedar Trust",
+     "2026-10-15",
+     "notional.column",
+     "0.29489846"
+    ],
+    [
+     "Americas · Cedar Trust",
+     "2026-10-15",
+     "notional.total",
+     null
+    ],
+    [
+     "Americas · Cedar Trust",
+     "2026-10-15",
+     "position.row",
+     null
+    ],
+    [
+     "Americas · Cedar Trust",
+     "2026-10-15",
+     "position.column",
+     null
+    ],
+    [
+     "Americas · Cedar Trust",
+     "2026-10-15",
+     "position.total",
+     null
+    ],
+    [
+     "Americas · Cedar Trust",
+     "2026-10-15",
+     "balance.row",
+     null
+    ],
+    [
+     "Americas · Cedar Trust",
+     "2026-10-15",
+     "balance.column",
+     "-13.69727606"
+    ],
+    [
+     "Americas · Cedar Trust",
+     "2026-10-15",
+     "balance.total",
+     null
+    ],
+    [
+     "Americas · Cedar Trust",
+     "2026-10-15",
+     "volume.running",
+     "104467941.81"
+    ],
+    [
+     "Americas · Cedar Trust",
+     "2026-10-15",
+     "trades.running",
+     "5867"
+    ],
+    [
+     "Americas · Damson LP",
+     "2026-10-13",
+     "volume.row",
+     "0.5975114"
+    ],
+    [
+     "Americas · Damson LP",
+     "2026-10-13",
+     "volume.column",
+     "0.17355377"
+    ],
+    [
+     "Americas · Damson LP",
+     "2026-10-13",
+     "volume.total",
+     "0.07211025"
+    ],
+    [
+     "Americas · Damson LP",
+     "2026-10-13",
+     "trades.row",
+     "0.21544252"
+    ],
+    [
+     "Americas · Damson LP",
+     "2026-10-13",
+     "trades.column",
+     "0.15584523"
+    ],
+    [
+     "Americas · Damson LP",
+     "2026-10-13",
+     "trades.total",
+     "0.06271372"
+    ],
+    [
+     "Americas · Damson LP",
+     "2026-10-13",
+     "pnl.row",
+     "-4.51142549"
+    ],
+    [
+     "Americas · Damson LP",
+     "2026-10-13",
+     "pnl.column",
+     "0.73871195"
+    ],
+    [
+     "Americas · Damson LP",
+     "2026-10-13",
+     "pnl.total",
+     "0.87646581"
+    ],
+    [
+     "Americas · Damson LP",
+     "2026-10-13",
+     "notional.row",
+     null
+    ],
+    [
+     "Americas · Damson LP",
+     "2026-10-13",
+     "notional.column",
+     "-0.0300891"
+    ],
+    [
+     "Americas · Damson LP",
+     "2026-10-13",
+     "notional.total",
+     null
+    ],
+    [
+     "Americas · Damson LP",
+     "2026-10-13",
+     "position.row",
+     null
+    ],
+    [
+     "Americas · Damson LP",
+     "2026-10-13",
+     "position.column",
+     null
+    ],
+    [
+     "Americas · Damson LP",
+     "2026-10-13",
+     "position.total",
+     null
+    ],
+    [
+     "Americas · Damson LP",
+     "2026-10-13",
+     "balance.row",
+     null
+    ],
+    [
+     "Americas · Damson LP",
+     "2026-10-13",
+     "balance.column",
+     "0.85622541"
+    ],
+    [
+     "Americas · Damson LP",
+     "2026-10-13",
+     "balance.total",
+     null
+    ],
+    [
+     "Americas · Damson LP",
+     "2026-10-13",
+     "volume.running",
+     "29919208.62"
+    ],
+    [
+     "Americas · Damson LP",
+     "2026-10-13",
+     "trades.running",
+     "1889"
+    ],
+    [
+     "Americas · Damson LP",
+     "2026-10-14",
+     "volume.row",
+     "0.32572936"
+    ],
+    [
+     "Americas · Damson LP",
+     "2026-10-14",
+     "volume.column",
+     "0.12466033"
+    ],
+    [
+     "Americas · Damson LP",
+     "2026-10-14",
+     "volume.total",
+     "0.03931042"
+    ],
+    [
+     "Americas · Damson LP",
+     "2026-10-14",
+     "trades.row",
+     "0.51950274"
+    ],
+    [
+     "Americas · Damson LP",
+     "2026-10-14",
+     "trades.column",
+     "0.58270436"
+    ],
+    [
+     "Americas · Damson LP",
+     "2026-10-14",
+     "trades.total",
+     "0.1512234"
+    ],
+    [
+     "Americas · Damson LP",
+     "2026-10-14",
+     "pnl.row",
+     "-3.11998189"
+    ],
+    [
+     "Americas · Damson LP",
+     "2026-10-14",
+     "pnl.column",
+     "0.89721796"
+    ],
+    [
+     "Americas · Damson LP",
+     "2026-10-14",
+     "pnl.total",
+     "0.60614045"
+    ],
+    [
+     "Americas · Damson LP",
+     "2026-10-14",
+     "notional.row",
+     null
+    ],
+    [
+     "Americas · Damson LP",
+     "2026-10-14",
+     "notional.column",
+     "-0.02970099"
+    ],
+    [
+     "Americas · Damson LP",
+     "2026-10-14",
+     "notional.total",
+     null
+    ],
+    [
+     "Americas · Damson LP",
+     "2026-10-14",
+     "position.row",
+     null
+    ],
+    [
+     "Americas · Damson LP",
+     "2026-10-14",
+     "position.column",
+     null
+    ],
+    [
+     "Americas · Damson LP",
+     "2026-10-14",
+     "position.total",
+     null
+    ],
+    [
+     "Americas · Damson LP",
+     "2026-10-14",
+     "balance.row",
+     null
+    ],
+    [
+     "Americas · Damson LP",
+     "2026-10-14",
+     "balance.column",
+     "-0.16842555"
+    ],
+    [
+     "Americas · Damson LP",
+     "2026-10-14",
+     "balance.total",
+     null
+    ],
+    [
+     "Americas · Damson LP",
+     "2026-10-14",
+     "volume.running",
+     "46229465.8"
+    ],
+    [
+     "Americas · Damson LP",
+     "2026-10-14",
+     "trades.running",
+     "6444"
+    ],
+    [
+     "Americas · Damson LP",
+     "2026-10-15",
+     "volume.row",
+     "0.07675924"
+    ],
+    [
+     "Americas · Damson LP",
+     "2026-10-15",
+     "volume.column",
+     "0.03441589"
+    ],
+    [
+     "Americas · Damson LP",
+     "2026-10-15",
+     "volume.total",
+     "0.00926364"
+    ],
+    [
+     "Americas · Damson LP",
+     "2026-10-15",
+     "trades.row",
+     "0.26505474"
+    ],
+    [
+     "Americas · Damson LP",
+     "2026-10-15",
+     "trades.column",
+     "0.22822351"
+    ],
+    [
+     "Americas · Damson LP",
+     "2026-10-15",
+     "trades.total",
+     "0.07715547"
+    ],
+    [
+     "Americas · Damson LP",
+     "2026-10-15",
+     "pnl.row",
+     "4.3955287"
+    ],
+    [
+     "Americas · Damson LP",
+     "2026-10-15",
+     "pnl.column",
+     "-2.17191016"
+    ],
+    [
+     "Americas · Damson LP",
+     "2026-10-15",
+     "pnl.total",
+     "-0.85394974"
+    ],
+    [
+     "Americas · Damson LP",
+     "2026-10-15",
+     "notional.row",
+     null
+    ],
+    [
+     "Americas · Damson LP",
+     "2026-10-15",
+     "notional.column",
+     "0.2776925"
+    ],
+    [
+     "Americas · Damson LP",
+     "2026-10-15",
+     "notional.total",
+     null
+    ],
+    [
+     "Americas · Damson LP",
+     "2026-10-15",
+     "position.row",
+     null
+    ],
+    [
+     "Americas · Damson LP",
+     "2026-10-15",
+     "position.column",
+     null
+    ],
+    [
+     "Americas · Damson LP",
+     "2026-10-15",
+     "position.total",
+     null
+    ],
+    [
+     "Americas · Damson LP",
+     "2026-10-15",
+     "balance.row",
+     null
+    ],
+    [
+     "Americas · Damson LP",
+     "2026-10-15",
+     "balance.column",
+     "19.71756602"
+    ],
+    [
+     "Americas · Damson LP",
+     "2026-10-15",
+     "balance.total",
+     null
+    ],
+    [
+     "Americas · Damson LP",
+     "2026-10-15",
+     "volume.running",
+     "50073033.73"
+    ],
+    [
+     "Americas · Damson LP",
+     "2026-10-15",
+     "trades.running",
+     "8768"
+    ],
+    [
+     "EMEA · Fern Partners",
+     "2026-10-13",
+     "volume.row",
+     "0.26798431"
+    ],
+    [
+     "EMEA · Fern Partners",
+     "2026-10-13",
+     "volume.column",
+     "0.12885434"
+    ],
+    [
+     "EMEA · Fern Partners",
+     "2026-10-13",
+     "volume.total",
+     "0.05353798"
+    ],
+    [
+     "EMEA · Fern Partners",
+     "2026-10-13",
+     "trades.row",
+     "0.12287438"
+    ],
+    [
+     "EMEA · Fern Partners",
+     "2026-10-13",
+     "trades.column",
+     "0.01848032"
+    ],
+    [
+     "EMEA · Fern Partners",
+     "2026-10-13",
+     "trades.total",
+     "0.00743667"
+    ],
+    [
+     "EMEA · Fern Partners",
+     "2026-10-13",
+     "pnl.row",
+     "1.68682026"
+    ],
+    [
+     "EMEA · Fern Partners",
+     "2026-10-13",
+     "pnl.column",
+     "0.29367647"
+    ],
+    [
+     "EMEA · Fern Partners",
+     "2026-10-13",
+     "pnl.total",
+     "0.3484408"
+    ],
+    [
+     "EMEA · Fern Partners",
+     "2026-10-13",
+     "notional.row",
+     null
+    ],
+    [
+     "EMEA · Fern Partners",
+     "2026-10-13",
+     "notional.column",
+     "0.01387404"
+    ],
+    [
+     "EMEA · Fern Partners",
+     "2026-10-13",
+     "notional.total",
+     null
+    ],
+    [
+     "EMEA · Fern Partners",
+     "2026-10-13",
+     "position.row",
+     null
+    ],
+    [
+     "EMEA · Fern Partners",
+     "2026-10-13",
+     "position.column",
+     null
+    ],
+    [
+     "EMEA · Fern Partners",
+     "2026-10-13",
+     "position.total",
+     null
+    ],
+    [
+     "EMEA · Fern Partners",
+     "2026-10-13",
+     "balance.row",
+     null
+    ],
+    [
+     "EMEA · Fern Partners",
+     "2026-10-13",
+     "balance.column",
+     "-0.30750299"
+    ],
+    [
+     "EMEA · Fern Partners",
+     "2026-10-13",
+     "balance.total",
+     null
+    ],
+    [
+     "EMEA · Fern Partners",
+     "2026-10-13",
+     "volume.running",
+     "22213402.96"
+    ],
+    [
+     "EMEA · Fern Partners",
+     "2026-10-13",
+     "trades.running",
+     "224"
+    ],
+    [
+     "EMEA · Fern Partners",
+     "2026-10-14",
+     "volume.row",
+     "0.58064265"
+    ],
+    [
+     "EMEA · Fern Partners",
+     "2026-10-14",
+     "volume.column",
+     "0.36785963"
+    ],
+    [
+     "EMEA · Fern Partners",
+     "2026-10-14",
+     "volume.total",
+     "0.11600096"
+    ],
+    [
+     "EMEA · Fern Partners",
+     "2026-10-14",
+     "trades.row",
+     "0.29566648"
+    ],
+    [
+     "EMEA · Fern Partners",
+     "2026-10-14",
+     "trades.column",
+     "0.06895228"
+    ],
+    [
+     "EMEA · Fern Partners",
+     "2026-10-14",
+     "trades.total",
+     "0.01789449"
+    ],
+    [
+     "EMEA · Fern Partners",
+     "2026-10-14",
+     "pnl.row",
+     "-2.14215065"
+    ],
+    [
+     "EMEA · Fern Partners",
+     "2026-10-14",
+     "pnl.column",
+     "-0.65499034"
+    ],
+    [
+     "EMEA · Fern Partners",
+     "2026-10-14",
+     "pnl.total",
+     "-0.44249687"
+    ],
+    [
+     "EMEA · Fern Partners",
+     "2026-10-14",
+     "notional.row",
+     null
+    ],
+    [
+     "EMEA · Fern Partners",
+     "2026-10-14",
+     "notional.column",
+     "0.80890443"
+    ],
+    [
+     "EMEA · Fern Partners",
+     "2026-10-14",
+     "notional.total",
+     null
+    ],
+    [
+     "EMEA · Fern Partners",
+     "2026-10-14",
+     "position.row",
+     null
+    ],
+    [
+     "EMEA · Fern Partners",
+     "2026-10-14",
+     "position.column",
+     null
+    ],
+    [
+     "EMEA · Fern Partners",
+     "2026-10-14",
+     "position.total",
+     null
+    ],
+    [
+     "EMEA · Fern Partners",
+     "2026-10-14",
+     "balance.row",
+     null
+    ],
+    [
+     "EMEA · Fern Partners",
+     "2026-10-14",
+     "balance.column",
+     "0.40928507"
+    ],
+    [
+     "EMEA · Fern Partners",
+     "2026-10-14",
+     "balance.total",
+     null
+    ],
+    [
+     "EMEA · Fern Partners",
+     "2026-10-14",
+     "volume.running",
+     "70343269.82"
+    ],
+    [
+     "EMEA · Fern Partners",
+     "2026-10-14",
+     "trades.running",
+     "763"
+    ],
+    [
+     "EMEA · Fern Partners",
+     "2026-10-15",
+     "volume.row",
+     "0.15137304"
+    ],
+    [
+     "EMEA · Fern Partners",
+     "2026-10-15",
+     "volume.column",
+     "0.11235145"
+    ],
+    [
+     "EMEA · Fern Partners",
+     "2026-10-15",
+     "volume.total",
+     "0.03024135"
+    ],
+    [
+     "EMEA · Fern Partners",
+     "2026-10-15",
+     "trades.row",
+     "0.58145913"
+    ],
+    [
+     "EMEA · Fern Partners",
+     "2026-10-15",
+     "trades.column",
+     "0.10409506"
+    ],
+    [
+     "EMEA · Fern Partners",
+     "2026-10-15",
+     "trades.total",
+     "0.03519139"
+    ],
+    [
+     "EMEA · Fern Partners",
+     "2026-10-15",
+     "pnl.row",
+     "3.3318357"
+    ],
+    [
+     "EMEA · Fern Partners",
+     "2026-10-15",
+     "pnl.column",
+     "1.75046453"
+    ],
+    [
+     "EMEA · Fern Partners",
+     "2026-10-15",
+     "pnl.total",
+     "0.68824611"
+    ],
+    [
+     "EMEA · Fern Partners",
+     "2026-10-15",
+     "notional.row",
+     null
+    ],
+    [
+     "EMEA · Fern Partners",
+     "2026-10-15",
+     "notional.column",
+     "0.02829227"
+    ],
+    [
+     "EMEA · Fern Partners",
+     "2026-10-15",
+     "notional.total",
+     null
+    ],
+    [
+     "EMEA · Fern Partners",
+     "2026-10-15",
+     "position.row",
+     null
+    ],
+    [
+     "EMEA · Fern Partners",
+     "2026-10-15",
+     "position.column",
+     null
+    ],
+    [
+     "EMEA · Fern Partners",
+     "2026-10-15",
+     "position.total",
+     null
+    ],
+    [
+     "EMEA · Fern Partners",
+     "2026-10-15",
+     "balance.row",
+     null
+    ],
+    [
+     "EMEA · Fern Partners",
+     "2026-10-15",
+     "balance.column",
+     "-17.50346108"
+    ],
+    [
+     "EMEA · Fern Partners",
+     "2026-10-15",
+     "balance.total",
+     null
+    ],
+    [
+     "EMEA · Fern Partners",
+     "2026-10-15",
+     "volume.running",
+     "82890685.04"
+    ],
+    [
+     "EMEA · Fern Partners",
+     "2026-10-15",
+     "trades.running",
+     "1823"
+    ],
+    [
+     "EMEA · Laurel & Co",
+     "2026-10-13",
+     "volume.row",
+     "0.34820833"
+    ],
+    [
+     "EMEA · Laurel & Co",
+     "2026-10-13",
+     "volume.column",
+     "0.21168914"
+    ],
+    [
+     "EMEA · Laurel & Co",
+     "2026-10-13",
+     "volume.total",
+     "0.0879552"
+    ],
+    [
+     "EMEA · Laurel & Co",
+     "2026-10-13",
+     "trades.row",
+     "0.66914793"
+    ],
+    [
+     "EMEA · Laurel & Co",
+     "2026-10-13",
+     "trades.column",
+     "0.3485686"
+    ],
+    [
+     "EMEA · Laurel & Co",
+     "2026-10-13",
+     "trades.total",
+     "0.14026759"
+    ],
+    [
+     "EMEA · Laurel & Co",
+     "2026-10-13",
+     "pnl.row",
+     "-23.95386596"
+    ],
+    [
+     "EMEA · Laurel & Co",
+     "2026-10-13",
+     "pnl.column",
+     "-0.64191332"
+    ],
+    [
+     "EMEA · Laurel & Co",
+     "2026-10-13",
+     "pnl.total",
+     "-0.76161633"
+    ],
+    [
+     "EMEA · Laurel & Co",
+     "2026-10-13",
+     "notional.row",
+     null
+    ],
+    [
+     "EMEA · Laurel & Co",
+     "2026-10-13",
+     "notional.column",
+     "-0.47177588"
+    ],
+    [
+     "EMEA · Laurel & Co",
+     "2026-10-13",
+     "notional.total",
+     null
+    ],
+    [
+     "EMEA · Laurel & Co",
+     "2026-10-13",
+     "position.row",
+     null
+    ],
+    [
+     "EMEA · Laurel & Co",
+     "2026-10-13",
+     "position.column",
+     null
+    ],
+    [
+     "EMEA · Laurel & Co",
+     "2026-10-13",
+     "position.total",
+     null
+    ],
+    [
+     "EMEA · Laurel & Co",
+     "2026-10-13",
+     "balance.row",
+     null
+    ],
+    [
+     "EMEA · Laurel & Co",
+     "2026-10-13",
+     "balance.column",
+     "0.09007708"
+    ],
+    [
+     "EMEA · Laurel & Co",
+     "2026-10-13",
+     "balance.total",
+     null
+    ],
+    [
+     "EMEA · Laurel & Co",
+     "2026-10-13",
+     "volume.running",
+     "36493424.95"
+    ],
+    [
+     "EMEA · Laurel & Co",
+     "2026-10-13",
+     "trades.running",
+     "4225"
+    ],
+    [
+     "EMEA · Laurel & Co",
+     "2026-10-14",
+     "volume.row",
+     "0.38474685"
+    ],
+    [
+     "EMEA · Laurel & Co",
+     "2026-10-14",
+     "volume.column",
+     "0.30818962"
+    ],
+    [
+     "EMEA · Laurel & Co",
+     "2026-10-14",
+     "volume.total",
+     "0.0971846"
+    ],
+    [
+     "EMEA · Laurel & Co",
+     "2026-10-14",
+     "trades.row",
+     "0.30139373"
+    ],
+    [
+     "EMEA · Laurel & Co",
+     "2026-10-14",
+     "trades.column",
+     "0.24344378"
+    ],
+    [
+     "EMEA · Laurel & Co",
+     "2026-10-14",
+     "trades.total",
+     "0.06317851"
+    ],
+    [
+     "EMEA · Laurel & Co",
+     "2026-10-14",
+     "pnl.row",
+     "10.39791965"
+    ],
+    [
+     "EMEA · Laurel & Co",
+     "2026-10-14",
+     "pnl.column",
+     "0.48936374"
+    ],
+    [
+     "EMEA · Laurel & Co",
+     "2026-10-14",
+     "pnl.total",
+     "0.33060323"
+    ],
+    [
+     "EMEA · Laurel & Co",
+     "2026-10-14",
+     "notional.row",
+     null
+    ],
+    [
+     "EMEA · Laurel & Co",
+     "2026-10-14",
+     "notional.column",
+     "0.24765465"
+    ],
+    [
+     "EMEA · Laurel & Co",
+     "2026-10-14",
+     "notional.total",
+     null
+    ],
+    [
+     "EMEA · Laurel & Co",
+     "2026-10-14",
+     "position.row",
+     null
+    ],
+    [
+     "EMEA · Laurel & Co",
+     "2026-10-14",
+     "position.column",
+     null
+    ],
+    [
+     "EMEA · Laurel & Co",
+     "2026-10-14",
+     "position.total",
+     null
+    ],
+    [
+     "EMEA · Laurel & Co",
+     "2026-10-14",
+     "balance.row",
+     null
+    ],
+    [
+     "EMEA · Laurel & Co",
+     "2026-10-14",
+     "balance.column",
+     "0.42534058"
+    ],
+    [
+     "EMEA · Laurel & Co",
+     "2026-10-14",
+     "balance.total",
+     null
+    ],
+    [
+     "EMEA · Laurel & Co",
+     "2026-10-14",
+     "volume.running",
+     "76816211.32"
+    ],
+    [
+     "EMEA · Laurel & Co",
+     "2026-10-14",
+     "trades.running",
+     "6128"
+    ],
+    [
+     "EMEA · Laurel & Co",
+     "2026-10-15",
+     "volume.row",
+     "0.26704482"
+    ],
+    [
+     "EMEA · Laurel & Co",
+     "2026-10-15",
+     "volume.column",
+     "0.2506017"
+    ],
+    [
+     "EMEA · Laurel & Co",
+     "2026-10-15",
+     "volume.total",
+     "0.06745382"
+    ],
+    [
+     "EMEA · Laurel & Co",
+     "2026-10-15",
+     "trades.row",
+     "0.02945835"
+    ],
+    [
+     "EMEA · Laurel & Co",
+     "2026-10-15",
+     "trades.column",
+     "0.01826574"
+    ],
+    [
+     "EMEA · Laurel & Co",
+     "2026-10-15",
+     "trades.total",
+     "0.00617509"
+    ],
+    [
+     "EMEA · Laurel & Co",
+     "2026-10-15",
+     "pnl.row",
+     "-14.42910287"
+    ],
+    [
+     "EMEA · Laurel & Co",
+     "2026-10-15",
+     "pnl.column",
+     "-1.16683516"
+    ],
+    [
+     "EMEA · Laurel & Co",
+     "2026-10-15",
+     "pnl.total",
+     "-0.45877523"
+    ],
+    [
+     "EMEA · Laurel & Co",
+     "2026-10-15",
+     "notional.row",
+     null
+    ],
+    [
+     "EMEA · Laurel & Co",
+     "2026-10-15",
+     "notional.column",
+     "-0.08601699"
+    ],
+    [
+     "EMEA · Laurel & Co",
+     "2026-10-15",
+     "notional.total",
+     null
+    ],
+    [
+     "EMEA · Laurel & Co",
+     "2026-10-15",
+     "position.row",
+     null
+    ],
+    [
+     "EMEA · Laurel & Co",
+     "2026-10-15",
+     "position.column",
+     null
+    ],
+    [
+     "EMEA · Laurel & Co",
+     "2026-10-15",
+     "position.total",
+     null
+    ],
+    [
+     "EMEA · Laurel & Co",
+     "2026-10-15",
+     "balance.row",
+     null
+    ],
+    [
+     "EMEA · Laurel & Co",
+     "2026-10-15",
+     "balance.column",
+     "-3.63646035"
+    ],
+    [
+     "EMEA · Laurel & Co",
+     "2026-10-15",
+     "balance.total",
+     null
+    ],
+    [
+     "EMEA · Laurel & Co",
+     "2026-10-15",
+     "volume.running",
+     "104803422.37"
+    ],
+    [
+     "EMEA · Laurel & Co",
+     "2026-10-15",
+     "trades.running",
+     "6314"
+    ],
+    [
+     "APAC · Acorn Fund",
+     "2026-10-13",
+     "volume.row",
+     "0.67837396"
+    ],
+    [
+     "APAC · Acorn Fund",
+     "2026-10-13",
+     "volume.column",
+     "0.28597824"
+    ],
+    [
+     "APAC · Acorn Fund",
+     "2026-10-13",
+     "volume.total",
+     "0.11882175"
+    ],
+    [
+     "APAC · Acorn Fund",
+     "2026-10-13",
+     "trades.row",
+     "0.57830997"
+    ],
+    [
+     "APAC · Acorn Fund",
+     "2026-10-13",
+     "trades.column",
+     "0.35063114"
+    ],
+    [
+     "APAC · Acorn Fund",
+     "2026-10-13",
+     "trades.total",
+     "0.14109757"
+    ],
+    [
+     "APAC · Acorn Fund",
+     "2026-10-13",
+     "pnl.row",
+     "0.75618618"
+    ],
+    [
+     "APAC · Acorn Fund",
+     "2026-10-13",
+     "pnl.column",
+     "0.63607357"
+    ],
+    [
+     "APAC · Acorn Fund",
+     "2026-10-13",
+     "pnl.total",
+     "0.75468759"
+    ],
+    [
+     "APAC · Acorn Fund",
+     "2026-10-13",
+     "notional.row",
+     null
+    ],
+    [
+     "APAC · Acorn Fund",
+     "2026-10-13",
+     "notional.column",
+     "0.762147"
+    ],
+    [
+     "APAC · Acorn Fund",
+     "2026-10-13",
+     "notional.total",
+     null
+    ],
+    [
+     "APAC · Acorn Fund",
+     "2026-10-13",
+     "position.row",
+     null
+    ],
+    [
+     "APAC · Acorn Fund",
+     "2026-10-13",
+     "position.column",
+     null
+    ],
+    [
+     "APAC · Acorn Fund",
+     "2026-10-13",
+     "position.total",
+     null
+    ],
+    [
+     "APAC · Acorn Fund",
+     "2026-10-13",
+     "balance.row",
+     null
+    ],
+    [
+     "APAC · Acorn Fund",
+     "2026-10-13",
+     "balance.column",
+     "-0.4905282"
+    ],
+    [
+     "APAC · Acorn Fund",
+     "2026-10-13",
+     "balance.total",
+     null
+    ],
+    [
+     "APAC · Acorn Fund",
+     "2026-10-13",
+     "volume.running",
+     "49300239.88"
+    ],
+    [
+     "APAC · Acorn Fund",
+     "2026-10-13",
+     "trades.running",
+     "4250"
+    ],
+    [
+     "APAC · Acorn Fund",
+     "2026-10-15",
+     "volume.row",
+     "0.32162604"
+    ],
+    [
+     "APAC · Acorn Fund",
+     "2026-10-15",
+     "volume.column",
+     "0.20929336"
+    ],
+    [
+     "APAC · Acorn Fund",
+     "2026-10-15",
+     "volume.total",
+     "0.05633496"
+    ],
+    [
+     "APAC · Acorn Fund",
+     "2026-10-15",
+     "trades.row",
+     "0.42169003"
+    ],
+    [
+     "APAC · Acorn Fund",
+     "2026-10-15",
+     "trades.column",
+     "0.30433075"
+    ],
+    [
+     "APAC · Acorn Fund",
+     "2026-10-15",
+     "trades.total",
+     "0.10288503"
+    ],
+    [
+     "APAC · Acorn Fund",
+     "2026-10-15",
+     "pnl.row",
+     "0.46537206"
+    ],
+    [
+     "APAC · Acorn Fund",
+     "2026-10-15",
+     "pnl.column",
+     "1.18126768"
+    ],
+    [
+     "APAC · Acorn Fund",
+     "2026-10-15",
+     "pnl.total",
+     "0.46444979"
+    ],
+    [
+     "APAC · Acorn Fund",
+     "2026-10-15",
+     "notional.row",
+     null
+    ],
+    [
+     "APAC · Acorn Fund",
+     "2026-10-15",
+     "notional.column",
+     "0.48513376"
+    ],
+    [
+     "APAC · Acorn Fund",
+     "2026-10-15",
+     "notional.total",
+     null
+    ],
+    [
+     "APAC · Acorn Fund",
+     "2026-10-15",
+     "position.row",
+     null
+    ],
+    [
+     "APAC · Acorn Fund",
+     "2026-10-15",
+     "position.column",
+     null
+    ],
+    [
+     "APAC · Acorn Fund",
+     "2026-10-15",
+     "position.total",
+     null
+    ],
+    [
+     "APAC · Acorn Fund",
+     "2026-10-15",
+     "balance.row",
+     null
+    ],
+    [
+     "APAC · Acorn Fund",
+     "2026-10-15",
+     "balance.column",
+     "16.11963147"
+    ],
+    [
+     "APAC · Acorn Fund",
+     "2026-10-15",
+     "balance.total",
+     null
+    ],
+    [
+     "APAC · Acorn Fund",
+     "2026-10-15",
+     "volume.running",
+     "72674133.55"
+    ],
+    [
+     "APAC · Acorn Fund",
+     "2026-10-15",
+     "trades.running",
+     "7349"
+    ],
+    [
+     "Americas · Cedar Trust",
+     "",
+     "volume.row",
+     "1"
+    ],
+    [
+     "Americas · Cedar Trust",
+     "",
+     "volume.column",
+     "0.25178506"
+    ],
+    [
+     "Americas · Cedar Trust",
+     "",
+     "volume.total",
+     "0.25178506"
+    ],
+    [
+     "Americas · Cedar Trust",
+     "",
+     "trades.row",
+     "1"
+    ],
+    [
+     "Americas · Cedar Trust",
+     "",
+     "trades.column",
+     "0.19478105"
+    ],
+    [
+     "Americas · Cedar Trust",
+     "",
+     "trades.total",
+     "0.19478105"
+    ],
+    [
+     "Americas · Cedar Trust",
+     "",
+     "pnl.row",
+     "1"
+    ],
+    [
+     "Americas · Cedar Trust",
+     "",
+     "pnl.column",
+     "-0.04210309"
+    ],
+    [
+     "Americas · Cedar Trust",
+     "",
+     "pnl.total",
+     "-0.04210309"
+    ],
+    [
+     "Americas · Cedar Trust",
+     "",
+     "notional.row",
+     null
+    ],
+    [
+     "Americas · Cedar Trust",
+     "",
+     "notional.column",
+     null
+    ],
+    [
+     "Americas · Cedar Trust",
+     "",
+     "notional.total",
+     null
+    ],
+    [
+     "Americas · Cedar Trust",
+     "",
+     "position.row",
+     null
+    ],
+    [
+     "Americas · Cedar Trust",
+     "",
+     "position.column",
+     null
+    ],
+    [
+     "Americas · Cedar Trust",
+     "",
+     "position.total",
+     null
+    ],
+    [
+     "Americas · Cedar Trust",
+     "",
+     "balance.row",
+     null
+    ],
+    [
+     "Americas · Cedar Trust",
+     "",
+     "balance.column",
+     null
+    ],
+    [
+     "Americas · Cedar Trust",
+     "",
+     "balance.total",
+     null
+    ],
+    [
+     "Americas · Cedar Trust",
+     "",
+     "volume.running",
+     "104467941.81"
+    ],
+    [
+     "Americas · Cedar Trust",
+     "",
+     "trades.running",
+     "5867"
+    ],
+    [
+     "Americas · Damson LP",
+     "",
+     "volume.row",
+     "1"
+    ],
+    [
+     "Americas · Damson LP",
+     "",
+     "volume.column",
+     "0.12068431"
+    ],
+    [
+     "Americas · Damson LP",
+     "",
+     "volume.total",
+     "0.12068431"
+    ],
+    [
+     "Americas · Damson LP",
+     "",
+     "trades.row",
+     "1"
+    ],
+    [
+     "Americas · Damson LP",
+     "",
+     "trades.column",
+     "0.29109259"
+    ],
+    [
+     "Americas · Damson LP",
+     "",
+     "trades.total",
+     "0.29109259"
+    ],
+    [
+     "Americas · Damson LP",
+     "",
+     "pnl.row",
+     "1"
+    ],
+    [
+     "Americas · Damson LP",
+     "",
+     "pnl.column",
+     "-0.19427691"
+    ],
+    [
+     "Americas · Damson LP",
+     "",
+     "pnl.total",
+     "-0.19427691"
+    ],
+    [
+     "Americas · Damson LP",
+     "",
+     "notional.row",
+     null
+    ],
+    [
+     "Americas · Damson LP",
+     "",
+     "notional.column",
+     null
+    ],
+    [
+     "Americas · Damson LP",
+     "",
+     "notional.total",
+     null
+    ],
+    [
+     "Americas · Damson LP",
+     "",
+     "position.row",
+     null
+    ],
+    [
+     "Americas · Damson LP",
+     "",
+     "position.column",
+     null
+    ],
+    [
+     "Americas · Damson LP",
+     "",
+     "position.total",
+     null
+    ],
+    [
+     "Americas · Damson LP",
+     "",
+     "balance.row",
+     null
+    ],
+    [
+     "Americas · Damson LP",
+     "",
+     "balance.column",
+     null
+    ],
+    [
+     "Americas · Damson LP",
+     "",
+     "balance.total",
+     null
+    ],
+    [
+     "Americas · Damson LP",
+     "",
+     "volume.running",
+     "50073033.74"
+    ],
+    [
+     "Americas · Damson LP",
+     "",
+     "trades.running",
+     "8768"
+    ],
+    [
+     "EMEA · Fern Partners",
+     "",
+     "volume.row",
+     "1"
+    ],
+    [
+     "EMEA · Fern Partners",
+     "",
+     "volume.column",
+     "0.19978029"
+    ],
+    [
+     "EMEA · Fern Partners",
+     "",
+     "volume.total",
+     "0.19978029"
+    ],
+    [
+     "EMEA · Fern Partners",
+     "",
+     "trades.row",
+     "1"
+    ],
+    [
+     "EMEA · Fern Partners",
+     "",
+     "trades.column",
+     "0.06052256"
+    ],
+    [
+     "EMEA · Fern Partners",
+     "",
+     "trades.total",
+     "0.06052256"
+    ],
+    [
+     "EMEA · Fern Partners",
+     "",
+     "pnl.row",
+     "1"
+    ],
+    [
+     "EMEA · Fern Partners",
+     "",
+     "pnl.column",
+     "0.20656664"
+    ],
+    [
+     "EMEA · Fern Partners",
+     "",
+     "pnl.total",
+     "0.20656664"
+    ],
+    [
+     "EMEA · Fern Partners",
+     "",
+     "notional.row",
+     null
+    ],
+    [
+     "EMEA · Fern Partners",
+     "",
+     "notional.column",
+     null
+    ],
+    [
+     "EMEA · Fern Partners",
+     "",
+     "notional.total",
+     null
+    ],
+    [
+     "EMEA · Fern Partners",
+     "",
+     "position.row",
+     null
+    ],
+    [
+     "EMEA · Fern Partners",
+     "",
+     "position.column",
+     null
+    ],
+    [
+     "EMEA · Fern Partners",
+     "",
+     "position.total",
+     null
+    ],
+    [
+     "EMEA · Fern Partners",
+     "",
+     "balance.row",
+     null
+    ],
+    [
+     "EMEA · Fern Partners",
+     "",
+     "balance.column",
+     null
+    ],
+    [
+     "EMEA · Fern Partners",
+     "",
+     "balance.total",
+     null
+    ],
+    [
+     "EMEA · Fern Partners",
+     "",
+     "volume.running",
+     "82890685.03"
+    ],
+    [
+     "EMEA · Fern Partners",
+     "",
+     "trades.running",
+     "1823"
+    ],
+    [
+     "EMEA · Laurel & Co",
+     "",
+     "volume.row",
+     "1"
+    ],
+    [
+     "EMEA · Laurel & Co",
+     "",
+     "volume.column",
+     "0.25259362"
+    ],
+    [
+     "EMEA · Laurel & Co",
+     "",
+     "volume.total",
+     "0.25259362"
+    ],
+    [
+     "EMEA · Laurel & Co",
+     "",
+     "trades.row",
+     "1"
+    ],
+    [
+     "EMEA · Laurel & Co",
+     "",
+     "trades.column",
+     "0.20962119"
+    ],
+    [
+     "EMEA · Laurel & Co",
+     "",
+     "trades.total",
+     "0.20962119"
+    ],
+    [
+     "EMEA · Laurel & Co",
+     "",
+     "pnl.row",
+     "1"
+    ],
+    [
+     "EMEA · Laurel & Co",
+     "",
+     "pnl.column",
+     "0.03179513"
+    ],
+    [
+     "EMEA · Laurel & Co",
+     "",
+     "pnl.total",
+     "0.03179513"
+    ],
+    [
+     "EMEA · Laurel & Co",
+     "",
+     "notional.row",
+     null
+    ],
+    [
+     "EMEA · Laurel & Co",
+     "",
+     "notional.column",
+     null
+    ],
+    [
+     "EMEA · Laurel & Co",
+     "",
+     "notional.total",
+     null
+    ],
+    [
+     "EMEA · Laurel & Co",
+     "",
+     "position.row",
+     null
+    ],
+    [
+     "EMEA · Laurel & Co",
+     "",
+     "position.column",
+     null
+    ],
+    [
+     "EMEA · Laurel & Co",
+     "",
+     "position.total",
+     null
+    ],
+    [
+     "EMEA · Laurel & Co",
+     "",
+     "balance.row",
+     null
+    ],
+    [
+     "EMEA · Laurel & Co",
+     "",
+     "balance.column",
+     null
+    ],
+    [
+     "EMEA · Laurel & Co",
+     "",
+     "balance.total",
+     null
+    ],
+    [
+     "EMEA · Laurel & Co",
+     "",
+     "volume.running",
+     "104803422.38"
+    ],
+    [
+     "EMEA · Laurel & Co",
+     "",
+     "trades.running",
+     "6314"
+    ],
+    [
+     "APAC · Acorn Fund",
+     "",
+     "volume.row",
+     "1"
+    ],
+    [
+     "APAC · Acorn Fund",
+     "",
+     "volume.column",
+     "0.17515671"
+    ],
+    [
+     "APAC · Acorn Fund",
+     "",
+     "volume.total",
+     "0.17515671"
+    ],
+    [
+     "APAC · Acorn Fund",
+     "",
+     "trades.row",
+     "1"
+    ],
+    [
+     "APAC · Acorn Fund",
+     "",
+     "trades.column",
+     "0.2439826"
+    ],
+    [
+     "APAC · Acorn Fund",
+     "",
+     "trades.total",
+     "0.2439826"
+    ],
+    [
+     "APAC · Acorn Fund",
+     "",
+     "pnl.row",
+     "1"
+    ],
+    [
+     "APAC · Acorn Fund",
+     "",
+     "pnl.column",
+     "0.99801822"
+    ],
+    [
+     "APAC · Acorn Fund",
+     "",
+     "pnl.total",
+     "0.99801822"
+    ],
+    [
+     "APAC · Acorn Fund",
+     "",
+     "notional.row",
+     null
+    ],
+    [
+     "APAC · Acorn Fund",
+     "",
+     "notional.column",
+     null
+    ],
+    [
+     "APAC · Acorn Fund",
+     "",
+     "notional.total",
+     null
+    ],
+    [
+     "APAC · Acorn Fund",
+     "",
+     "position.row",
+     null
+    ],
+    [
+     "APAC · Acorn Fund",
+     "",
+     "position.column",
+     null
+    ],
+    [
+     "APAC · Acorn Fund",
+     "",
+     "position.total",
+     null
+    ],
+    [
+     "APAC · Acorn Fund",
+     "",
+     "balance.row",
+     null
+    ],
+    [
+     "APAC · Acorn Fund",
+     "",
+     "balance.column",
+     null
+    ],
+    [
+     "APAC · Acorn Fund",
+     "",
+     "balance.total",
+     null
+    ],
+    [
+     "APAC · Acorn Fund",
+     "",
+     "volume.running",
+     "72674133.55"
+    ],
+    [
+     "APAC · Acorn Fund",
+     "",
+     "trades.running",
+     "7349"
+    ],
+    [
+     "Americas",
+     "2026-10-13",
+     "volume.row",
+     "0.41661772"
+    ],
+    [
+     "Americas",
+     "2026-10-13",
+     "volume.column",
+     "0.37347828"
+    ],
+    [
+     "Americas",
+     "2026-10-13",
+     "volume.total",
+     "0.15517734"
+    ],
+    [
+     "Americas",
+     "2026-10-13",
+     "trades.row",
+     "0.23382303"
+    ],
+    [
+     "Americas",
+     "2026-10-13",
+     "trades.column",
+     "0.28231994"
+    ],
+    [
+     "Americas",
+     "2026-10-13",
+     "trades.total",
+     "0.11360845"
+    ],
+    [
+     "Americas",
+     "2026-10-13",
+     "pnl.row",
+     "-3.57461035"
+    ],
+    [
+     "Americas",
+     "2026-10-13",
+     "pnl.column",
+     "0.71216329"
+    ],
+    [
+     "Americas",
+     "2026-10-13",
+     "pnl.total",
+     "0.84496639"
+    ],
+    [
+     "Americas",
+     "2026-10-13",
+     "notional.row",
+     null
+    ],
+    [
+     "Americas",
+     "2026-10-13",
+     "notional.column",
+     "0.69575485"
+    ],
+    [
+     "Americas",
+     "2026-10-13",
+     "notional.total",
+     null
+    ],
+    [
+     "Americas",
+     "2026-10-13",
+     "position.row",
+     null
+    ],
+    [
+     "Americas",
+     "2026-10-13",
+     "position.column",
+     null
+    ],
+    [
+     "Americas",
+     "2026-10-13",
+     "position.total",
+     null
+    ],
+    [
+     "Americas",
+     "2026-10-13",
+     "balance.row",
+     null
+    ],
+    [
+     "Americas",
+     "2026-10-13",
+     "balance.column",
+     "1.70795411"
+    ],
+    [
+     "Americas",
+     "2026-10-13",
+     "balance.total",
+     null
+    ],
+    [
+     "Americas",
+     "2026-10-13",
+     "volume.running",
+     "64384509.25"
+    ],
+    [
+     "Americas",
+     "2026-10-13",
+     "trades.running",
+     "3422"
+    ],
+    [
+     "Americas",
+     "2026-10-14",
+     "volume.row",
+     "0.27426341"
+    ],
+    [
+     "Americas",
+     "2026-10-14",
+     "volume.column",
+     "0.32395075"
+    ],
+    [
+     "Americas",
+     "2026-10-14",
+     "volume.total",
+     "0.10215472"
+    ],
+    [
+     "Americas",
+     "2026-10-14",
+     "trades.row",
+     "0.36727024"
+    ],
+    [
+     "Americas",
+     "2026-10-14",
+     "trades.column",
+     "0.68760394"
+    ],
+    [
+     "Americas",
+     "2026-10-14",
+     "trades.total",
+     "0.17844693"
+    ],
+    [
+     "Americas",
+     "2026-10-14",
+     "pnl.row",
+     "-3.33137888"
+    ],
+    [
+     "Americas",
+     "2026-10-14",
+     "pnl.column",
+     "1.1656266"
+    ],
+    [
+     "Americas",
+     "2026-10-14",
+     "pnl.total",
+     "0.78747134"
+    ],
+    [
+     "Americas",
+     "2026-10-14",
+     "notional.row",
+     null
+    ],
+    [
+     "Americas",
+     "2026-10-14",
+     "notional.column",
+     "-0.05655908"
+    ],
+    [
+     "Americas",
+     "2026-10-14",
+     "notional.total",
+     null
+    ],
+    [
+     "Americas",
+     "2026-10-14",
+     "position.row",
+     null
+    ],
+    [
+     "Americas",
+     "2026-10-14",
+     "position.column",
+     null
+    ],
+    [
+     "Americas",
+     "2026-10-14",
+     "position.total",
+     null
+    ],
+    [
+     "Americas",
+     "2026-10-14",
+     "balance.row",
+     null
+    ],
+    [
+     "Americas",
+     "2026-10-14",
+     "balance.column",
+     "0.16537435"
+    ],
+    [
+     "Americas",
+     "2026-10-14",
+     "balance.total",
+     null
+    ],
+    [
+     "Americas",
+     "2026-10-14",
+     "volume.running",
+     "106769444.09"
+    ],
+    [
+     "Americas",
+     "2026-10-14",
+     "trades.running",
+     "8797"
+    ],
+    [
+     "Americas",
+     "2026-10-15",
+     "volume.row",
+     "0.30911887"
+    ],
+    [
+     "Americas",
+     "2026-10-15",
+     "volume.column",
+     "0.42775349"
+    ],
+    [
+     "Americas",
+     "2026-10-15",
+     "volume.total",
+     "0.11513731"
+    ],
+    [
+     "Americas",
+     "2026-10-15",
+     "trades.row",
+     "0.39890673"
+    ],
+    [
+     "Americas",
+     "2026-10-15",
+     "trades.column",
+     "0.57330846"
+    ],
+    [
+     "Americas",
+     "2026-10-15",
+     "trades.total",
+     "0.19381827"
+    ],
+    [
+     "Americas",
+     "2026-10-15",
+     "pnl.row",
+     "1.27228003"
+    ],
+    [
+     "Americas",
+     "2026-10-15",
+     "pnl.column",
+     "-0.76489705"
+    ],
+    [
+     "Americas",
+     "2026-10-15",
+     "pnl.total",
+     "-0.30074155"
+    ],
+    [
+     "Americas",
+     "2026-10-15",
+     "notional.row",
+     null
+    ],
+    [
+     "Americas",
+     "2026-10-15",
+     "notional.column",
+     "0.57259096"
+    ],
+    [
+     "Americas",
+     "2026-10-15",
+     "notional.total",
+     null
+    ],
+    [
+     "Americas",
+     "2026-10-15",
+     "position.row",
+     null
+    ],
+    [
+     "Americas",
+     "2026-10-15",
+     "position.column",
+     null
+    ],
+    [
+     "Americas",
+     "2026-10-15",
+     "position.total",
+     null
+    ],
+    [
+     "Americas",
+     "2026-10-15",
+     "balance.row",
+     null
+    ],
+    [
+     "Americas",
+     "2026-10-15",
+     "balance.column",
+     "6.02028996"
+    ],
+    [
+     "Americas",
+     "2026-10-15",
+     "balance.total",
+     null
+    ],
+    [
+     "Americas",
+     "2026-10-15",
+     "volume.running",
+     "154540975.54"
+    ],
+    [
+     "Americas",
+     "2026-10-15",
+     "trades.running",
+     "14635"
+    ],
+    [
+     "EMEA",
+     "2026-10-13",
+     "volume.row",
+     "0.31277928"
+    ],
+    [
+     "EMEA",
+     "2026-10-13",
+     "volume.column",
+     "0.34054348"
+    ],
+    [
+     "EMEA",
+     "2026-10-13",
+     "volume.total",
+     "0.14149319"
+    ],
+    [
+     "EMEA",
+     "2026-10-13",
+     "trades.row",
+     "0.54676171"
+    ],
+    [
+     "EMEA",
+     "2026-10-13",
+     "trades.column",
+     "0.36704892"
+    ],
+    [
+     "EMEA",
+     "2026-10-13",
+     "trades.total",
+     "0.14770426"
+    ],
+    [
+     "EMEA",
+     "2026-10-13",
+     "pnl.row",
+     "-1.73339677"
+    ],
+    [
+     "EMEA",
+     "2026-10-13",
+     "pnl.column",
+     "-0.34823686"
+    ],
+    [
+     "EMEA",
+     "2026-10-13",
+     "pnl.total",
+     "-0.41317553"
+    ],
+    [
+     "EMEA",
+     "2026-10-13",
+     "notional.row",
+     null
+    ],
+    [
+     "EMEA",
+     "2026-10-13",
+     "notional.column",
+     "-0.45790185"
+    ],
+    [
+     "EMEA",
+     "2026-10-13",
+     "notional.total",
+     null
+    ],
+    [
+     "EMEA",
+     "2026-10-13",
+     "position.row",
+     null
+    ],
+    [
+     "EMEA",
+     "2026-10-13",
+     "position.column",
+     null
+    ],
+    [
+     "EMEA",
+     "2026-10-13",
+     "position.total",
+     null
+    ],
+    [
+     "EMEA",
+     "2026-10-13",
+     "balance.row",
+     null
+    ],
+    [
+     "EMEA",
+     "2026-10-13",
+     "balance.column",
+     "-0.21742591"
+    ],
+    [
+     "EMEA",
+     "2026-10-13",
+     "balance.total",
+     null
+    ],
+    [
+     "EMEA",
+     "2026-10-13",
+     "volume.running",
+     "58706827.92"
+    ],
+    [
+     "EMEA",
+     "2026-10-13",
+     "trades.running",
+     "4449"
+    ],
+    [
+     "EMEA",
+     "2026-10-14",
+     "volume.row",
+     "0.47125962"
+    ],
+    [
+     "EMEA",
+     "2026-10-14",
+     "volume.column",
+     "0.67604925"
+    ],
+    [
+     "EMEA",
+     "2026-10-14",
+     "volume.total",
+     "0.21318556"
+    ],
+    [
+     "EMEA",
+     "2026-10-14",
+     "trades.row",
+     "0.30011061"
+    ],
+    [
+     "EMEA",
+     "2026-10-14",
+     "trades.column",
+     "0.31239606"
+    ],
+    [
+     "EMEA",
+     "2026-10-14",
+     "trades.total",
+     "0.08107301"
+    ],
+    [
+     "EMEA",
+     "2026-10-14",
+     "pnl.row",
+     "-0.46942779"
+    ],
+    [
+     "EMEA",
+     "2026-10-14",
+     "pnl.column",
+     "-0.1656266"
+    ],
+    [
+     "EMEA",
+     "2026-10-14",
+     "pnl.total",
+     "-0.11189364"
+    ],
+    [
+     "EMEA",
+     "2026-10-14",
+     "notional.row",
+     null
+    ],
+    [
+     "EMEA",
+     "2026-10-14",
+     "notional.column",
+     "1.05655908"
+    ],
+    [
+     "EMEA",
+     "2026-10-14",
+     "notional.total",
+     null
+    ],
+    [
+     "EMEA",
+     "2026-10-14",
+     "position.row",
+     null
+    ],
+    [
+     "EMEA",
+     "2026-10-14",
+     "position.column",
+     null
+    ],
+    [
+     "EMEA",
+     "2026-10-14",
+     "position.total",
+     null
+    ],
+    [
+     "EMEA",
+     "2026-10-14",
+     "balance.row",
+     null
+    ],
+    [
+     "EMEA",
+     "2026-10-14",
+     "balance.column",
+     "0.83462565"
+    ],
+    [
+     "EMEA",
+     "2026-10-14",
+     "balance.total",
+     null
+    ],
+    [
+     "EMEA",
+     "2026-10-14",
+     "volume.running",
+     "147159481.15"
+    ],
+    [
+     "EMEA",
+     "2026-10-14",
+     "trades.running",
+     "6891"
+    ],
+    [
+     "EMEA",
+     "2026-10-15",
+     "volume.row",
+     "0.2159611"
+    ],
+    [
+     "EMEA",
+     "2026-10-15",
+     "volume.column",
+     "0.36295315"
+    ],
+    [
+     "EMEA",
+     "2026-10-15",
+     "volume.total",
+     "0.09769517"
+    ],
+    [
+     "EMEA",
+     "2026-10-15",
+     "trades.row",
+     "0.15312769"
+    ],
+    [
+     "EMEA",
+     "2026-10-15",
+     "trades.column",
+     "0.1223608"
+    ],
+    [
+     "EMEA",
+     "2026-10-15",
+     "trades.total",
+     "0.04136649"
+    ],
+    [
+     "EMEA",
+     "2026-10-15",
+     "pnl.row",
+     "0.96270002"
+    ],
+    [
+     "EMEA",
+     "2026-10-15",
+     "pnl.column",
+     "0.58362937"
+    ],
+    [
+     "EMEA",
+     "2026-10-15",
+     "pnl.total",
+     "0.22947089"
+    ],
+    [
+     "EMEA",
+     "2026-10-15",
+     "notional.row",
+     null
+    ],
+    [
+     "EMEA",
+     "2026-10-15",
+     "notional.column",
+     "-0.05772472"
+    ],
+    [
+     "EMEA",
+     "2026-10-15",
+     "notional.total",
+     null
+    ],
+    [
+     "EMEA",
+     "2026-10-15",
+     "position.row",
+     null
+    ],
+    [
+     "EMEA",
+     "2026-10-15",
+     "position.column",
+     null
+    ],
+    [
+     "EMEA",
+     "2026-10-15",
+     "position.total",
+     null
+    ],
+    [
+     "EMEA",
+     "2026-10-15",
+     "balance.row",
+     null
+    ],
+    [
+     "EMEA",
+     "2026-10-15",
+     "balance.column",
+     "-21.13992143"
+    ],
+    [
+     "EMEA",
+     "2026-10-15",
+     "balance.total",
+     null
+    ],
+    [
+     "EMEA",
+     "2026-10-15",
+     "volume.running",
+     "187694107.42"
+    ],
+    [
+     "EMEA",
+     "2026-10-15",
+     "trades.running",
+     "8137"
+    ],
+    [
+     "APAC",
+     "2026-10-13",
+     "volume.row",
+     "0.67837396"
+    ],
+    [
+     "APAC",
+     "2026-10-13",
+     "volume.column",
+     "0.28597824"
+    ],
+    [
+     "APAC",
+     "2026-10-13",
+     "volume.total",
+     "0.11882175"
+    ],
+    [
+     "APAC",
+     "2026-10-13",
+     "trades.row",
+     "0.57830997"
+    ],
+    [
+     "APAC",
+     "2026-10-13",
+     "trades.column",
+     "0.35063114"
+    ],
+    [
+     "APAC",
+     "2026-10-13",
+     "trades.total",
+     "0.14109757"
+    ],
+    [
+     "APAC",
+     "2026-10-13",
+     "pnl.row",
+     "0.75618618"
+    ],
+    [
+     "APAC",
+     "2026-10-13",
+     "pnl.column",
+     "0.63607357"
+    ],
+    [
+     "APAC",
+     "2026-10-13",
+     "pnl.total",
+     "0.75468759"
+    ],
+    [
+     "APAC",
+     "2026-10-13",
+     "notional.row",
+     null
+    ],
+    [
+     "APAC",
+     "2026-10-13",
+     "notional.column",
+     "0.762147"
+    ],
+    [
+     "APAC",
+     "2026-10-13",
+     "notional.total",
+     null
+    ],
+    [
+     "APAC",
+     "2026-10-13",
+     "position.row",
+     null
+    ],
+    [
+     "APAC",
+     "2026-10-13",
+     "position.column",
+     null
+    ],
+    [
+     "APAC",
+     "2026-10-13",
+     "position.total",
+     null
+    ],
+    [
+     "APAC",
+     "2026-10-13",
+     "balance.row",
+     null
+    ],
+    [
+     "APAC",
+     "2026-10-13",
+     "balance.column",
+     "-0.4905282"
+    ],
+    [
+     "APAC",
+     "2026-10-13",
+     "balance.total",
+     null
+    ],
+    [
+     "APAC",
+     "2026-10-13",
+     "volume.running",
+     "49300239.88"
+    ],
+    [
+     "APAC",
+     "2026-10-13",
+     "trades.running",
+     "4250"
+    ],
+    [
+     "APAC",
+     "2026-10-15",
+     "volume.row",
+     "0.32162604"
+    ],
+    [
+     "APAC",
+     "2026-10-15",
+     "volume.column",
+     "0.20929336"
+    ],
+    [
+     "APAC",
+     "2026-10-15",
+     "volume.total",
+     "0.05633496"
+    ],
+    [
+     "APAC",
+     "2026-10-15",
+     "trades.row",
+     "0.42169003"
+    ],
+    [
+     "APAC",
+     "2026-10-15",
+     "trades.column",
+     "0.30433075"
+    ],
+    [
+     "APAC",
+     "2026-10-15",
+     "trades.total",
+     "0.10288503"
+    ],
+    [
+     "APAC",
+     "2026-10-15",
+     "pnl.row",
+     "0.46537206"
+    ],
+    [
+     "APAC",
+     "2026-10-15",
+     "pnl.column",
+     "1.18126768"
+    ],
+    [
+     "APAC",
+     "2026-10-15",
+     "pnl.total",
+     "0.46444979"
+    ],
+    [
+     "APAC",
+     "2026-10-15",
+     "notional.row",
+     null
+    ],
+    [
+     "APAC",
+     "2026-10-15",
+     "notional.column",
+     "0.48513376"
+    ],
+    [
+     "APAC",
+     "2026-10-15",
+     "notional.total",
+     null
+    ],
+    [
+     "APAC",
+     "2026-10-15",
+     "position.row",
+     null
+    ],
+    [
+     "APAC",
+     "2026-10-15",
+     "position.column",
+     null
+    ],
+    [
+     "APAC",
+     "2026-10-15",
+     "position.total",
+     null
+    ],
+    [
+     "APAC",
+     "2026-10-15",
+     "balance.row",
+     null
+    ],
+    [
+     "APAC",
+     "2026-10-15",
+     "balance.column",
+     "16.11963147"
+    ],
+    [
+     "APAC",
+     "2026-10-15",
+     "balance.total",
+     null
+    ],
+    [
+     "APAC",
+     "2026-10-15",
+     "volume.running",
+     "72674133.55"
+    ],
+    [
+     "APAC",
+     "2026-10-15",
+     "trades.running",
+     "7349"
+    ],
+    [
+     "Americas",
+     "",
+     "volume.row",
+     "1"
+    ],
+    [
+     "Americas",
+     "",
+     "volume.column",
+     "0.37246937"
+    ],
+    [
+     "Americas",
+     "",
+     "volume.total",
+     "0.37246937"
+    ],
+    [
+     "Americas",
+     "",
+     "trades.row",
+     "1"
+    ],
+    [
+     "Americas",
+     "",
+     "trades.column",
+     "0.48587364"
+    ],
+    [
+     "Americas",
+     "",
+     "trades.total",
+     "0.48587364"
+    ],
+    [
+     "Americas",
+     "",
+     "pnl.row",
+     "1"
+    ],
+    [
+     "Americas",
+     "",
+     "pnl.column",
+     "-0.23638"
+    ],
+    [
+     "Americas",
+     "",
+     "pnl.total",
+     "-0.23638"
+    ],
+    [
+     "Americas",
+     "",
+     "notional.row",
+     null
+    ],
+    [
+     "Americas",
+     "",
+     "notional.column",
+     null
+    ],
+    [
+     "Americas",
+     "",
+     "notional.total",
+     null
+    ],
+    [
+     "Americas",
+     "",
+     "position.row",
+     null
+    ],
+    [
+     "Americas",
+     "",
+     "position.column",
+     null
+    ],
+    [
+     "Americas",
+     "",
+     "position.total",
+     null
+    ],
+    [
+     "Americas",
+     "",
+     "balance.row",
+     null
+    ],
+    [
+     "Americas",
+     "",
+     "balance.column",
+     null
+    ],
+    [
+     "Americas",
+     "",
+     "balance.total",
+     null
+    ],
+    [
+     "Americas",
+     "",
+     "volume.running",
+     "154540975.54"
+    ],
+    [
+     "Americas",
+     "",
+     "trades.running",
+     "14635"
+    ],
+    [
+     "EMEA",
+     "",
+     "volume.row",
+     "1"
+    ],
+    [
+     "EMEA",
+     "",
+     "volume.column",
+     "0.45237392"
+    ],
+    [
+     "EMEA",
+     "",
+     "volume.total",
+     "0.45237392"
+    ],
+    [
+     "EMEA",
+     "",
+     "trades.row",
+     "1"
+    ],
+    [
+     "EMEA",
+     "",
+     "trades.column",
+     "0.27014375"
+    ],
+    [
+     "EMEA",
+     "",
+     "trades.total",
+     "0.27014375"
+    ],
+    [
+     "EMEA",
+     "",
+     "pnl.row",
+     "1"
+    ],
+    [
+     "EMEA",
+     "",
+     "pnl.column",
+     "0.23836177"
+    ],
+    [
+     "EMEA",
+     "",
+     "pnl.total",
+     "0.23836177"
+    ],
+    [
+     "EMEA",
+     "",
+     "notional.row",
+     null
+    ],
+    [
+     "EMEA",
+     "",
+     "notional.column",
+     null
+    ],
+    [
+     "EMEA",
+     "",
+     "notional.total",
+     null
+    ],
+    [
+     "EMEA",
+     "",
+     "position.row",
+     null
+    ],
+    [
+     "EMEA",
+     "",
+     "position.column",
+     null
+    ],
+    [
+     "EMEA",
+     "",
+     "position.total",
+     null
+    ],
+    [
+     "EMEA",
+     "",
+     "balance.row",
+     null
+    ],
+    [
+     "EMEA",
+     "",
+     "balance.column",
+     null
+    ],
+    [
+     "EMEA",
+     "",
+     "balance.total",
+     null
+    ],
+    [
+     "EMEA",
+     "",
+     "volume.running",
+     "187694107.41"
+    ],
+    [
+     "EMEA",
+     "",
+     "trades.running",
+     "8137"
+    ],
+    [
+     "APAC",
+     "",
+     "volume.row",
+     "1"
+    ],
+    [
+     "APAC",
+     "",
+     "volume.column",
+     "0.17515671"
+    ],
+    [
+     "APAC",
+     "",
+     "volume.total",
+     "0.17515671"
+    ],
+    [
+     "APAC",
+     "",
+     "trades.row",
+     "1"
+    ],
+    [
+     "APAC",
+     "",
+     "trades.column",
+     "0.2439826"
+    ],
+    [
+     "APAC",
+     "",
+     "trades.total",
+     "0.2439826"
+    ],
+    [
+     "APAC",
+     "",
+     "pnl.row",
+     "1"
+    ],
+    [
+     "APAC",
+     "",
+     "pnl.column",
+     "0.99801822"
+    ],
+    [
+     "APAC",
+     "",
+     "pnl.total",
+     "0.99801822"
+    ],
+    [
+     "APAC",
+     "",
+     "notional.row",
+     null
+    ],
+    [
+     "APAC",
+     "",
+     "notional.column",
+     null
+    ],
+    [
+     "APAC",
+     "",
+     "notional.total",
+     null
+    ],
+    [
+     "APAC",
+     "",
+     "position.row",
+     null
+    ],
+    [
+     "APAC",
+     "",
+     "position.column",
+     null
+    ],
+    [
+     "APAC",
+     "",
+     "position.total",
+     null
+    ],
+    [
+     "APAC",
+     "",
+     "balance.row",
+     null
+    ],
+    [
+     "APAC",
+     "",
+     "balance.column",
+     null
+    ],
+    [
+     "APAC",
+     "",
+     "balance.total",
+     null
+    ],
+    [
+     "APAC",
+     "",
+     "volume.running",
+     "72674133.54"
+    ],
+    [
+     "APAC",
+     "",
+     "trades.running",
+     "7349"
+    ],
+    [
+     "",
+     "2026-10-13",
+     "volume.row",
+     "0.41549228"
+    ],
+    [
+     "",
+     "2026-10-13",
+     "volume.column",
+     "1"
+    ],
+    [
+     "",
+     "2026-10-13",
+     "volume.total",
+     "0.41549228"
+    ],
+    [
+     "",
+     "2026-10-13",
+     "trades.row",
+     "0.40241028"
+    ],
+    [
+     "",
+     "2026-10-13",
+     "trades.column",
+     "1"
+    ],
+    [
+     "",
+     "2026-10-13",
+     "trades.total",
+     "0.40241028"
+    ],
+    [
+     "",
+     "2026-10-13",
+     "pnl.row",
+     "1.18647845"
+    ],
+    [
+     "",
+     "2026-10-13",
+     "pnl.column",
+     "1"
+    ],
+    [
+     "",
+     "2026-10-13",
+     "pnl.total",
+     "1.18647845"
+    ],
+    [
+     "",
+     "2026-10-13",
+     "notional.row",
+     null
+    ],
+    [
+     "",
+     "2026-10-13",
+     "notional.column",
+     "1"
+    ],
+    [
+     "",
+     "2026-10-13",
+     "notional.total",
+     null
+    ],
+    [
+     "",
+     "2026-10-13",
+     "position.row",
+     null
+    ],
+    [
+     "",
+     "2026-10-13",
+     "position.column",
+     null
+    ],
+    [
+     "",
+     "2026-10-13",
+     "position.total",
+     null
+    ],
+    [
+     "",
+     "2026-10-13",
+     "balance.row",
+     null
+    ],
+    [
+     "",
+     "2026-10-13",
+     "balance.column",
+     "1"
+    ],
+    [
+     "",
+     "2026-10-13",
+     "balance.total",
+     null
+    ],
+    [
+     "",
+     "2026-10-13",
+     "volume.running",
+     "172391577.04"
+    ],
+    [
+     "",
+     "2026-10-13",
+     "trades.running",
+     "12121"
+    ],
+    [
+     "",
+     "2026-10-14",
+     "volume.row",
+     "0.31534028"
+    ],
+    [
+     "",
+     "2026-10-14",
+     "volume.column",
+     "1"
+    ],
+    [
+     "",
+     "2026-10-14",
+     "volume.total",
+     "0.31534028"
+    ],
+    [
+     "",
+     "2026-10-14",
+     "trades.row",
+     "0.25951994"
+    ],
+    [
+     "",
+     "2026-10-14",
+     "trades.column",
+     "1"
+    ],
+    [
+     "",
+     "2026-10-14",
+     "trades.total",
+     "0.25951994"
+    ],
+    [
+     "",
+     "2026-10-14",
+     "pnl.row",
+     "0.6755777"
+    ],
+    [
+     "",
+     "2026-10-14",
+     "pnl.column",
+     "1"
+    ],
+    [
+     "",
+     "2026-10-14",
+     "pnl.total",
+     "0.6755777"
+    ],
+    [
+     "",
+     "2026-10-14",
+     "notional.row",
+     null
+    ],
+    [
+     "",
+     "2026-10-14",
+     "notional.column",
+     "1"
+    ],
+    [
+     "",
+     "2026-10-14",
+     "notional.total",
+     null
+    ],
+    [
+     "",
+     "2026-10-14",
+     "position.row",
+     null
+    ],
+    [
+     "",
+     "2026-10-14",
+     "position.column",
+     null
+    ],
+    [
+     "",
+     "2026-10-14",
+     "position.total",
+     null
+    ],
+    [
+     "",
+     "2026-10-14",
+     "balance.row",
+     null
+    ],
+    [
+     "",
+     "2026-10-14",
+     "balance.column",
+     "1"
+    ],
+    [
+     "",
+     "2026-10-14",
+     "balance.total",
+     null
+    ],
+    [
+     "",
+     "2026-10-14",
+     "volume.running",
+     "303229165.12"
+    ],
+    [
+     "",
+     "2026-10-14",
+     "trades.running",
+     "19938"
+    ],
+    [
+     "",
+     "2026-10-15",
+     "volume.row",
+     "0.26916744"
+    ],
+    [
+     "",
+     "2026-10-15",
+     "volume.column",
+     "1"
+    ],
+    [
+     "",
+     "2026-10-15",
+     "volume.total",
+     "0.26916744"
+    ],
+    [
+     "",
+     "2026-10-15",
+     "trades.row",
+     "0.33806979"
+    ],
+    [
+     "",
+     "2026-10-15",
+     "trades.column",
+     "1"
+    ],
+    [
+     "",
+     "2026-10-15",
+     "trades.total",
+     "0.33806979"
+    ],
+    [
+     "",
+     "2026-10-15",
+     "pnl.row",
+     "0.39317913"
+    ],
+    [
+     "",
+     "2026-10-15",
+     "pnl.column",
+     "1"
+    ],
+    [
+     "",
+     "2026-10-15",
+     "pnl.total",
+     "0.39317913"
+    ],
+    [
+     "",
+     "2026-10-15",
+     "notional.row",
+     null
+    ],
+    [
+     "",
+     "2026-10-15",
+     "notional.column",
+     "1"
+    ],
+    [
+     "",
+     "2026-10-15",
+     "notional.total",
+     null
+    ],
+    [
+     "",
+     "2026-10-15",
+     "position.row",
+     null
+    ],
+    [
+     "",
+     "2026-10-15",
+     "position.column",
+     null
+    ],
+    [
+     "",
+     "2026-10-15",
+     "position.total",
+     null
+    ],
+    [
+     "",
+     "2026-10-15",
+     "balance.row",
+     null
+    ],
+    [
+     "",
+     "2026-10-15",
+     "balance.column",
+     "1"
+    ],
+    [
+     "",
+     "2026-10-15",
+     "balance.total",
+     null
+    ],
+    [
+     "",
+     "2026-10-15",
+     "volume.running",
+     "414909216.51"
+    ],
+    [
+     "",
+     "2026-10-15",
+     "trades.running",
+     "30121"
+    ],
+    [
+     "",
+     "",
+     "volume.row",
+     "1"
+    ],
+    [
+     "",
+     "",
+     "volume.column",
+     "1"
+    ],
+    [
+     "",
+     "",
+     "volume.total",
+     "1"
+    ],
+    [
+     "",
+     "",
+     "trades.row",
+     "1"
+    ],
+    [
+     "",
+     "",
+     "trades.column",
+     "1"
+    ],
+    [
+     "",
+     "",
+     "trades.total",
+     "1"
+    ],
+    [
+     "",
+     "",
+     "pnl.row",
+     "1"
+    ],
+    [
+     "",
+     "",
+     "pnl.column",
+     "1"
+    ],
+    [
+     "",
+     "",
+     "pnl.total",
+     "1"
+    ],
+    [
+     "",
+     "",
+     "notional.row",
+     null
+    ],
+    [
+     "",
+     "",
+     "notional.column",
+     null
+    ],
+    [
+     "",
+     "",
+     "notional.total",
+     null
+    ],
+    [
+     "",
+     "",
+     "position.row",
+     null
+    ],
+    [
+     "",
+     "",
+     "position.column",
+     null
+    ],
+    [
+     "",
+     "",
+     "position.total",
+     null
+    ],
+    [
+     "",
+     "",
+     "balance.row",
+     null
+    ],
+    [
+     "",
+     "",
+     "balance.column",
+     null
+    ],
+    [
+     "",
+     "",
+     "balance.total",
+     null
+    ],
+    [
+     "",
+     "",
+     "volume.running",
+     "414909216.51"
+    ],
+    [
+     "",
+     "",
+     "trades.running",
+     "30121"
+    ]
+   ]
+  },
+  {
+   "name": "dates down, rows date › region, columns leg",
+   "rows": [
+    "date",
+    "region"
+   ],
+   "columns": [
+    "leg"
+   ],
+   "cells": [
+    {
+     "row": "2026-10-13 · Americas",
+     "column": "risk",
+     "figures": {
+      "q": "30209150817",
+      "n": "-3115273662842",
+      "r": "-3016667012125",
+      "u": "235631014220",
+      "b": "751675029750",
+      "v": "3156229374000000",
+      "t": "102100000000",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "2026-10-13 · EMEA",
+     "column": "risk",
+     "figures": {
+      "q": "44069266563",
+      "n": "15606258232146",
+      "r": "4963891673833",
+      "u": "3938414995791",
+      "b": "-21543856719508",
+      "v": "4748906346000000",
+      "t": "287100000000",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "2026-10-13 · APAC",
+     "column": "risk",
+     "figures": {
+      "q": "15567588305",
+      "n": "2587721399031",
+      "r": "-3886876235483",
+      "u": "672217665705",
+      "b": "1431196744088",
+      "v": "3157671373000000",
+      "t": "491700000000",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "2026-10-13 · —",
+     "column": "hedge",
+     "figures": {
+      "q": "19972327444",
+      "n": "-1967082759365",
+      "r": "-2897448963485",
+      "u": "920066592516",
+      "b": "-22550416840240",
+      "v": "157734035000000",
+      "t": "456300000000",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "2026-10-14 · Americas",
+     "column": "risk",
+     "figures": {
+      "q": "-10846652695",
+      "n": "10515182190574",
+      "r": "-3590701520442",
+      "u": "3430325327208",
+      "b": "14892185940407",
+      "v": "2196710011000000",
+      "t": "225700000000",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "2026-10-14 · EMEA",
+     "column": "risk",
+     "figures": {
+      "q": "24032337754",
+      "n": "-387128042057",
+      "r": "-3795139000285",
+      "u": "-1834077524254",
+      "b": "-19936909612733",
+      "v": "3991581642000000",
+      "t": "92400000000",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "2026-10-14 · APAC",
+     "column": "risk",
+     "figures": {
+      "q": "8437966043",
+      "n": "-8110366668552",
+      "r": "3107443056069",
+      "u": "-4985542963258",
+      "b": "-20406615680549",
+      "v": "2773975398000000",
+      "t": "155700000000",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "2026-10-14 · —",
+     "column": "hedge",
+     "figures": {
+      "q": "-21164861728",
+      "n": "-2394392271526",
+      "r": "-3185322638601",
+      "u": "-273272086633",
+      "b": "8886125553399",
+      "v": "2077296384000000",
+      "t": "232300000000",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "2026-10-15 · Americas",
+     "column": "risk",
+     "figures": {
+      "q": "8432108280",
+      "n": "-1897691902704",
+      "r": "-345726900268",
+      "u": "-2762040584348",
+      "b": "20892287297174",
+      "v": "3952355310000000",
+      "t": "31100000000",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "2026-10-15 · EMEA",
+     "column": "risk",
+     "figures": {
+      "q": "4972905293",
+      "n": "-8498793100006",
+      "r": "584592337254",
+      "u": "2322764461860",
+      "b": "27415904444642",
+      "v": "3825418709000000",
+      "t": "97700000000",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "2026-10-15 · APAC",
+     "column": "risk",
+     "figures": {
+      "q": "17368238396",
+      "n": "1642776159569",
+      "r": "-3674098675837",
+      "u": "-1937664303695",
+      "b": "-27409449981059",
+      "v": "3461345543000000",
+      "t": "266500000000",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "2026-10-15 · —",
+     "column": "hedge",
+     "figures": {
+      "q": "42675496812",
+      "n": "7074454282410",
+      "r": "-2079552210634",
+      "u": "-2311851539416",
+      "b": "-8439919331576",
+      "v": "2846963675000000",
+      "t": "186600000000",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "2026-10-13 · Americas",
+     "column": "",
+     "figures": {
+      "q": "30209150817",
+      "n": "-3115273662842",
+      "r": "-3016667012125",
+      "u": "235631014220",
+      "b": "751675029750",
+      "v": "3156229374000000",
+      "t": "102100000000",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "2026-10-13 · EMEA",
+     "column": "",
+     "figures": {
+      "q": "44069266563",
+      "n": "15606258232146",
+      "r": "4963891673833",
+      "u": "3938414995791",
+      "b": "-21543856719508",
+      "v": "4748906347000000",
+      "t": "287100000000",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "2026-10-13 · APAC",
+     "column": "",
+     "figures": {
+      "q": "15567588305",
+      "n": "2587721399031",
+      "r": "-3886876235483",
+      "u": "672217665705",
+      "b": "1431196744088",
+      "v": "3157671374000000",
+      "t": "491700000000",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "2026-10-13 · —",
+     "column": "",
+     "figures": {
+      "q": "19972327444",
+      "n": "-1967082759365",
+      "r": "-2897448963485",
+      "u": "920066592516",
+      "b": "-22550416840240",
+      "v": "157734035000000",
+      "t": "456300000000",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "2026-10-14 · Americas",
+     "column": "",
+     "figures": {
+      "q": "-10846652695",
+      "n": "10515182190574",
+      "r": "-3590701520442",
+      "u": "3430325327208",
+      "b": "14892185940407",
+      "v": "2196710011000000",
+      "t": "225700000000",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "2026-10-14 · EMEA",
+     "column": "",
+     "figures": {
+      "q": "24032337754",
+      "n": "-387128042057",
+      "r": "-3795139000285",
+      "u": "-1834077524254",
+      "b": "-19936909612733",
+      "v": "3991581641000000",
+      "t": "92400000000",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "2026-10-14 · APAC",
+     "column": "",
+     "figures": {
+      "q": "8437966043",
+      "n": "-8110366668552",
+      "r": "3107443056069",
+      "u": "-4985542963258",
+      "b": "-20406615680549",
+      "v": "2773975398000000",
+      "t": "155700000000",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "2026-10-14 · —",
+     "column": "",
+     "figures": {
+      "q": "-21164861728",
+      "n": "-2394392271526",
+      "r": "-3185322638601",
+      "u": "-273272086633",
+      "b": "8886125553399",
+      "v": "2077296383000000",
+      "t": "232300000000",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "2026-10-15 · Americas",
+     "column": "",
+     "figures": {
+      "q": "8432108280",
+      "n": "-1897691902704",
+      "r": "-345726900268",
+      "u": "-2762040584348",
+      "b": "20892287297174",
+      "v": "3952355310000000",
+      "t": "31100000000",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "2026-10-15 · EMEA",
+     "column": "",
+     "figures": {
+      "q": "4972905293",
+      "n": "-8498793100006",
+      "r": "584592337254",
+      "u": "2322764461860",
+      "b": "27415904444642",
+      "v": "3825418709000000",
+      "t": "97700000000",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "2026-10-15 · APAC",
+     "column": "",
+     "figures": {
+      "q": "17368238396",
+      "n": "1642776159569",
+      "r": "-3674098675837",
+      "u": "-1937664303695",
+      "b": "-27409449981059",
+      "v": "3461345542000000",
+      "t": "266500000000",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "2026-10-15 · —",
+     "column": "",
+     "figures": {
+      "q": "42675496812",
+      "n": "7074454282410",
+      "r": "-2079552210634",
+      "u": "-2311851539416",
+      "b": "-8439919331576",
+      "v": "2846963675000000",
+      "t": "186600000000",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "2026-10-13",
+     "column": "risk",
+     "figures": {
+      "q": "89846005685",
+      "n": "15078705968335",
+      "r": "-1939651573775",
+      "u": "4846263675716",
+      "b": "-19360984945670",
+      "v": "11062807093000000",
+      "t": "880900000000",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "2026-10-13",
+     "column": "hedge",
+     "figures": {
+      "q": "19972327444",
+      "n": "-1967082759365",
+      "r": "-2897448963485",
+      "u": "920066592516",
+      "b": "-22550416840240",
+      "v": "157734035000000",
+      "t": "456300000000",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "2026-10-14",
+     "column": "risk",
+     "figures": {
+      "q": "21623651102",
+      "n": "2017687479965",
+      "r": "-4278397464658",
+      "u": "-3389295160304",
+      "b": "-25451339352875",
+      "v": "8962267051000000",
+      "t": "473800000000",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "2026-10-14",
+     "column": "hedge",
+     "figures": {
+      "q": "-21164861728",
+      "n": "-2394392271526",
+      "r": "-3185322638601",
+      "u": "-273272086633",
+      "b": "8886125553399",
+      "v": "2077296384000000",
+      "t": "232300000000",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "2026-10-15",
+     "column": "risk",
+     "figures": {
+      "q": "30773251969",
+      "n": "-8753708843141",
+      "r": "-3435233238851",
+      "u": "-2376940426183",
+      "b": "20898741760757",
+      "v": "11239119562000000",
+      "t": "395300000000",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "2026-10-15",
+     "column": "hedge",
+     "figures": {
+      "q": "42675496812",
+      "n": "7074454282410",
+      "r": "-2079552210634",
+      "u": "-2311851539416",
+      "b": "-8439919331576",
+      "v": "2846963675000000",
+      "t": "186600000000",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "2026-10-13",
+     "column": "",
+     "figures": {
+      "q": "109818333129",
+      "n": "13111623208970",
+      "r": "-4837100537260",
+      "u": "5766330268232",
+      "b": "-41911401785910",
+      "v": "11220541128000000",
+      "t": "1337200000000",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "2026-10-14",
+     "column": "",
+     "figures": {
+      "q": "458789374",
+      "n": "-376704791561",
+      "r": "-7463720103259",
+      "u": "-3662567246937",
+      "b": "-16565213799476",
+      "v": "11039563436000000",
+      "t": "706100000000",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "2026-10-15",
+     "column": "",
+     "figures": {
+      "q": "73448748781",
+      "n": "-1679254560731",
+      "r": "-5514785449485",
+      "u": "-4688791965599",
+      "b": "12458822429181",
+      "v": "14086083237000000",
+      "t": "581900000000",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "",
+     "column": "risk",
+     "figures": {
+      "q": null,
+      "n": null,
+      "r": "-9653282277284",
+      "u": null,
+      "b": null,
+      "v": "31264193706000000",
+      "t": "1750000000000",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "",
+     "column": "hedge",
+     "figures": {
+      "q": null,
+      "n": null,
+      "r": "-8162323812720",
+      "u": null,
+      "b": null,
+      "v": "5081994094000000",
+      "t": "875200000000",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "",
+     "column": "",
+     "figures": {
+      "q": null,
+      "n": null,
+      "r": "-17815606090004",
+      "u": null,
+      "b": null,
+      "v": "36346187800000000",
+      "t": "2625200000000",
+      "g": null,
+      "m": null
+     }
+    }
+   ],
+   "entries": [
+    "volume.row",
+    "volume.column",
+    "volume.total",
+    "pnl.row",
+    "pnl.column",
+    "pnl.total",
+    "volume.running",
+    "trades.running"
+   ],
+   "derived": [
+    [
+     "2026-10-13 · Americas",
+     "risk",
+     "volume.row",
+     "1"
+    ],
+    [
+     "2026-10-13 · Americas",
+     "risk",
+     "volume.column",
+     "0.10095349"
+    ],
+    [
+     "2026-10-13 · Americas",
+     "risk",
+     "volume.total",
+     "0.08683798"
+    ],
+    [
+     "2026-10-13 · Americas",
+     "risk",
+     "pnl.row",
+     "1"
+    ],
+    [
+     "2026-10-13 · Americas",
+     "risk",
+     "pnl.column",
+     "0.28809227"
+    ],
+    [
+     "2026-10-13 · Americas",
+     "risk",
+     "pnl.total",
+     "0.15610112"
+    ],
+    [
+     "2026-10-13 · Americas",
+     "risk",
+     "volume.running",
+     "31562293.74"
+    ],
+    [
+     "2026-10-13 · Americas",
+     "risk",
+     "trades.running",
+     "1021"
+    ],
+    [
+     "2026-10-13 · EMEA",
+     "risk",
+     "volume.row",
+     "1"
+    ],
+    [
+     "2026-10-13 · EMEA",
+     "risk",
+     "volume.column",
+     "0.15189601"
+    ],
+    [
+     "2026-10-13 · EMEA",
+     "risk",
+     "volume.total",
+     "0.13065762"
+    ],
+    [
+     "2026-10-13 · EMEA",
+     "risk",
+     "pnl.row",
+     "1"
+    ],
+    [
+     "2026-10-13 · EMEA",
+     "risk",
+     "pnl.column",
+     "-0.92220515"
+    ],
+    [
+     "2026-10-13 · EMEA",
+     "risk",
+     "pnl.total",
+     "-0.49969149"
+    ],
+    [
+     "2026-10-13 · EMEA",
+     "risk",
+     "volume.running",
+     "47489063.46"
+    ],
+    [
+     "2026-10-13 · EMEA",
+     "risk",
+     "trades.running",
+     "2871"
+    ],
+    [
+     "2026-10-13 · APAC",
+     "risk",
+     "volume.row",
+     "1"
+    ],
+    [
+     "2026-10-13 · APAC",
+     "risk",
+     "volume.column",
+     "0.10099961"
+    ],
+    [
+     "2026-10-13 · APAC",
+     "risk",
+     "volume.total",
+     "0.08687765"
+    ],
+    [
+     "2026-10-13 · APAC",
+     "risk",
+     "pnl.row",
+     "1"
+    ],
+    [
+     "2026-10-13 · APAC",
+     "risk",
+     "pnl.column",
+     "0.33301197"
+    ],
+    [
+     "2026-10-13 · APAC",
+     "risk",
+     "pnl.total",
+     "0.1804406"
+    ],
+    [
+     "2026-10-13 · APAC",
+     "risk",
+     "volume.running",
+     "31576713.73"
+    ],
+    [
+     "2026-10-13 · APAC",
+     "risk",
+     "trades.running",
+     "4917"
+    ],
+    [
+     "2026-10-13 · —",
+     "hedge",
+     "volume.row",
+     "1"
+    ],
+    [
+     "2026-10-13 · —",
+     "hedge",
+     "volume.column",
+     "0.03103782"
+    ],
+    [
+     "2026-10-13 · —",
+     "hedge",
+     "volume.total",
+     "0.00433977"
+    ],
+    [
+     "2026-10-13 · —",
+     "hedge",
+     "pnl.row",
+     "1"
+    ],
+    [
+     "2026-10-13 · —",
+     "hedge",
+     "pnl.column",
+     "0.24225728"
+    ],
+    [
+     "2026-10-13 · —",
+     "hedge",
+     "pnl.total",
+     "0.11099159"
+    ],
+    [
+     "2026-10-13 · —",
+     "hedge",
+     "volume.running",
+     "1577340.35"
+    ],
+    [
+     "2026-10-13 · —",
+     "hedge",
+     "trades.running",
+     "4563"
+    ],
+    [
+     "2026-10-14 · Americas",
+     "risk",
+     "volume.row",
+     "1"
+    ],
+    [
+     "2026-10-14 · Americas",
+     "risk",
+     "volume.column",
+     "0.07026281"
+    ],
+    [
+     "2026-10-14 · Americas",
+     "risk",
+     "volume.total",
+     "0.06043853"
+    ],
+    [
+     "2026-10-14 · Americas",
+     "risk",
+     "pnl.row",
+     "1"
+    ],
+    [
+     "2026-10-14 · Americas",
+     "risk",
+     "pnl.column",
+     "0.01661364"
+    ],
+    [
+     "2026-10-14 · Americas",
+     "risk",
+     "pnl.total",
+     "0.00900201"
+    ],
+    [
+     "2026-10-14 · Americas",
+     "risk",
+     "volume.running",
+     "53529393.85"
+    ],
+    [
+     "2026-10-14 · Americas",
+     "risk",
+     "trades.running",
+     "3278"
+    ],
+    [
+     "2026-10-14 · EMEA",
+     "risk",
+     "volume.row",
+     "1"
+    ],
+    [
+     "2026-10-14 · EMEA",
+     "risk",
+     "volume.column",
+     "0.12767262"
+    ],
+    [
+     "2026-10-14 · EMEA",
+     "risk",
+     "volume.total",
+     "0.10982119"
+    ],
+    [
+     "2026-10-14 · EMEA",
+     "risk",
+     "pnl.row",
+     "1"
+    ],
+    [
+     "2026-10-14 · EMEA",
+     "risk",
+     "pnl.column",
+     "0.58314016"
+    ],
+    [
+     "2026-10-14 · EMEA",
+     "risk",
+     "pnl.total",
+     "0.31597109"
+    ],
+    [
+     "2026-10-14 · EMEA",
+     "risk",
+     "volume.running",
+     "87404879.88"
+    ],
+    [
+     "2026-10-14 · EMEA",
+     "risk",
+     "trades.running",
+     "3795"
+    ],
+    [
+     "2026-10-14 · APAC",
+     "risk",
+     "volume.row",
+     "1"
+    ],
+    [
+     "2026-10-14 · APAC",
+     "risk",
+     "volume.column",
+     "0.08872691"
+    ],
+    [
+     "2026-10-14 · APAC",
+     "risk",
+     "volume.total",
+     "0.07632094"
+    ],
+    [
+     "2026-10-14 · APAC",
+     "risk",
+     "pnl.row",
+     "1"
+    ],
+    [
+     "2026-10-14 · APAC",
+     "risk",
+     "pnl.column",
+     "0.19455558"
+    ],
+    [
+     "2026-10-14 · APAC",
+     "risk",
+     "pnl.total",
+     "0.10541881"
+    ],
+    [
+     "2026-10-14 · APAC",
+     "risk",
+     "volume.running",
+     "59316467.71"
+    ],
+    [
+     "2026-10-14 · APAC",
+     "risk",
+     "trades.running",
+     "6474"
+    ],
+    [
+     "2026-10-14 · —",
+     "hedge",
+     "volume.row",
+     "1"
+    ],
+    [
+     "2026-10-14 · —",
+     "hedge",
+     "volume.column",
+     "0.40875616"
+    ],
+    [
+     "2026-10-14 · —",
+     "hedge",
+     "volume.total",
+     "0.05715307"
+    ],
+    [
+     "2026-10-14 · —",
+     "hedge",
+     "pnl.row",
+     "1"
+    ],
+    [
+     "2026-10-14 · —",
+     "hedge",
+     "pnl.column",
+     "0.42372672"
+    ],
+    [
+     "2026-10-14 · —",
+     "hedge",
+     "pnl.total",
+     "0.19413287"
+    ],
+    [
+     "2026-10-14 · —",
+     "hedge",
+     "volume.running",
+     "22350304.19"
+    ],
+    [
+     "2026-10-14 · —",
+     "hedge",
+     "trades.running",
+     "6886"
+    ],
+    [
+     "2026-10-15 · Americas",
+     "risk",
+     "volume.row",
+     "1"
+    ],
+    [
+     "2026-10-15 · Americas",
+     "risk",
+     "volume.column",
+     "0.12641795"
+    ],
+    [
+     "2026-10-15 · Americas",
+     "risk",
+     "volume.total",
+     "0.10874195"
+    ],
+    [
+     "2026-10-15 · Americas",
+     "risk",
+     "pnl.row",
+     "1"
+    ],
+    [
+     "2026-10-15 · Americas",
+     "risk",
+     "pnl.column",
+     "0.32193894"
+    ],
+    [
+     "2026-10-15 · Americas",
+     "risk",
+     "pnl.total",
+     "0.17444074"
+    ],
+    [
+     "2026-10-15 · Americas",
+     "risk",
+     "volume.running",
+     "93052946.95"
+    ],
+    [
+     "2026-10-15 · Americas",
+     "risk",
+     "trades.running",
+     "3589"
+    ],
+    [
+     "2026-10-15 · EMEA",
+     "risk",
+     "volume.row",
+     "1"
+    ],
+    [
+     "2026-10-15 · EMEA",
+     "risk",
+     "volume.column",
+     "0.12235782"
+    ],
+    [
+     "2026-10-15 · EMEA",
+     "risk",
+     "volume.total",
+     "0.10524952"
+    ],
+    [
+     "2026-10-15 · EMEA",
+     "risk",
+     "pnl.row",
+     "1"
+    ],
+    [
+     "2026-10-15 · EMEA",
+     "risk",
+     "pnl.column",
+     "-0.30117806"
+    ],
+    [
+     "2026-10-15 · EMEA",
+     "risk",
+     "pnl.total",
+     "-0.16319157"
+    ],
+    [
+     "2026-10-15 · EMEA",
+     "risk",
+     "volume.running",
+     "125659066.97"
+    ],
+    [
+     "2026-10-15 · EMEA",
+     "risk",
+     "trades.running",
+     "4772"
+    ],
+    [
+     "2026-10-15 · APAC",
+     "risk",
+     "volume.row",
+     "1"
+    ],
+    [
+     "2026-10-15 · APAC",
+     "risk",
+     "volume.column",
+     "0.11071277"
+    ],
+    [
+     "2026-10-15 · APAC",
+     "risk",
+     "volume.total",
+     "0.0952327"
+    ],
+    [
+     "2026-10-15 · APAC",
+     "risk",
+     "pnl.row",
+     "1"
+    ],
+    [
+     "2026-10-15 · APAC",
+     "risk",
+     "pnl.column",
+     "0.58133211"
+    ],
+    [
+     "2026-10-15 · APAC",
+     "risk",
+     "pnl.total",
+     "0.31499142"
+    ],
+    [
+     "2026-10-15 · APAC",
+     "risk",
+     "volume.running",
+     "93929923.14"
+    ],
+    [
+     "2026-10-15 · APAC",
+     "risk",
+     "trades.running",
+     "9139"
+    ],
+    [
+     "2026-10-15 · —",
+     "hedge",
+     "volume.row",
+     "1"
+    ],
+    [
+     "2026-10-15 · —",
+     "hedge",
+     "volume.column",
+     "0.56020602"
+    ],
+    [
+     "2026-10-15 · —",
+     "hedge",
+     "volume.total",
+     "0.07832909"
+    ],
+    [
+     "2026-10-15 · —",
+     "hedge",
+     "pnl.row",
+     "1"
+    ],
+    [
+     "2026-10-15 · —",
+     "hedge",
+     "pnl.column",
+     "0.53800901"
+    ],
+    [
+     "2026-10-15 · —",
+     "hedge",
+     "pnl.total",
+     "0.24649196"
+    ],
+    [
+     "2026-10-15 · —",
+     "hedge",
+     "volume.running",
+     "50819940.94"
+    ],
+    [
+     "2026-10-15 · —",
+     "hedge",
+     "trades.running",
+     "8752"
+    ],
+    [
+     "2026-10-13 · Americas",
+     "",
+     "volume.row",
+     "1"
+    ],
+    [
+     "2026-10-13 · Americas",
+     "",
+     "volume.column",
+     "0.08683798"
+    ],
+    [
+     "2026-10-13 · Americas",
+     "",
+     "volume.total",
+     "0.08683798"
+    ],
+    [
+     "2026-10-13 · Americas",
+     "",
+     "pnl.row",
+     "1"
+    ],
+    [
+     "2026-10-13 · Americas",
+     "",
+     "pnl.column",
+     "0.15610112"
+    ],
+    [
+     "2026-10-13 · Americas",
+     "",
+     "pnl.total",
+     "0.15610112"
+    ],
+    [
+     "2026-10-13 · Americas",
+     "",
+     "volume.running",
+     "31562293.74"
+    ],
+    [
+     "2026-10-13 · Americas",
+     "",
+     "trades.running",
+     "1021"
+    ],
+    [
+     "2026-10-13 · EMEA",
+     "",
+     "volume.row",
+     "1"
+    ],
+    [
+     "2026-10-13 · EMEA",
+     "",
+     "volume.column",
+     "0.13065762"
+    ],
+    [
+     "2026-10-13 · EMEA",
+     "",
+     "volume.total",
+     "0.13065762"
+    ],
+    [
+     "2026-10-13 · EMEA",
+     "",
+     "pnl.row",
+     "1"
+    ],
+    [
+     "2026-10-13 · EMEA",
+     "",
+     "pnl.column",
+     "-0.49969149"
+    ],
+    [
+     "2026-10-13 · EMEA",
+     "",
+     "pnl.total",
+     "-0.49969149"
+    ],
+    [
+     "2026-10-13 · EMEA",
+     "",
+     "volume.running",
+     "47489063.47"
+    ],
+    [
+     "2026-10-13 · EMEA",
+     "",
+     "trades.running",
+     "2871"
+    ],
+    [
+     "2026-10-13 · APAC",
+     "",
+     "volume.row",
+     "1"
+    ],
+    [
+     "2026-10-13 · APAC",
+     "",
+     "volume.column",
+     "0.08687765"
+    ],
+    [
+     "2026-10-13 · APAC",
+     "",
+     "volume.total",
+     "0.08687765"
+    ],
+    [
+     "2026-10-13 · APAC",
+     "",
+     "pnl.row",
+     "1"
+    ],
+    [
+     "2026-10-13 · APAC",
+     "",
+     "pnl.column",
+     "0.1804406"
+    ],
+    [
+     "2026-10-13 · APAC",
+     "",
+     "pnl.total",
+     "0.1804406"
+    ],
+    [
+     "2026-10-13 · APAC",
+     "",
+     "volume.running",
+     "31576713.74"
+    ],
+    [
+     "2026-10-13 · APAC",
+     "",
+     "trades.running",
+     "4917"
+    ],
+    [
+     "2026-10-13 · —",
+     "",
+     "volume.row",
+     "1"
+    ],
+    [
+     "2026-10-13 · —",
+     "",
+     "volume.column",
+     "0.00433977"
+    ],
+    [
+     "2026-10-13 · —",
+     "",
+     "volume.total",
+     "0.00433977"
+    ],
+    [
+     "2026-10-13 · —",
+     "",
+     "pnl.row",
+     "1"
+    ],
+    [
+     "2026-10-13 · —",
+     "",
+     "pnl.column",
+     "0.11099159"
+    ],
+    [
+     "2026-10-13 · —",
+     "",
+     "pnl.total",
+     "0.11099159"
+    ],
+    [
+     "2026-10-13 · —",
+     "",
+     "volume.running",
+     "1577340.35"
+    ],
+    [
+     "2026-10-13 · —",
+     "",
+     "trades.running",
+     "4563"
+    ],
+    [
+     "2026-10-14 · Americas",
+     "",
+     "volume.row",
+     "1"
+    ],
+    [
+     "2026-10-14 · Americas",
+     "",
+     "volume.column",
+     "0.06043853"
+    ],
+    [
+     "2026-10-14 · Americas",
+     "",
+     "volume.total",
+     "0.06043853"
+    ],
+    [
+     "2026-10-14 · Americas",
+     "",
+     "pnl.row",
+     "1"
+    ],
+    [
+     "2026-10-14 · Americas",
+     "",
+     "pnl.column",
+     "0.00900201"
+    ],
+    [
+     "2026-10-14 · Americas",
+     "",
+     "pnl.total",
+     "0.00900201"
+    ],
+    [
+     "2026-10-14 · Americas",
+     "",
+     "volume.running",
+     "53529393.85"
+    ],
+    [
+     "2026-10-14 · Americas",
+     "",
+     "trades.running",
+     "3278"
+    ],
+    [
+     "2026-10-14 · EMEA",
+     "",
+     "volume.row",
+     "1"
+    ],
+    [
+     "2026-10-14 · EMEA",
+     "",
+     "volume.column",
+     "0.10982119"
+    ],
+    [
+     "2026-10-14 · EMEA",
+     "",
+     "volume.total",
+     "0.10982119"
+    ],
+    [
+     "2026-10-14 · EMEA",
+     "",
+     "pnl.row",
+     "1"
+    ],
+    [
+     "2026-10-14 · EMEA",
+     "",
+     "pnl.column",
+     "0.31597109"
+    ],
+    [
+     "2026-10-14 · EMEA",
+     "",
+     "pnl.total",
+     "0.31597109"
+    ],
+    [
+     "2026-10-14 · EMEA",
+     "",
+     "volume.running",
+     "87404879.88"
+    ],
+    [
+     "2026-10-14 · EMEA",
+     "",
+     "trades.running",
+     "3795"
+    ],
+    [
+     "2026-10-14 · APAC",
+     "",
+     "volume.row",
+     "1"
+    ],
+    [
+     "2026-10-14 · APAC",
+     "",
+     "volume.column",
+     "0.07632094"
+    ],
+    [
+     "2026-10-14 · APAC",
+     "",
+     "volume.total",
+     "0.07632094"
+    ],
+    [
+     "2026-10-14 · APAC",
+     "",
+     "pnl.row",
+     "1"
+    ],
+    [
+     "2026-10-14 · APAC",
+     "",
+     "pnl.column",
+     "0.10541881"
+    ],
+    [
+     "2026-10-14 · APAC",
+     "",
+     "pnl.total",
+     "0.10541881"
+    ],
+    [
+     "2026-10-14 · APAC",
+     "",
+     "volume.running",
+     "59316467.72"
+    ],
+    [
+     "2026-10-14 · APAC",
+     "",
+     "trades.running",
+     "6474"
+    ],
+    [
+     "2026-10-14 · —",
+     "",
+     "volume.row",
+     "1"
+    ],
+    [
+     "2026-10-14 · —",
+     "",
+     "volume.column",
+     "0.05715307"
+    ],
+    [
+     "2026-10-14 · —",
+     "",
+     "volume.total",
+     "0.05715307"
+    ],
+    [
+     "2026-10-14 · —",
+     "",
+     "pnl.row",
+     "1"
+    ],
+    [
+     "2026-10-14 · —",
+     "",
+     "pnl.column",
+     "0.19413287"
+    ],
+    [
+     "2026-10-14 · —",
+     "",
+     "pnl.total",
+     "0.19413287"
+    ],
+    [
+     "2026-10-14 · —",
+     "",
+     "volume.running",
+     "22350304.18"
+    ],
+    [
+     "2026-10-14 · —",
+     "",
+     "trades.running",
+     "6886"
+    ],
+    [
+     "2026-10-15 · Americas",
+     "",
+     "volume.row",
+     "1"
+    ],
+    [
+     "2026-10-15 · Americas",
+     "",
+     "volume.column",
+     "0.10874195"
+    ],
+    [
+     "2026-10-15 · Americas",
+     "",
+     "volume.total",
+     "0.10874195"
+    ],
+    [
+     "2026-10-15 · Americas",
+     "",
+     "pnl.row",
+     "1"
+    ],
+    [
+     "2026-10-15 · Americas",
+     "",
+     "pnl.column",
+     "0.17444074"
+    ],
+    [
+     "2026-10-15 · Americas",
+     "",
+     "pnl.total",
+     "0.17444074"
+    ],
+    [
+     "2026-10-15 · Americas",
+     "",
+     "volume.running",
+     "93052946.95"
+    ],
+    [
+     "2026-10-15 · Americas",
+     "",
+     "trades.running",
+     "3589"
+    ],
+    [
+     "2026-10-15 · EMEA",
+     "",
+     "volume.row",
+     "1"
+    ],
+    [
+     "2026-10-15 · EMEA",
+     "",
+     "volume.column",
+     "0.10524952"
+    ],
+    [
+     "2026-10-15 · EMEA",
+     "",
+     "volume.total",
+     "0.10524952"
+    ],
+    [
+     "2026-10-15 · EMEA",
+     "",
+     "pnl.row",
+     "1"
+    ],
+    [
+     "2026-10-15 · EMEA",
+     "",
+     "pnl.column",
+     "-0.16319157"
+    ],
+    [
+     "2026-10-15 · EMEA",
+     "",
+     "pnl.total",
+     "-0.16319157"
+    ],
+    [
+     "2026-10-15 · EMEA",
+     "",
+     "volume.running",
+     "125659066.97"
+    ],
+    [
+     "2026-10-15 · EMEA",
+     "",
+     "trades.running",
+     "4772"
+    ],
+    [
+     "2026-10-15 · APAC",
+     "",
+     "volume.row",
+     "1"
+    ],
+    [
+     "2026-10-15 · APAC",
+     "",
+     "volume.column",
+     "0.0952327"
+    ],
+    [
+     "2026-10-15 · APAC",
+     "",
+     "volume.total",
+     "0.0952327"
+    ],
+    [
+     "2026-10-15 · APAC",
+     "",
+     "pnl.row",
+     "1"
+    ],
+    [
+     "2026-10-15 · APAC",
+     "",
+     "pnl.column",
+     "0.31499142"
+    ],
+    [
+     "2026-10-15 · APAC",
+     "",
+     "pnl.total",
+     "0.31499142"
+    ],
+    [
+     "2026-10-15 · APAC",
+     "",
+     "volume.running",
+     "93929923.14"
+    ],
+    [
+     "2026-10-15 · APAC",
+     "",
+     "trades.running",
+     "9139"
+    ],
+    [
+     "2026-10-15 · —",
+     "",
+     "volume.row",
+     "1"
+    ],
+    [
+     "2026-10-15 · —",
+     "",
+     "volume.column",
+     "0.07832909"
+    ],
+    [
+     "2026-10-15 · —",
+     "",
+     "volume.total",
+     "0.07832909"
+    ],
+    [
+     "2026-10-15 · —",
+     "",
+     "pnl.row",
+     "1"
+    ],
+    [
+     "2026-10-15 · —",
+     "",
+     "pnl.column",
+     "0.24649196"
+    ],
+    [
+     "2026-10-15 · —",
+     "",
+     "pnl.total",
+     "0.24649196"
+    ],
+    [
+     "2026-10-15 · —",
+     "",
+     "volume.running",
+     "50819940.93"
+    ],
+    [
+     "2026-10-15 · —",
+     "",
+     "trades.running",
+     "8752"
+    ],
+    [
+     "2026-10-13",
+     "risk",
+     "volume.row",
+     "0.98594239"
+    ],
+    [
+     "2026-10-13",
+     "risk",
+     "volume.column",
+     "0.35384911"
+    ],
+    [
+     "2026-10-13",
+     "risk",
+     "volume.total",
+     "0.30437324"
+    ],
+    [
+     "2026-10-13",
+     "risk",
+     "pnl.row",
+     "3.12798009"
+    ],
+    [
+     "2026-10-13",
+     "risk",
+     "pnl.column",
+     "-0.30110091"
+    ],
+    [
+     "2026-10-13",
+     "risk",
+     "pnl.total",
+     "-0.16314977"
+    ],
+    [
+     "2026-10-13",
+     "risk",
+     "volume.running",
+     "110628070.93"
+    ],
+    [
+     "2026-10-13",
+     "risk",
+     "trades.running",
+     "8809"
+    ],
+    [
+     "2026-10-13",
+     "hedge",
+     "volume.row",
+     "0.01405761"
+    ],
+    [
+     "2026-10-13",
+     "hedge",
+     "volume.column",
+     "0.03103782"
+    ],
+    [
+     "2026-10-13",
+     "hedge",
+     "volume.total",
+     "0.00433977"
+    ],
+    [
+     "2026-10-13",
+     "hedge",
+     "pnl.row",
+     "-2.12798009"
+    ],
+    [
+     "2026-10-13",
+     "hedge",
+     "pnl.column",
+     "0.24225728"
+    ],
+    [
+     "2026-10-13",
+     "hedge",
+     "pnl.total",
+     "0.11099159"
+    ],
+    [
+     "2026-10-13",
+     "hedge",
+     "volume.running",
+     "1577340.35"
+    ],
+    [
+     "2026-10-13",
+     "hedge",
+     "trades.running",
+     "4563"
+    ],
+    [
+     "2026-10-14",
+     "risk",
+     "volume.row",
+     "0.81183165"
+    ],
+    [
+     "2026-10-14",
+     "risk",
+     "volume.column",
+     "0.28666234"
+    ],
+    [
+     "2026-10-14",
+     "risk",
+     "volume.total",
+     "0.24658066"
+    ],
+    [
+     "2026-10-14",
+     "risk",
+     "pnl.row",
+     "0.68915105"
+    ],
+    [
+     "2026-10-14",
+     "risk",
+     "pnl.column",
+     "0.79430938"
+    ],
+    [
+     "2026-10-14",
+     "risk",
+     "pnl.total",
+     "0.4303919"
+    ],
+    [
+     "2026-10-14",
+     "risk",
+     "volume.running",
+     "200250741.44"
+    ],
+    [
+     "2026-10-14",
+     "risk",
+     "trades.running",
+     "13547"
+    ],
+    [
+     "2026-10-14",
+     "hedge",
+     "volume.row",
+     "0.18816835"
+    ],
+    [
+     "2026-10-14",
+     "hedge",
+     "volume.column",
+     "0.40875616"
+    ],
+    [
+     "2026-10-14",
+     "hedge",
+     "volume.total",
+     "0.05715307"
+    ],
+    [
+     "2026-10-14",
+     "hedge",
+     "pnl.row",
+     "0.31084895"
+    ],
+    [
+     "2026-10-14",
+     "hedge",
+     "pnl.column",
+     "0.42372672"
+    ],
+    [
+     "2026-10-14",
+     "hedge",
+     "pnl.total",
+     "0.19413287"
+    ],
+    [
+     "2026-10-14",
+     "hedge",
+     "volume.running",
+     "22350304.19"
+    ],
+    [
+     "2026-10-14",
+     "hedge",
+     "trades.running",
+     "6886"
+    ],
+    [
+     "2026-10-15",
+     "risk",
+     "volume.row",
+     "0.7978882"
+    ],
+    [
+     "2026-10-15",
+     "risk",
+     "volume.column",
+     "0.35948855"
+    ],
+    [
+     "2026-10-15",
+     "risk",
+     "volume.total",
+     "0.30922416"
+    ],
+    [
+     "2026-10-15",
+     "risk",
+     "pnl.row",
+     "0.56962117"
+    ],
+    [
+     "2026-10-15",
+     "risk",
+     "pnl.column",
+     "0.602093"
+    ],
+    [
+     "2026-10-15",
+     "risk",
+     "pnl.total",
+     "0.32624058"
+    ],
+    [
+     "2026-10-15",
+     "risk",
+     "volume.running",
+     "312641937.06"
+    ],
+    [
+     "2026-10-15",
+     "risk",
+     "trades.running",
+     "17500"
+    ],
+    [
+     "2026-10-15",
+     "hedge",
+     "volume.row",
+     "0.2021118"
+    ],
+    [
+     "2026-10-15",
+     "hedge",
+     "volume.column",
+     "0.56020602"
+    ],
+    [
+     "2026-10-15",
+     "hedge",
+     "volume.total",
+     "0.07832909"
+    ],
+    [
+     "2026-10-15",
+     "hedge",
+     "pnl.row",
+     "0.43037883"
+    ],
+    [
+     "2026-10-15",
+     "hedge",
+     "pnl.column",
+     "0.53800901"
+    ],
+    [
+     "2026-10-15",
+     "hedge",
+     "pnl.total",
+     "0.24649196"
+    ],
+    [
+     "2026-10-15",
+     "hedge",
+     "volume.running",
+     "50819940.94"
+    ],
+    [
+     "2026-10-15",
+     "hedge",
+     "trades.running",
+     "8752"
+    ],
+    [
+     "2026-10-13",
+     "",
+     "volume.row",
+     "1"
+    ],
+    [
+     "2026-10-13",
+     "",
+     "volume.column",
+     "0.30871301"
+    ],
+    [
+     "2026-10-13",
+     "",
+     "volume.total",
+     "0.30871301"
+    ],
+    [
+     "2026-10-13",
+     "",
+     "pnl.row",
+     "1"
+    ],
+    [
+     "2026-10-13",
+     "",
+     "pnl.column",
+     "-0.05215819"
+    ],
+    [
+     "2026-10-13",
+     "",
+     "pnl.total",
+     "-0.05215819"
+    ],
+    [
+     "2026-10-13",
+     "",
+     "volume.running",
+     "112205411.28"
+    ],
+    [
+     "2026-10-13",
+     "",
+     "trades.running",
+     "13372"
+    ],
+    [
+     "2026-10-14",
+     "",
+     "volume.row",
+     "1"
+    ],
+    [
+     "2026-10-14",
+     "",
+     "volume.column",
+     "0.30373374"
+    ],
+    [
+     "2026-10-14",
+     "",
+     "volume.total",
+     "0.30373374"
+    ],
+    [
+     "2026-10-14",
+     "",
+     "pnl.row",
+     "1"
+    ],
+    [
+     "2026-10-14",
+     "",
+     "pnl.column",
+     "0.62452477"
+    ],
+    [
+     "2026-10-14",
+     "",
+     "pnl.total",
+     "0.62452477"
+    ],
+    [
+     "2026-10-14",
+     "",
+     "volume.running",
+     "222601045.64"
+    ],
+    [
+     "2026-10-14",
+     "",
+     "trades.running",
+     "20433"
+    ],
+    [
+     "2026-10-15",
+     "",
+     "volume.row",
+     "1"
+    ],
+    [
+     "2026-10-15",
+     "",
+     "volume.column",
+     "0.38755325"
+    ],
+    [
+     "2026-10-15",
+     "",
+     "volume.total",
+     "0.38755325"
+    ],
+    [
+     "2026-10-15",
+     "",
+     "pnl.row",
+     "1"
+    ],
+    [
+     "2026-10-15",
+     "",
+     "pnl.column",
+     "0.57273254"
+    ],
+    [
+     "2026-10-15",
+     "",
+     "pnl.total",
+     "0.57273254"
+    ],
+    [
+     "2026-10-15",
+     "",
+     "volume.running",
+     "363461878.01"
+    ],
+    [
+     "2026-10-15",
+     "",
+     "trades.running",
+     "26252"
+    ],
+    [
+     "",
+     "risk",
+     "volume.row",
+     "0.86017807"
+    ],
+    [
+     "",
+     "risk",
+     "volume.column",
+     "1"
+    ],
+    [
+     "",
+     "risk",
+     "volume.total",
+     "0.86017807"
+    ],
+    [
+     "",
+     "risk",
+     "pnl.row",
+     "0.54184417"
+    ],
+    [
+     "",
+     "risk",
+     "pnl.column",
+     "1"
+    ],
+    [
+     "",
+     "risk",
+     "pnl.total",
+     "0.54184417"
+    ],
+    [
+     "",
+     "risk",
+     "volume.running",
+     "312641937.06"
+    ],
+    [
+     "",
+     "risk",
+     "trades.running",
+     "17500"
+    ],
+    [
+     "",
+     "hedge",
+     "volume.row",
+     "0.13982193"
+    ],
+    [
+     "",
+     "hedge",
+     "volume.column",
+     "1"
+    ],
+    [
+     "",
+     "hedge",
+     "volume.total",
+     "0.13982193"
+    ],
+    [
+     "",
+     "hedge",
+     "pnl.row",
+     "0.45815583"
+    ],
+    [
+     "",
+     "hedge",
+     "pnl.column",
+     "1"
+    ],
+    [
+     "",
+     "hedge",
+     "pnl.total",
+     "0.45815583"
+    ],
+    [
+     "",
+     "hedge",
+     "volume.running",
+     "50819940.94"
+    ],
+    [
+     "",
+     "hedge",
+     "trades.running",
+     "8752"
+    ],
+    [
+     "",
+     "",
+     "volume.row",
+     "1"
+    ],
+    [
+     "",
+     "",
+     "volume.column",
+     "1"
+    ],
+    [
+     "",
+     "",
+     "volume.total",
+     "1"
+    ],
+    [
+     "",
+     "",
+     "pnl.row",
+     "1"
+    ],
+    [
+     "",
+     "",
+     "pnl.column",
+     "1"
+    ],
+    [
+     "",
+     "",
+     "pnl.total",
+     "1"
+    ],
+    [
+     "",
+     "",
+     "volume.running",
+     "363461878"
+    ],
+    [
+     "",
+     "",
+     "trades.running",
+     "26252"
+    ]
+   ]
+  },
+  {
+   "name": "dates inside another column field: columns leg › date, rows client",
+   "rows": [
+    "client"
+   ],
+   "columns": [
+    "leg",
+    "date"
+   ],
+   "cells": [
+    {
+     "row": "Cedar Trust",
+     "column": "risk · 2026-10-13",
+     "figures": {
+      "q": "-13158213824",
+      "n": "-8058686014264",
+      "r": "4141020611859",
+      "u": "3343510724371",
+      "b": "-10206632846966",
+      "v": "2304090914000000",
+      "t": "421600000000",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "Cedar Trust",
+     "column": "risk · 2026-10-14",
+     "figures": {
+      "q": "23506118345",
+      "n": "3981168046593",
+      "r": "-2584794696886",
+      "u": "367095308611",
+      "b": "24999047156888",
+      "v": "3960485983000000",
+      "t": "78600000000",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "Cedar Trust",
+     "column": "risk · 2026-10-15",
+     "figures": {
+      "q": "-34772494097",
+      "n": "-1697441502474",
+      "r": "3289909098530",
+      "u": "1255195508711",
+      "b": "-9266854240559",
+      "v": "1490844456000000",
+      "t": "361200000000",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "Cedar Trust",
+     "column": "hedge · 2026-10-13",
+     "figures": {
+      "q": "-123914121",
+      "n": "2690761820413",
+      "r": "-438224392710",
+      "u": "-3669106415472",
+      "b": "8344306081999",
+      "v": "3848059183000000",
+      "t": "175400000000",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "Cedar Trust",
+     "column": "hedge · 2026-10-14",
+     "figures": {
+      "q": "-26601962791",
+      "n": "15852501532062",
+      "r": "2466134745627",
+      "u": "2407995914109",
+      "b": "9483096858020",
+      "v": "2735314450000000",
+      "t": "284200000000",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "Cedar Trust",
+     "column": "hedge · 2026-10-15",
+     "figures": {
+      "q": "-43938324658",
+      "n": "-19315964560955",
+      "r": "4234276522183",
+      "u": "-3652154312003",
+      "b": "3074620496481",
+      "v": "2359902559000000",
+      "t": "87600000000",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "Fern Partners",
+     "column": "risk · 2026-10-13",
+     "figures": {
+      "q": "885478314",
+      "n": "7895700535736",
+      "r": "-1900491545675",
+      "u": "924534979276",
+      "b": "24774705721065",
+      "v": "306696278000000",
+      "t": "351500000000",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "Fern Partners",
+     "column": "risk · 2026-10-14",
+     "figures": {
+      "q": "-36144845979",
+      "n": "9780814792029",
+      "r": "2786440897034",
+      "u": "-3589118121890",
+      "b": "11776314040180",
+      "v": "4988056091000000",
+      "t": "313400000000",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "Fern Partners",
+     "column": "risk · 2026-10-15",
+     "figures": {
+      "q": "-2242925018",
+      "n": "-11951265502721",
+      "r": "-3524705786257",
+      "u": "1101483344100",
+      "b": "-141599290072",
+      "v": "4680064402000000",
+      "t": "21100000000",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "Fern Partners",
+     "column": "hedge · 2026-10-13",
+     "figures": {
+      "q": "-17073024227",
+      "n": "368056148290",
+      "r": "-2725863481173",
+      "u": "4183862524805",
+      "b": "22220512926578",
+      "v": "2579139513000000",
+      "t": "271400000000",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "Fern Partners",
+     "column": "hedge · 2026-10-14",
+     "figures": {
+      "q": "-49328885588",
+      "n": "-7954746275208",
+      "r": "-4014185128035",
+      "u": "-1729599849786",
+      "b": "-10680247975979",
+      "v": "1044895991000000",
+      "t": "435200000000",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "Cedar Trust",
+     "column": "risk",
+     "figures": {
+      "q": null,
+      "n": null,
+      "r": "4846135013503",
+      "u": null,
+      "b": null,
+      "v": "7755421354000000",
+      "t": "861400000000",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "Cedar Trust",
+     "column": "hedge",
+     "figures": {
+      "q": null,
+      "n": null,
+      "r": "6262186875100",
+      "u": null,
+      "b": null,
+      "v": "8943276192000000",
+      "t": "547200000000",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "Fern Partners",
+     "column": "risk",
+     "figures": {
+      "q": null,
+      "n": null,
+      "r": "-2638756434898",
+      "u": null,
+      "b": null,
+      "v": "9974816771000000",
+      "t": "686000000000",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "Fern Partners",
+     "column": "hedge",
+     "figures": {
+      "q": null,
+      "n": null,
+      "r": "-6740048609208",
+      "u": null,
+      "b": null,
+      "v": "3624035504000000",
+      "t": "706600000000",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "Cedar Trust",
+     "column": "",
+     "figures": {
+      "q": null,
+      "n": null,
+      "r": "11108321888603",
+      "u": null,
+      "b": null,
+      "v": "16698697546000000",
+      "t": "1408600000000",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "Fern Partners",
+     "column": "",
+     "figures": {
+      "q": null,
+      "n": null,
+      "r": "-9378805044106",
+      "u": null,
+      "b": null,
+      "v": "13598852275000000",
+      "t": "1392600000000",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "",
+     "column": "risk · 2026-10-13",
+     "figures": {
+      "q": null,
+      "n": "-162985478528",
+      "r": "2240529066184",
+      "u": "4268045703647",
+      "b": "14568072874099",
+      "v": "2610787192000000",
+      "t": "773100000000",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "",
+     "column": "risk · 2026-10-14",
+     "figures": {
+      "q": null,
+      "n": "13761982838622",
+      "r": "201646200148",
+      "u": "-3222022813279",
+      "b": "36775361197068",
+      "v": "8948542074000000",
+      "t": "392000000000",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "",
+     "column": "risk · 2026-10-15",
+     "figures": {
+      "q": null,
+      "n": "-13648707005195",
+      "r": "-234796687727",
+      "u": "2356678852811",
+      "b": "-9408453530631",
+      "v": "6170908858000000",
+      "t": "382300000000",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "",
+     "column": "hedge · 2026-10-13",
+     "figures": {
+      "q": null,
+      "n": "3058817968703",
+      "r": "-3164087873883",
+      "u": "514756109333",
+      "b": "30564819008577",
+      "v": "6427198696000000",
+      "t": "446800000000",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "",
+     "column": "hedge · 2026-10-14",
+     "figures": {
+      "q": null,
+      "n": "7897755256854",
+      "r": "-1548050382408",
+      "u": "678396064323",
+      "b": "-1197151117959",
+      "v": "3780210441000000",
+      "t": "719400000000",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "",
+     "column": "hedge · 2026-10-15",
+     "figures": {
+      "q": null,
+      "n": "-19315964560955",
+      "r": "4234276522183",
+      "u": "-3652154312003",
+      "b": "3074620496481",
+      "v": "2359902559000000",
+      "t": "87600000000",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "",
+     "column": "risk",
+     "figures": {
+      "q": null,
+      "n": null,
+      "r": "2207378578605",
+      "u": null,
+      "b": null,
+      "v": "17730238125000000",
+      "t": "1547400000000",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "",
+     "column": "hedge",
+     "figures": {
+      "q": null,
+      "n": null,
+      "r": "-477861734108",
+      "u": null,
+      "b": null,
+      "v": "12567311696000000",
+      "t": "1253800000000",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "",
+     "column": "",
+     "figures": {
+      "q": null,
+      "n": null,
+      "r": "1729516844497",
+      "u": null,
+      "b": null,
+      "v": "30297549820000000",
+      "t": "2801200000000",
+      "g": null,
+      "m": null
+     }
+    }
+   ],
+   "entries": [
+    "volume.row",
+    "volume.column",
+    "volume.total",
+    "volume.running",
+    "trades.running"
+   ],
+   "derived": [
+    [
+     "Cedar Trust",
+     "risk · 2026-10-13",
+     "volume.row",
+     "0.13798028"
+    ],
+    [
+     "Cedar Trust",
+     "risk · 2026-10-13",
+     "volume.column",
+     "0.88252728"
+    ],
+    [
+     "Cedar Trust",
+     "risk · 2026-10-13",
+     "volume.total",
+     "0.07604875"
+    ],
+    [
+     "Cedar Trust",
+     "risk · 2026-10-13",
+     "volume.running",
+     "23040909.14"
+    ],
+    [
+     "Cedar Trust",
+     "risk · 2026-10-13",
+     "trades.running",
+     "4216"
+    ],
+    [
+     "Cedar Trust",
+     "risk · 2026-10-14",
+     "volume.row",
+     "0.23717335"
+    ],
+    [
+     "Cedar Trust",
+     "risk · 2026-10-14",
+     "volume.column",
+     "0.4425845"
+    ],
+    [
+     "Cedar Trust",
+     "risk · 2026-10-14",
+     "volume.total",
+     "0.13071968"
+    ],
+    [
+     "Cedar Trust",
+     "risk · 2026-10-14",
+     "volume.running",
+     "62645768.97"
+    ],
+    [
+     "Cedar Trust",
+     "risk · 2026-10-14",
+     "trades.running",
+     "5002"
+    ],
+    [
+     "Cedar Trust",
+     "risk · 2026-10-15",
+     "volume.row",
+     "0.08927909"
+    ],
+    [
+     "Cedar Trust",
+     "risk · 2026-10-15",
+     "volume.column",
+     "0.24159236"
+    ],
+    [
+     "Cedar Trust",
+     "risk · 2026-10-15",
+     "volume.total",
+     "0.04920677"
+    ],
+    [
+     "Cedar Trust",
+     "risk · 2026-10-15",
+     "volume.running",
+     "77554213.53"
+    ],
+    [
+     "Cedar Trust",
+     "risk · 2026-10-15",
+     "trades.running",
+     "8614"
+    ],
+    [
+     "Cedar Trust",
+     "hedge · 2026-10-13",
+     "volume.row",
+     "0.23044068"
+    ],
+    [
+     "Cedar Trust",
+     "hedge · 2026-10-13",
+     "volume.column",
+     "0.59871483"
+    ],
+    [
+     "Cedar Trust",
+     "hedge · 2026-10-13",
+     "volume.total",
+     "0.12700892"
+    ],
+    [
+     "Cedar Trust",
+     "hedge · 2026-10-13",
+     "volume.running",
+     "38480591.83"
+    ],
+    [
+     "Cedar Trust",
+     "hedge · 2026-10-13",
+     "trades.running",
+     "1754"
+    ],
+    [
+     "Cedar Trust",
+     "hedge · 2026-10-14",
+     "volume.row",
+     "0.16380406"
+    ],
+    [
+     "Cedar Trust",
+     "hedge · 2026-10-14",
+     "volume.column",
+     "0.72358788"
+    ],
+    [
+     "Cedar Trust",
+     "hedge · 2026-10-14",
+     "volume.total",
+     "0.0902817"
+    ],
+    [
+     "Cedar Trust",
+     "hedge · 2026-10-14",
+     "volume.running",
+     "65833736.33"
+    ],
+    [
+     "Cedar Trust",
+     "hedge · 2026-10-14",
+     "trades.running",
+     "4596"
+    ],
+    [
+     "Cedar Trust",
+     "hedge · 2026-10-15",
+     "volume.row",
+     "0.14132255"
+    ],
+    [
+     "Cedar Trust",
+     "hedge · 2026-10-15",
+     "volume.column",
+     "1"
+    ],
+    [
+     "Cedar Trust",
+     "hedge · 2026-10-15",
+     "volume.total",
+     "0.07789087"
+    ],
+    [
+     "Cedar Trust",
+     "hedge · 2026-10-15",
+     "volume.running",
+     "89432761.92"
+    ],
+    [
+     "Cedar Trust",
+     "hedge · 2026-10-15",
+     "trades.running",
+     "5472"
+    ],
+    [
+     "Fern Partners",
+     "risk · 2026-10-13",
+     "volume.row",
+     "0.0225531"
+    ],
+    [
+     "Fern Partners",
+     "risk · 2026-10-13",
+     "volume.column",
+     "0.11747272"
+    ],
+    [
+     "Fern Partners",
+     "risk · 2026-10-13",
+     "volume.total",
+     "0.01012281"
+    ],
+    [
+     "Fern Partners",
+     "risk · 2026-10-13",
+     "volume.running",
+     "3066962.78"
+    ],
+    [
+     "Fern Partners",
+     "risk · 2026-10-13",
+     "trades.running",
+     "3515"
+    ],
+    [
+     "Fern Partners",
+     "risk · 2026-10-14",
+     "volume.row",
+     "0.36679979"
+    ],
+    [
+     "Fern Partners",
+     "risk · 2026-10-14",
+     "volume.column",
+     "0.5574155"
+    ],
+    [
+     "Fern Partners",
+     "risk · 2026-10-14",
+     "volume.total",
+     "0.16463563"
+    ],
+    [
+     "Fern Partners",
+     "risk · 2026-10-14",
+     "volume.running",
+     "52947523.69"
+    ],
+    [
+     "Fern Partners",
+     "risk · 2026-10-14",
+     "trades.running",
+     "6649"
+    ],
+    [
+     "Fern Partners",
+     "risk · 2026-10-15",
+     "volume.row",
+     "0.34415143"
+    ],
+    [
+     "Fern Partners",
+     "risk · 2026-10-15",
+     "volume.column",
+     "0.75840764"
+    ],
+    [
+     "Fern Partners",
+     "risk · 2026-10-15",
+     "volume.total",
+     "0.15447006"
+    ],
+    [
+     "Fern Partners",
+     "risk · 2026-10-15",
+     "volume.running",
+     "99748167.71"
+    ],
+    [
+     "Fern Partners",
+     "risk · 2026-10-15",
+     "trades.running",
+     "6860"
+    ],
+    [
+     "Fern Partners",
+     "hedge · 2026-10-13",
+     "volume.row",
+     "0.18965862"
+    ],
+    [
+     "Fern Partners",
+     "hedge · 2026-10-13",
+     "volume.column",
+     "0.40128517"
+    ],
+    [
+     "Fern Partners",
+     "hedge · 2026-10-13",
+     "volume.total",
+     "0.085127"
+    ],
+    [
+     "Fern Partners",
+     "hedge · 2026-10-13",
+     "volume.running",
+     "25791395.13"
+    ],
+    [
+     "Fern Partners",
+     "hedge · 2026-10-13",
+     "trades.running",
+     "2714"
+    ],
+    [
+     "Fern Partners",
+     "hedge · 2026-10-14",
+     "volume.row",
+     "0.07683707"
+    ],
+    [
+     "Fern Partners",
+     "hedge · 2026-10-14",
+     "volume.column",
+     "0.27641212"
+    ],
+    [
+     "Fern Partners",
+     "hedge · 2026-10-14",
+     "volume.total",
+     "0.03448781"
+    ],
+    [
+     "Fern Partners",
+     "hedge · 2026-10-14",
+     "volume.running",
+     "36240355.04"
+    ],
+    [
+     "Fern Partners",
+     "hedge · 2026-10-14",
+     "trades.running",
+     "7066"
+    ],
+    [
+     "Cedar Trust",
+     "risk",
+     "volume.row",
+     "0.46443271"
+    ],
+    [
+     "Cedar Trust",
+     "risk",
+     "volume.column",
+     "0.43741214"
+    ],
+    [
+     "Cedar Trust",
+     "risk",
+     "volume.total",
+     "0.2559752"
+    ],
+    [
+     "Cedar Trust",
+     "risk",
+     "volume.running",
+     "77554213.54"
+    ],
+    [
+     "Cedar Trust",
+     "risk",
+     "trades.running",
+     "8614"
+    ],
+    [
+     "Cedar Trust",
+     "hedge",
+     "volume.row",
+     "0.53556729"
+    ],
+    [
+     "Cedar Trust",
+     "hedge",
+     "volume.column",
+     "0.71163001"
+    ],
+    [
+     "Cedar Trust",
+     "hedge",
+     "volume.total",
+     "0.2951815"
+    ],
+    [
+     "Cedar Trust",
+     "hedge",
+     "volume.running",
+     "89432761.92"
+    ],
+    [
+     "Cedar Trust",
+     "hedge",
+     "trades.running",
+     "5472"
+    ],
+    [
+     "Fern Partners",
+     "risk",
+     "volume.row",
+     "0.73350431"
+    ],
+    [
+     "Fern Partners",
+     "risk",
+     "volume.column",
+     "0.56258786"
+    ],
+    [
+     "Fern Partners",
+     "risk",
+     "volume.total",
+     "0.3292285"
+    ],
+    [
+     "Fern Partners",
+     "risk",
+     "volume.running",
+     "99748167.71"
+    ],
+    [
+     "Fern Partners",
+     "risk",
+     "trades.running",
+     "6860"
+    ],
+    [
+     "Fern Partners",
+     "hedge",
+     "volume.row",
+     "0.26649569"
+    ],
+    [
+     "Fern Partners",
+     "hedge",
+     "volume.column",
+     "0.28836999"
+    ],
+    [
+     "Fern Partners",
+     "hedge",
+     "volume.total",
+     "0.1196148"
+    ],
+    [
+     "Fern Partners",
+     "hedge",
+     "volume.running",
+     "36240355.04"
+    ],
+    [
+     "Fern Partners",
+     "hedge",
+     "trades.running",
+     "7066"
+    ],
+    [
+     "Cedar Trust",
+     "",
+     "volume.row",
+     "1"
+    ],
+    [
+     "Cedar Trust",
+     "",
+     "volume.column",
+     "0.5511567"
+    ],
+    [
+     "Cedar Trust",
+     "",
+     "volume.total",
+     "0.5511567"
+    ],
+    [
+     "Cedar Trust",
+     "",
+     "volume.running",
+     "166986975.46"
+    ],
+    [
+     "Cedar Trust",
+     "",
+     "trades.running",
+     "14086"
+    ],
+    [
+     "Fern Partners",
+     "",
+     "volume.row",
+     "1"
+    ],
+    [
+     "Fern Partners",
+     "",
+     "volume.column",
+     "0.4488433"
+    ],
+    [
+     "Fern Partners",
+     "",
+     "volume.total",
+     "0.4488433"
+    ],
+    [
+     "Fern Partners",
+     "",
+     "volume.running",
+     "135988522.75"
+    ],
+    [
+     "Fern Partners",
+     "",
+     "trades.running",
+     "13926"
+    ],
+    [
+     "",
+     "risk · 2026-10-13",
+     "volume.row",
+     "0.08617156"
+    ],
+    [
+     "",
+     "risk · 2026-10-13",
+     "volume.column",
+     "1"
+    ],
+    [
+     "",
+     "risk · 2026-10-13",
+     "volume.total",
+     "0.08617156"
+    ],
+    [
+     "",
+     "risk · 2026-10-13",
+     "volume.running",
+     "26107871.92"
+    ],
+    [
+     "",
+     "risk · 2026-10-13",
+     "trades.running",
+     "7731"
+    ],
+    [
+     "",
+     "risk · 2026-10-14",
+     "volume.row",
+     "0.29535531"
+    ],
+    [
+     "",
+     "risk · 2026-10-14",
+     "volume.column",
+     "1"
+    ],
+    [
+     "",
+     "risk · 2026-10-14",
+     "volume.total",
+     "0.29535531"
+    ],
+    [
+     "",
+     "risk · 2026-10-14",
+     "volume.running",
+     "115593292.66"
+    ],
+    [
+     "",
+     "risk · 2026-10-14",
+     "trades.running",
+     "11651"
+    ],
+    [
+     "",
+     "risk · 2026-10-15",
+     "volume.row",
+     "0.20367683"
+    ],
+    [
+     "",
+     "risk · 2026-10-15",
+     "volume.column",
+     "1"
+    ],
+    [
+     "",
+     "risk · 2026-10-15",
+     "volume.total",
+     "0.20367683"
+    ],
+    [
+     "",
+     "risk · 2026-10-15",
+     "volume.running",
+     "177302381.24"
+    ],
+    [
+     "",
+     "risk · 2026-10-15",
+     "trades.running",
+     "15474"
+    ],
+    [
+     "",
+     "hedge · 2026-10-13",
+     "volume.row",
+     "0.21213592"
+    ],
+    [
+     "",
+     "hedge · 2026-10-13",
+     "volume.column",
+     "1"
+    ],
+    [
+     "",
+     "hedge · 2026-10-13",
+     "volume.total",
+     "0.21213592"
+    ],
+    [
+     "",
+     "hedge · 2026-10-13",
+     "volume.running",
+     "64271986.96"
+    ],
+    [
+     "",
+     "hedge · 2026-10-13",
+     "trades.running",
+     "4468"
+    ],
+    [
+     "",
+     "hedge · 2026-10-14",
+     "volume.row",
+     "0.12476951"
+    ],
+    [
+     "",
+     "hedge · 2026-10-14",
+     "volume.column",
+     "1"
+    ],
+    [
+     "",
+     "hedge · 2026-10-14",
+     "volume.total",
+     "0.12476951"
+    ],
+    [
+     "",
+     "hedge · 2026-10-14",
+     "volume.running",
+     "102074091.37"
+    ],
+    [
+     "",
+     "hedge · 2026-10-14",
+     "trades.running",
+     "11662"
+    ],
+    [
+     "",
+     "hedge · 2026-10-15",
+     "volume.row",
+     "0.07789087"
+    ],
+    [
+     "",
+     "hedge · 2026-10-15",
+     "volume.column",
+     "1"
+    ],
+    [
+     "",
+     "hedge · 2026-10-15",
+     "volume.total",
+     "0.07789087"
+    ],
+    [
+     "",
+     "hedge · 2026-10-15",
+     "volume.running",
+     "125673116.96"
+    ],
+    [
+     "",
+     "hedge · 2026-10-15",
+     "trades.running",
+     "12538"
+    ],
+    [
+     "",
+     "risk",
+     "volume.row",
+     "0.5852037"
+    ],
+    [
+     "",
+     "risk",
+     "volume.column",
+     "1"
+    ],
+    [
+     "",
+     "risk",
+     "volume.total",
+     "0.5852037"
+    ],
+    [
+     "",
+     "risk",
+     "volume.running",
+     "177302381.25"
+    ],
+    [
+     "",
+     "risk",
+     "trades.running",
+     "15474"
+    ],
+    [
+     "",
+     "hedge",
+     "volume.row",
+     "0.4147963"
+    ],
+    [
+     "",
+     "hedge",
+     "volume.column",
+     "1"
+    ],
+    [
+     "",
+     "hedge",
+     "volume.total",
+     "0.4147963"
+    ],
+    [
+     "",
+     "hedge",
+     "volume.running",
+     "125673116.96"
+    ],
+    [
+     "",
+     "hedge",
+     "trades.running",
+     "12538"
+    ],
+    [
+     "",
+     "",
+     "volume.row",
+     "1"
+    ],
+    [
+     "",
+     "",
+     "volume.column",
+     "1"
+    ],
+    [
+     "",
+     "",
+     "volume.total",
+     "1"
+    ],
+    [
+     "",
+     "",
+     "volume.running",
+     "302975498.2"
+    ],
+    [
+     "",
+     "",
+     "trades.running",
+     "28012"
+    ]
+   ]
+  },
+  {
+   "name": "no Date in rows or columns: no running total",
+   "rows": [
+    "client"
+   ],
+   "columns": [
+    "leg"
+   ],
+   "cells": [
+    {
+     "row": "Cedar Trust",
+     "column": "risk",
+     "figures": {
+      "q": "-41153140238",
+      "n": "1106572872959",
+      "r": "-2581021193182",
+      "u": "613381470320",
+      "b": "14721994295250",
+      "v": "510835682000000",
+      "t": "378900000000",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "Cedar Trust",
+     "column": "hedge",
+     "figures": {
+      "q": "9326148754",
+      "n": "6557423342019",
+      "r": "4306301806354",
+      "u": "-718682212755",
+      "b": "13713849051855",
+      "v": "634517372000000",
+      "t": "83100000000",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "Fern Partners",
+     "column": "risk",
+     "figures": {
+      "q": "-49532369407",
+      "n": "-8639873578213",
+      "r": "4550567693077",
+      "u": "4046884238487",
+      "b": "-11159219651017",
+      "v": "1616641392000000",
+      "t": "135800000000",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "Fern Partners",
+     "column": "hedge",
+     "figures": {
+      "q": "35766842169",
+      "n": "-5660655549727",
+      "r": "1503144176676",
+      "u": "1712873803917",
+      "b": "26525753983296",
+      "v": "58513131000000",
+      "t": "439700000000",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "Cedar Trust",
+     "column": "",
+     "figures": {
+      "q": "-31826991484",
+      "n": "7663996214978",
+      "r": "1725280613172",
+      "u": "-105300742435",
+      "b": "28435843347105",
+      "v": "1145353054000000",
+      "t": "462000000000",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "Fern Partners",
+     "column": "",
+     "figures": {
+      "q": "-13765527238",
+      "n": "-14300529127940",
+      "r": "6053711869753",
+      "u": "5759758042404",
+      "b": "15366534332279",
+      "v": "1675154523000000",
+      "t": "575500000000",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "",
+     "column": "risk",
+     "figures": {
+      "q": null,
+      "n": "-7533300705254",
+      "r": "1969546499895",
+      "u": "4660265708807",
+      "b": "3562774644233",
+      "v": "2127477075000000",
+      "t": "514700000000",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "",
+     "column": "hedge",
+     "figures": {
+      "q": null,
+      "n": "896767792292",
+      "r": "5809445983030",
+      "u": "994191591162",
+      "b": "40239603035151",
+      "v": "693030503000000",
+      "t": "522800000000",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "",
+     "column": "",
+     "figures": {
+      "q": null,
+      "n": "-6636532912962",
+      "r": "7778992482925",
+      "u": "5654457299969",
+      "b": "43802377679384",
+      "v": "2820507578000000",
+      "t": "1037500000000",
+      "g": null,
+      "m": null
+     }
+    }
+   ],
+   "entries": [
+    "volume.row",
+    "volume.column",
+    "volume.total",
+    "pnl.row",
+    "pnl.column",
+    "pnl.total",
+    "volume.running"
+   ],
+   "derived": [
+    [
+     "Cedar Trust",
+     "risk",
+     "volume.row",
+     "0.44600718"
+    ],
+    [
+     "Cedar Trust",
+     "risk",
+     "volume.column",
+     "0.24011337"
+    ],
+    [
+     "Cedar Trust",
+     "risk",
+     "volume.total",
+     "0.18111481"
+    ],
+    [
+     "Cedar Trust",
+     "risk",
+     "pnl.row",
+     "-1.21460751"
+    ],
+    [
+     "Cedar Trust",
+     "risk",
+     "pnl.column",
+     "-0.29678665"
+    ],
+    [
+     "Cedar Trust",
+     "risk",
+     "pnl.total",
+     "-0.14647315"
+    ],
+    [
+     "Cedar Trust",
+     "risk",
+     "volume.running",
+     null
+    ],
+    [
+     "Cedar Trust",
+     "hedge",
+     "volume.row",
+     "0.55399282"
+    ],
+    [
+     "Cedar Trust",
+     "hedge",
+     "volume.column",
+     "0.91556918"
+    ],
+    [
+     "Cedar Trust",
+     "hedge",
+     "volume.total",
+     "0.22496567"
+    ],
+    [
+     "Cedar Trust",
+     "hedge",
+     "pnl.row",
+     "2.21460751"
+    ],
+    [
+     "Cedar Trust",
+     "hedge",
+     "pnl.column",
+     "0.52730904"
+    ],
+    [
+     "Cedar Trust",
+     "hedge",
+     "pnl.total",
+     "0.26706614"
+    ],
+    [
+     "Cedar Trust",
+     "hedge",
+     "volume.running",
+     null
+    ],
+    [
+     "Fern Partners",
+     "risk",
+     "volume.row",
+     "0.96507001"
+    ],
+    [
+     "Fern Partners",
+     "risk",
+     "volume.column",
+     "0.75988663"
+    ],
+    [
+     "Fern Partners",
+     "risk",
+     "volume.total",
+     "0.57317392"
+    ],
+    [
+     "Fern Partners",
+     "risk",
+     "pnl.row",
+     "0.72776686"
+    ],
+    [
+     "Fern Partners",
+     "risk",
+     "pnl.column",
+     "1.29678665"
+    ],
+    [
+     "Fern Partners",
+     "risk",
+     "pnl.total",
+     "0.64000328"
+    ],
+    [
+     "Fern Partners",
+     "risk",
+     "volume.running",
+     null
+    ],
+    [
+     "Fern Partners",
+     "hedge",
+     "volume.row",
+     "0.03492999"
+    ],
+    [
+     "Fern Partners",
+     "hedge",
+     "volume.column",
+     "0.08443082"
+    ],
+    [
+     "Fern Partners",
+     "hedge",
+     "volume.total",
+     "0.0207456"
+    ],
+    [
+     "Fern Partners",
+     "hedge",
+     "pnl.row",
+     "0.27223314"
+    ],
+    [
+     "Fern Partners",
+     "hedge",
+     "pnl.column",
+     "0.47269096"
+    ],
+    [
+     "Fern Partners",
+     "hedge",
+     "pnl.total",
+     "0.23940373"
+    ],
+    [
+     "Fern Partners",
+     "hedge",
+     "volume.running",
+     null
+    ],
+    [
+     "Cedar Trust",
+     "",
+     "volume.row",
+     "1"
+    ],
+    [
+     "Cedar Trust",
+     "",
+     "volume.column",
+     "0.40608047"
+    ],
+    [
+     "Cedar Trust",
+     "",
+     "volume.total",
+     "0.40608047"
+    ],
+    [
+     "Cedar Trust",
+     "",
+     "pnl.row",
+     "1"
+    ],
+    [
+     "Cedar Trust",
+     "",
+     "pnl.column",
+     "0.12059299"
+    ],
+    [
+     "Cedar Trust",
+     "",
+     "pnl.total",
+     "0.12059299"
+    ],
+    [
+     "Cedar Trust",
+     "",
+     "volume.running",
+     null
+    ],
+    [
+     "Fern Partners",
+     "",
+     "volume.row",
+     "1"
+    ],
+    [
+     "Fern Partners",
+     "",
+     "volume.column",
+     "0.59391953"
+    ],
+    [
+     "Fern Partners",
+     "",
+     "volume.total",
+     "0.59391953"
+    ],
+    [
+     "Fern Partners",
+     "",
+     "pnl.row",
+     "1"
+    ],
+    [
+     "Fern Partners",
+     "",
+     "pnl.column",
+     "0.87940701"
+    ],
+    [
+     "Fern Partners",
+     "",
+     "pnl.total",
+     "0.87940701"
+    ],
+    [
+     "Fern Partners",
+     "",
+     "volume.running",
+     null
+    ],
+    [
+     "",
+     "risk",
+     "volume.row",
+     "0.75428873"
+    ],
+    [
+     "",
+     "risk",
+     "volume.column",
+     "1"
+    ],
+    [
+     "",
+     "risk",
+     "volume.total",
+     "0.75428873"
+    ],
+    [
+     "",
+     "risk",
+     "pnl.row",
+     "0.49353013"
+    ],
+    [
+     "",
+     "risk",
+     "pnl.column",
+     "1"
+    ],
+    [
+     "",
+     "risk",
+     "pnl.total",
+     "0.49353013"
+    ],
+    [
+     "",
+     "risk",
+     "volume.running",
+     null
+    ],
+    [
+     "",
+     "hedge",
+     "volume.row",
+     "0.24571127"
+    ],
+    [
+     "",
+     "hedge",
+     "volume.column",
+     "1"
+    ],
+    [
+     "",
+     "hedge",
+     "volume.total",
+     "0.24571127"
+    ],
+    [
+     "",
+     "hedge",
+     "pnl.row",
+     "0.50646987"
+    ],
+    [
+     "",
+     "hedge",
+     "pnl.column",
+     "1"
+    ],
+    [
+     "",
+     "hedge",
+     "pnl.total",
+     "0.50646987"
+    ],
+    [
+     "",
+     "hedge",
+     "volume.running",
+     null
+    ],
+    [
+     "",
+     "",
+     "volume.row",
+     "1"
+    ],
+    [
+     "",
+     "",
+     "volume.column",
+     "1"
+    ],
+    [
+     "",
+     "",
+     "volume.total",
+     "1"
+    ],
+    [
+     "",
+     "",
+     "pnl.row",
+     "1"
+    ],
+    [
+     "",
+     "",
+     "pnl.column",
+     "1"
+    ],
+    [
+     "",
+     "",
+     "pnl.total",
+     "1"
+    ],
+    [
+     "",
+     "",
+     "volume.running",
+     null
+    ]
+   ]
+  },
+  {
+   "name": "totals across the rows hidden (no Total row): % of column and of grand total none",
+   "rows": [
+    "client"
+   ],
+   "columns": [
+    "date"
+   ],
+   "cells": [
+    {
+     "row": "Cedar Trust",
+     "column": "2026-10-13",
+     "figures": {
+      "q": "38721849699",
+      "n": "6856844644062",
+      "r": "-2405152218416",
+      "u": "-3871802233625",
+      "b": "-25173773677088",
+      "v": "4545333804000000",
+      "t": "199100000000",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "Cedar Trust",
+     "column": "2026-10-14",
+     "figures": {
+      "q": "34281968278",
+      "n": "12027794774621",
+      "r": "-929511134745",
+      "u": "-3743551579536",
+      "b": "9258053039666",
+      "v": "3326843921000000",
+      "t": "129900000000",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "Cedar Trust",
+     "column": "2026-10-15",
+     "figures": {
+      "q": "20662231987",
+      "n": "-18377155694179",
+      "r": "4709815535461",
+      "u": "235179709270",
+      "b": "-27504949634894",
+      "v": "1548271062000000",
+      "t": "372100000000",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "Fern Partners",
+     "column": "2026-10-13",
+     "figures": {
+      "q": "11334572487",
+      "n": "1327415690757",
+      "r": "-2271475505549",
+      "u": "-4840780388331",
+      "b": "1721295865718",
+      "v": "2473177175000000",
+      "t": "262800000000",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "Fern Partners",
+     "column": "2026-10-14",
+     "figures": {
+      "q": "-3995451529",
+      "n": "14388738796114",
+      "r": "2913726066472",
+      "u": "-1518954779021",
+      "b": "-26231075143441",
+      "v": "416741219000000",
+      "t": "211600000000",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "Fern Partners",
+     "column": "2026-10-15",
+     "figures": {
+      "q": "-20870286540",
+      "n": "9154666191898",
+      "r": "-1961632152087",
+      "u": "-2694664063164",
+      "b": "3029576546978",
+      "v": "713546887000000",
+      "t": "139400000000",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "Cedar Trust",
+     "column": "",
+     "figures": {
+      "q": null,
+      "n": null,
+      "r": "1375152182300",
+      "u": null,
+      "b": null,
+      "v": "9420448787000000",
+      "t": "701100000000",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "Fern Partners",
+     "column": "",
+     "figures": {
+      "q": null,
+      "n": null,
+      "r": "-1319381591164",
+      "u": null,
+      "b": null,
+      "v": "3603465281000000",
+      "t": "613800000000",
+      "g": null,
+      "m": null
+     }
+    }
+   ],
+   "entries": [
+    "volume.row",
+    "volume.column",
+    "volume.total",
+    "volume.running"
+   ],
+   "derived": [
+    [
+     "Cedar Trust",
+     "2026-10-13",
+     "volume.row",
+     "0.48249653"
+    ],
+    [
+     "Cedar Trust",
+     "2026-10-13",
+     "volume.column",
+     null
+    ],
+    [
+     "Cedar Trust",
+     "2026-10-13",
+     "volume.total",
+     null
+    ],
+    [
+     "Cedar Trust",
+     "2026-10-13",
+     "volume.running",
+     "45453338.04"
+    ],
+    [
+     "Cedar Trust",
+     "2026-10-14",
+     "volume.row",
+     "0.35315132"
+    ],
+    [
+     "Cedar Trust",
+     "2026-10-14",
+     "volume.column",
+     null
+    ],
+    [
+     "Cedar Trust",
+     "2026-10-14",
+     "volume.total",
+     null
+    ],
+    [
+     "Cedar Trust",
+     "2026-10-14",
+     "volume.running",
+     "78721777.25"
+    ],
+    [
+     "Cedar Trust",
+     "2026-10-15",
+     "volume.row",
+     "0.16435216"
+    ],
+    [
+     "Cedar Trust",
+     "2026-10-15",
+     "volume.column",
+     null
+    ],
+    [
+     "Cedar Trust",
+     "2026-10-15",
+     "volume.total",
+     null
+    ],
+    [
+     "Cedar Trust",
+     "2026-10-15",
+     "volume.running",
+     "94204487.87"
+    ],
+    [
+     "Fern Partners",
+     "2026-10-13",
+     "volume.row",
+     "0.68633301"
+    ],
+    [
+     "Fern Partners",
+     "2026-10-13",
+     "volume.column",
+     null
+    ],
+    [
+     "Fern Partners",
+     "2026-10-13",
+     "volume.total",
+     null
+    ],
+    [
+     "Fern Partners",
+     "2026-10-13",
+     "volume.running",
+     "24731771.75"
+    ],
+    [
+     "Fern Partners",
+     "2026-10-14",
+     "volume.row",
+     "0.11565013"
+    ],
+    [
+     "Fern Partners",
+     "2026-10-14",
+     "volume.column",
+     null
+    ],
+    [
+     "Fern Partners",
+     "2026-10-14",
+     "volume.total",
+     null
+    ],
+    [
+     "Fern Partners",
+     "2026-10-14",
+     "volume.running",
+     "28899183.94"
+    ],
+    [
+     "Fern Partners",
+     "2026-10-15",
+     "volume.row",
+     "0.19801686"
+    ],
+    [
+     "Fern Partners",
+     "2026-10-15",
+     "volume.column",
+     null
+    ],
+    [
+     "Fern Partners",
+     "2026-10-15",
+     "volume.total",
+     null
+    ],
+    [
+     "Fern Partners",
+     "2026-10-15",
+     "volume.running",
+     "36034652.81"
+    ],
+    [
+     "Cedar Trust",
+     "",
+     "volume.row",
+     "1"
+    ],
+    [
+     "Cedar Trust",
+     "",
+     "volume.column",
+     null
+    ],
+    [
+     "Cedar Trust",
+     "",
+     "volume.total",
+     null
+    ],
+    [
+     "Cedar Trust",
+     "",
+     "volume.running",
+     "94204487.87"
+    ],
+    [
+     "Fern Partners",
+     "",
+     "volume.row",
+     "1"
+    ],
+    [
+     "Fern Partners",
+     "",
+     "volume.column",
+     null
+    ],
+    [
+     "Fern Partners",
+     "",
+     "volume.total",
+     null
+    ],
+    [
+     "Fern Partners",
+     "",
+     "volume.running",
+     "36034652.81"
+    ]
+   ]
+  },
+  {
+   "name": "totals across the columns hidden (no Total column): % of row and of grand total none, running total its own",
+   "rows": [
+    "client"
+   ],
+   "columns": [
+    "date"
+   ],
+   "cells": [
+    {
+     "row": "Cedar Trust",
+     "column": "2026-10-13",
+     "figures": {
+      "q": "-24161705526",
+      "n": "-15311052910983",
+      "r": "-2430404166225",
+      "u": "-1356898988597",
+      "b": "24382483935914",
+      "v": "1376058347000000",
+      "t": "54500000000",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "Cedar Trust",
+     "column": "2026-10-14",
+     "figures": {
+      "q": "-24111546098",
+      "n": "-12053213911131",
+      "r": "3219476746162",
+      "u": "4250665296567",
+      "b": "-22224444150924",
+      "v": "1648129379000000",
+      "t": "166800000000",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "Cedar Trust",
+     "column": "2026-10-15",
+     "figures": {
+      "q": "29236374853",
+      "n": "8570694406516",
+      "r": "-3097268776036",
+      "u": "-4826154399197",
+      "b": "-18618997831363",
+      "v": "4991054014000000",
+      "t": "252400000000",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "Fern Partners",
+     "column": "2026-10-13",
+     "figures": {
+      "q": "-41643673193",
+      "n": "16958514992147",
+      "r": "-1276633833767",
+      "u": "-1382480009924",
+      "b": "-924633764661",
+      "v": "4416836069000000",
+      "t": "364400000000",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "Fern Partners",
+     "column": "2026-10-14",
+     "figures": {
+      "q": "-40589440183",
+      "n": "3541827504523",
+      "r": "1746572385309",
+      "u": "3885751304915",
+      "b": "23444151550065",
+      "v": "872236267000000",
+      "t": "492300000000",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "Fern Partners",
+     "column": "2026-10-15",
+     "figures": {
+      "q": "-18726725305",
+      "n": "-10233026039786",
+      "r": "-2595203765667",
+      "u": "-1170831891940",
+      "b": "-15423655458725",
+      "v": "746785568000000",
+      "t": "254500000000",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "",
+     "column": "2026-10-13",
+     "figures": {
+      "q": null,
+      "n": "1647462081164",
+      "r": "-3707037999992",
+      "u": "-2739378998521",
+      "b": "23457850171253",
+      "v": "5792894416000000",
+      "t": "418900000000",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "",
+     "column": "2026-10-14",
+     "figures": {
+      "q": null,
+      "n": "-8511386406608",
+      "r": "4966049131471",
+      "u": "8136416601482",
+      "b": "1219707399141",
+      "v": "2520365645000000",
+      "t": "659100000000",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "",
+     "column": "2026-10-15",
+     "figures": {
+      "q": null,
+      "n": "-1662331633270",
+      "r": "-5692472541703",
+      "u": "-5996986291137",
+      "b": "-34042653290088",
+      "v": "5737839583000000",
+      "t": "506900000000",
+      "g": null,
+      "m": null
+     }
+    }
+   ],
+   "entries": [
+    "volume.row",
+    "volume.column",
+    "volume.total",
+    "volume.running"
+   ],
+   "derived": [
+    [
+     "Cedar Trust",
+     "2026-10-13",
+     "volume.row",
+     null
+    ],
+    [
+     "Cedar Trust",
+     "2026-10-13",
+     "volume.column",
+     "0.23754245"
+    ],
+    [
+     "Cedar Trust",
+     "2026-10-13",
+     "volume.total",
+     null
+    ],
+    [
+     "Cedar Trust",
+     "2026-10-13",
+     "volume.running",
+     "13760583.47"
+    ],
+    [
+     "Cedar Trust",
+     "2026-10-14",
+     "volume.row",
+     null
+    ],
+    [
+     "Cedar Trust",
+     "2026-10-14",
+     "volume.column",
+     "0.65392471"
+    ],
+    [
+     "Cedar Trust",
+     "2026-10-14",
+     "volume.total",
+     null
+    ],
+    [
+     "Cedar Trust",
+     "2026-10-14",
+     "volume.running",
+     "30241877.26"
+    ],
+    [
+     "Cedar Trust",
+     "2026-10-15",
+     "volume.row",
+     null
+    ],
+    [
+     "Cedar Trust",
+     "2026-10-15",
+     "volume.column",
+     "0.869849"
+    ],
+    [
+     "Cedar Trust",
+     "2026-10-15",
+     "volume.total",
+     null
+    ],
+    [
+     "Cedar Trust",
+     "2026-10-15",
+     "volume.running",
+     "80152417.4"
+    ],
+    [
+     "Fern Partners",
+     "2026-10-13",
+     "volume.row",
+     null
+    ],
+    [
+     "Fern Partners",
+     "2026-10-13",
+     "volume.column",
+     "0.76245755"
+    ],
+    [
+     "Fern Partners",
+     "2026-10-13",
+     "volume.total",
+     null
+    ],
+    [
+     "Fern Partners",
+     "2026-10-13",
+     "volume.running",
+     "44168360.69"
+    ],
+    [
+     "Fern Partners",
+     "2026-10-14",
+     "volume.row",
+     null
+    ],
+    [
+     "Fern Partners",
+     "2026-10-14",
+     "volume.column",
+     "0.34607529"
+    ],
+    [
+     "Fern Partners",
+     "2026-10-14",
+     "volume.total",
+     null
+    ],
+    [
+     "Fern Partners",
+     "2026-10-14",
+     "volume.running",
+     "52890723.36"
+    ],
+    [
+     "Fern Partners",
+     "2026-10-15",
+     "volume.row",
+     null
+    ],
+    [
+     "Fern Partners",
+     "2026-10-15",
+     "volume.column",
+     "0.130151"
+    ],
+    [
+     "Fern Partners",
+     "2026-10-15",
+     "volume.total",
+     null
+    ],
+    [
+     "Fern Partners",
+     "2026-10-15",
+     "volume.running",
+     "60358579.04"
+    ],
+    [
+     "",
+     "2026-10-13",
+     "volume.row",
+     null
+    ],
+    [
+     "",
+     "2026-10-13",
+     "volume.column",
+     "1"
+    ],
+    [
+     "",
+     "2026-10-13",
+     "volume.total",
+     null
+    ],
+    [
+     "",
+     "2026-10-13",
+     "volume.running",
+     "57928944.16"
+    ],
+    [
+     "",
+     "2026-10-14",
+     "volume.row",
+     null
+    ],
+    [
+     "",
+     "2026-10-14",
+     "volume.column",
+     "1"
+    ],
+    [
+     "",
+     "2026-10-14",
+     "volume.total",
+     null
+    ],
+    [
+     "",
+     "2026-10-14",
+     "volume.running",
+     "83132600.61"
+    ],
+    [
+     "",
+     "2026-10-15",
+     "volume.row",
+     null
+    ],
+    [
+     "",
+     "2026-10-15",
+     "volume.column",
+     "1"
+    ],
+    [
+     "",
+     "2026-10-15",
+     "volume.total",
+     null
+    ],
+    [
+     "",
+     "2026-10-15",
+     "volume.running",
+     "140510996.44"
+    ]
+   ]
+  },
+  {
+   "name": "by hand: half away from zero either way, a total of mixed signs, a total of zero",
+   "rows": [
+    "client"
+   ],
+   "columns": [],
+   "cells": [
+    {
+     "row": "A",
+     "column": "",
+     "figures": {
+      "q": null,
+      "n": null,
+      "r": "-30000000000",
+      "u": null,
+      "b": null,
+      "v": "1",
+      "t": "0",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "B",
+     "column": "",
+     "figures": {
+      "q": null,
+      "n": null,
+      "r": "50000000000",
+      "u": null,
+      "b": null,
+      "v": "-1",
+      "t": "0",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "C",
+     "column": "",
+     "figures": {
+      "q": null,
+      "n": null,
+      "r": "3",
+      "u": "-1",
+      "b": null,
+      "v": "199999999",
+      "t": "0",
+      "g": null,
+      "m": null
+     }
+    },
+    {
+     "row": "",
+     "column": "",
+     "figures": {
+      "q": null,
+      "n": null,
+      "r": "20000000000",
+      "u": null,
+      "b": null,
+      "v": "200000000",
+      "t": "0",
+      "g": null,
+      "m": null
+     }
+    }
+   ],
+   "entries": [
+    "volume.total",
+    "volume.row",
+    "volume.column",
+    "pnl.total",
+    "trades.total",
+    "volume.running"
+   ],
+   "derived": [
+    [
+     "A",
+     "",
+     "volume.total",
+     "0.00000001"
+    ],
+    [
+     "A",
+     "",
+     "volume.row",
+     "1"
+    ],
+    [
+     "A",
+     "",
+     "volume.column",
+     "0.00000001"
+    ],
+    [
+     "A",
+     "",
+     "pnl.total",
+     "-1.5"
+    ],
+    [
+     "A",
+     "",
+     "trades.total",
+     null
+    ],
+    [
+     "A",
+     "",
+     "volume.running",
+     null
+    ],
+    [
+     "B",
+     "",
+     "volume.total",
+     "-0.00000001"
+    ],
+    [
+     "B",
+     "",
+     "volume.row",
+     "1"
+    ],
+    [
+     "B",
+     "",
+     "volume.column",
+     "-0.00000001"
+    ],
+    [
+     "B",
+     "",
+     "pnl.total",
+     "2.5"
+    ],
+    [
+     "B",
+     "",
+     "trades.total",
+     null
+    ],
+    [
+     "B",
+     "",
+     "volume.running",
+     null
+    ],
+    [
+     "C",
+     "",
+     "volume.total",
+     "1"
+    ],
+    [
+     "C",
+     "",
+     "volume.row",
+     "1"
+    ],
+    [
+     "C",
+     "",
+     "volume.column",
+     "1"
+    ],
+    [
+     "C",
+     "",
+     "pnl.total",
+     "0"
+    ],
+    [
+     "C",
+     "",
+     "trades.total",
+     null
+    ],
+    [
+     "C",
+     "",
+     "volume.running",
+     null
+    ],
+    [
+     "",
+     "",
+     "volume.total",
+     "1"
+    ],
+    [
+     "",
+     "",
+     "volume.row",
+     "1"
+    ],
+    [
+     "",
+     "",
+     "volume.column",
+     "1"
+    ],
+    [
+     "",
+     "",
+     "pnl.total",
+     "1"
+    ],
+    [
+     "",
+     "",
+     "trades.total",
+     null
+    ],
+    [
+     "",
+     "",
+     "volume.running",
+     null
+    ]
+   ]
+  }
+ ]
+}

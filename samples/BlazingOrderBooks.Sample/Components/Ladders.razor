@@ -1,0 +1,215 @@
+@implements IAsyncDisposable
+@inject Outlet Outlet
+@inject Publisher Publisher
+@inject BookFeed Feed
+@inject FeedStats Stats
+@inject IJSRuntime Js
+@inject Microsoft.Extensions.Options.IOptions<MarketFeedOptions> Options
+
+<h3>BTC-PERP <small @ref="_markEl"></small> <small><a href="/">← Blazing Order Books</a></small></h3>
+<p @ref="_alertsEl"></p>
+<p class="shape">
+    depth
+    @foreach (var depth in BookShape.Depths.Append(0))
+    {
+        <button aria-pressed="@(_shape.Depth == depth ? "true" : "false")" @onclick="() => Reshape(_shape with { Depth = depth })">@(depth > 0 ? depth : "all")</button>
+    }
+    · group
+    @foreach (var group in BookShape.Groups)
+    {
+        <button aria-pressed="@(_shape.Group == group ? "true" : "false")" title="@group tick@(group > 1 ? "s" : "") a level"
+                @onclick="() => Reshape(_shape with { Group = group })">@Step(group)</button>
+    }
+    · <button aria-pressed="@(_shape.Vwap ? "true" : "false")" title="cumulative: each level the size from the best price down to it, at the average price of filling it all"
+              @onclick="() => Reshape(_shape with { Vwap = !_shape.Vwap })">VWAP</button>
+    · <BandwidthToggle/>
+    <br/><small>Each a topic of its own, shaped by the provider and shared by those asking alike; a VWAP book's sums kept by
+        the router, its averages alone sent.</small>
+</p>
+<div style="display: flex; gap: 2rem; flex-wrap: wrap">
+    <div><small>raw book</small>
+        <table class="ladder" @ref="_bookEl"></table>
+    </div>
+    <div><small>accelerated book</small>
+        <table class="ladder" @ref="_acceleratedEl"></table>
+    </div>
+</div>
+<p>@_status</p>
+<p>@Stats.Line()</p>
+<p>Heartbeat RTT: @Outlet.Rtt.TotalMilliseconds.ToString("F1") ms · streaming
+    cap @(Outlet.StreamingBytesPerSecond > 0 ? $"{Outlet.StreamingBytesPerSecond:N0} B/s" : "none")@(Outlet.FaultInjector is null ? "" : " · test connection: injected outages") <button
+        @onclick="StateHasChanged">refresh
+    </button>
+</p>
+<p>Book feed: @Feed.Ingest.Posts.ToString("N0") depth updates posted (accelerated
+    book: @Feed.Accelerated.Posts.ToString("N0"), from prints too), folded by the router in WebAssembly
+    (@Feed.Ingest.FuelPerDelta.ToString("F0") fuel a level change) into @Feed.Ingest.Batches.ToString("N0") updates
+    (@((Feed.Ingest.Batches == 0 ? 0 : (double)Feed.Ingest.Applied / Feed.Ingest.Batches).ToString("F2")) a fold, at
+    most @Feed.Ingest.LargestBatch)@(Feed.Ingest.Superseded + Feed.Ingest.Refused > 0 ? $" · {Feed.Ingest.Superseded:N0} superseded by a snapshot, {Feed.Ingest.Refused:N0} refused" : "")</p>
+<p>Flow control: min RTT @Outlet.MinRtt.TotalMilliseconds.ToString("F2") ms ·
+    delivered @((Outlet.DeliveryRate / 1024.0).ToString("F1")) KB/s · in
+    flight @Outlet.InflightBytes.ToString("N0") of @Outlet.InflightLimit.ToString("N0") B
+    · @(Outlet.PacingRate > 0 ? $"paced at {Outlet.PacingRate / 1024.0:F1} KB/s" : "unpaced (the feed is the limit)") ·
+    <span id="rate"></span></p>
+
+@code {
+    readonly CancellationTokenSource _cts = new();
+    CancellationTokenSource? _books; // the books' subscriptions, as shaped now: cancelled to shape them anew
+    BookShape _shape = new(10, 1);
+    ElementReference _bookEl, _acceleratedEl, _markEl, _alertsEl;
+    string _status = "";
+    bool _interactive;
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (!firstRender) return; // interactive only (not during prerender)
+        _interactive = true;
+        SubscribeBooks(); // through the "market" service, as shaped
+        _ = KeepSubscribed("mark", "bookView.attachMark", _markEl, 0, _cts.Token);
+        _ = KeepTapped(Publisher.Alerts(), "alerts", Market.AlertsPolicy, "bookView.attachAlerts", _alertsEl, Lane.High); // subscribed, not pushed
+    }
+
+    /// <summary>
+    ///     Keeps one subscription to a "market" topic: step 1 through its provider (which hands over the topic and its error
+    ///     policy), then the view activates it (step 2); when it ends with a fault — its error policy has already put the view
+    ///     in
+    ///     its degraded state — wait for the topic to recover, as this connection sees it (a test connection also sees
+    ///     injected outages), and subscribe again. No provider serving: try again shortly.
+    /// </summary>
+    async Task KeepSubscribed(string topic, string attach, ElementReference element, int rows, CancellationToken ct)
+    {
+        try
+        {
+            while (true)
+            {
+                Tap? tap;
+                try
+                {
+                    tap = await Publisher.SubscribeAsync(Outlet, "market", topic, Market.ForEyes, ct); // (20 a second)
+                }
+                catch (ServiceUnavailableException)
+                {
+                    await SetStatus("market: unavailable — subscribing again shortly");
+                    await Task.Delay(1000, ct);
+                    continue;
+                }
+
+                if (tap is null)
+                {
+                    await SetStatus($"market: {topic} refused");
+                    return;
+                }
+
+                var source = tap.Source; // (a shape's: a topic of its own)
+                using (tap)
+                {
+                    await Js.InvokeVoidAsync(attach, ct, tap.Binding, element, PriceScale(source), rows, ExtraPlaces(source));
+                    var fault = await tap.Completion.WaitAsync(ct);
+                    if (fault is null) return; // closed normally (the view unsubscribed)
+                    await SetStatus($"{topic}: {fault.Code} (last good v{fault.Version}) — subscribing again after recovery");
+                }
+
+                while (Outlet.FaultOf(source) is not null) await Task.Delay(250, ct);
+                await SetStatus("");
+            }
+        }
+        catch (Exception e) when (e is OperationCanceledException or JSDisconnectedException)
+        {
+        }
+    }
+
+    /// <summary>
+    ///     Keeps one tap on a source directly (the alerts): bind (step 1), let the view activate it (step 2); when the tap
+    ///     ends with a fault — its
+    ///     error policy has already put the view in its degraded state — wait for the source to recover, as this connection
+    ///     sees it (a test connection also sees injected outages), and bind a new one.
+    /// </summary>
+    async Task KeepTapped(Source source, string topic, ErrorPolicy policy, string attach, ElementReference element, Lane? lane = null)
+    {
+        var ct = _cts.Token;
+        try
+        {
+            while (true)
+            {
+                using var tap = Outlet.Tap(source, topic, policy, lane: lane);
+                await Js.InvokeVoidAsync(attach, ct, tap.Binding, element);
+                var fault = await tap.Completion.WaitAsync(ct);
+                if (fault is null) return; // closed normally (the view unsubscribed)
+                await SetStatus($"{topic}: {fault.Code} (last good v{fault.Version}) — resubscribing after recovery");
+                while (Outlet.FaultOf(source) is not null) await Task.Delay(250, ct);
+                await SetStatus("");
+            }
+        }
+        catch (Exception e) when (e is OperationCanceledException or JSDisconnectedException)
+        {
+        }
+    }
+
+    /// <summary>
+    ///     The decimal places of the source's price, as its provider declared them in step 1 (its format: the key's
+    ///     <c>price</c> field, or a value's only field) — so the page shows prices as the provider means them, not as it
+    ///     assumes. 2 if it declared none.
+    /// </summary>
+    static int PriceScale(Source source)
+    {
+        var format = source.Format;
+        var field = format?.Layout?.Fields.FirstOrDefault(f => f.Name == "vwap") // (a VWAP book's prices: its rows')
+                    ?? format?.KeyLayout?.Fields.FirstOrDefault(f => f.Name == "price") ?? format?.Layout?.Fields.FirstOrDefault();
+        return field?.Scale ?? 2;
+    }
+
+    /// <summary>
+    ///     The places a VWAP book's prices have past its levels' (its row's <c>vwap</c> over its key's <c>price</c>): shown
+    ///     only where they carry digits. 0 for a book's own prices.
+    /// </summary>
+    static int ExtraPlaces(Source source)
+    {
+        var format = source.Format;
+        var vwap = format?.Layout?.Fields.FirstOrDefault(f => f.Name == "vwap");
+        var price = format?.KeyLayout?.Fields.FirstOrDefault(f => f.Name == "price");
+        return vwap is null || price is null ? 0 : Math.Max(0, vwap.Scale - price.Scale);
+    }
+
+    /// <summary>Both books subscribed as shaped now — a parameter each, <c>book?depth=10&amp;group=1</c> — the last let go.</summary>
+    void SubscribeBooks()
+    {
+        _books?.Cancel();
+        _books = CancellationTokenSource.CreateLinkedTokenSource(_cts.Token);
+        var query = "?" + _shape.Query;
+        _ = KeepSubscribed("book" + query, "bookView.attachBook", _bookEl, _shape.Depth, _books.Token);
+        _ = KeepSubscribed("book-accelerated" + query, "bookView.attachBook", _acceleratedEl, _shape.Depth, _books.Token);
+    }
+
+    void Reshape(BookShape shape)
+    {
+        if (shape == _shape) return;
+        _shape = shape;
+        SubscribeBooks();
+    }
+
+    /// <summary>A grouping's span as a price: ticks of the venue's grid, in units of 0.01.</summary>
+    string Step(int group) => (Math.Max(1, Options.Value.TickSize) * group / 100m).ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+
+    Task SetStatus(string status)
+    {
+        return InvokeAsync(() =>
+        {
+            _status = status;
+            StateHasChanged();
+        });
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        _cts.Cancel();
+        if (!_interactive) return;
+        try
+        {
+            await Js.InvokeVoidAsync("bookView.detach", _bookEl, _acceleratedEl, _markEl, _alertsEl);
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+    }
+
+}

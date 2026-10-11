@@ -1,0 +1,38 @@
+<Project>
+    <!-- What every Tapline package shares. Each project keeps its own PackageId, Description, license and extra tags,
+         and a README.md beside it, which its package carries. All packages are versioned together. -->
+    <PropertyGroup>
+        <Version>0.1.0</Version>
+        <Authors>Mark Hammond</Authors>
+        <Copyright>Copyright © 2026 Mark Hammond</Copyright>
+        <PackageProjectUrl>https://github.com/markhammond/tapline</PackageProjectUrl>
+        <RepositoryUrl>https://github.com/markhammond/tapline</RepositoryUrl>
+        <RepositoryType>git</RepositoryType>
+        <PackageTags>realtime;streaming;fan-out;pubsub;conflation;backpressure;tapline</PackageTags>
+        <PackageIcon>icon.png</PackageIcon>
+        <PackageReadmeFile>README.md</PackageReadmeFile>
+        <PackageReleaseNotes>Initial public release.</PackageReleaseNotes>
+        <IsPackable>true</IsPackable>
+
+        <!-- IntelliSense for consumers. Missing or partial comments aren't errors; a broken cref still is. -->
+        <GenerateDocumentationFile>true</GenerateDocumentationFile>
+        <NoWarn>$(NoWarn);CS1591;CS1573</NoWarn>
+
+        <!-- Debuggable from the package: symbols beside it (.snupkg), sources linked to the commit (Source Link). -->
+        <IncludeSymbols>true</IncludeSymbols>
+        <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+        <PublishRepositoryUrl>true</PublishRepositoryUrl>
+        <EmbedUntrackedSources>true</EmbedUntrackedSources>
+        <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
+
+        <!-- Checks each package as it's made (and, once a version is published, against it as a baseline). -->
+        <EnablePackageValidation>true</EnablePackageValidation>
+    </PropertyGroup>
+    <ItemGroup>
+        <None Include="$(MSBuildThisFileDirectory)../assets/logo-128.png" Pack="true" PackagePath="icon.png" Visible="false"/>
+        <None Include="README.md" Pack="true" PackagePath="/" Condition="Exists('README.md')"/>
+        <!-- The EPL-2.0 packages carry its text; one under another license packs its own (Tapline.Authentication.Opaque). -->
+        <None Include="$(MSBuildThisFileDirectory)../LICENSE" Pack="true" PackagePath="/" Visible="false"
+              Condition="'$(PackageLicenseExpression)' == 'EPL-2.0'"/>
+    </ItemGroup>
+</Project>

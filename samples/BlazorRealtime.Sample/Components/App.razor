@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8"/>
+    <base href="/"/>
+    <title>Tapline.BlazorRealtime sample: Unknown Pleasures</title>
+    <style>body {
+            font: 14px system-ui;
+            margin: 2rem
+        }</style>
+    @* the waveform's theme and caption font, as they were left (waveform.js keeps them in local storage), before the first
+       paint: no flash of another *@
+    <script>try {
+            const t = JSON.parse(localStorage.getItem('tapline.waveform.theme'))?.theme;
+            if (typeof t === 'string') document.documentElement.dataset.waveformTheme = t;
+            const f = localStorage.getItem('tapline.waveform.font');
+            if (f) document.documentElement.dataset.waveformFont = f;
+        } catch {
+        }</script>
+</head>
+<body>
+<Routes/>
+<p id="rate" style="color: #666"></p>
+<script src="@Assets["_framework/blazor.web.js"]" autostart="false"></script>
+<script type="module">
+    import {tapline} from './@Assets["_content/Tapline.AspNetCore/tapline.js"]';
+    import {startBlazor} from './@Assets["_content/Tapline.BlazorRealtime/blazor-realtime.js"]';
+    import {createWaveform} from './@Assets["waveform.js"]';
+    window.waveformView = createWaveform(tapline);                    // the waveform: wwwroot/waveform.js
+    startBlazor(Blazor, tapline);
+    const rate = document.getElementById('rate');                  // the stream as this page receives it (inflated payload bytes)
+    setInterval(() => rate.textContent = `received ${(tapline.transferRate / 1024).toFixed(2)} KiB/s (2 s smoothing)`, 500);
+</script>
+</body>
+</html>

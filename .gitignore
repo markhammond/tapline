@@ -1,0 +1,13 @@
+bin/
+obj/
+node_modules/
+tests/js/fixtures/*
+!tests/js/fixtures/signalr.json
+.idea/
+*.DotSettings.user
+.claude/
+docs/design/
+samples/docs/design/
+parking-lot/
+.DS_Store
+artifacts/

@@ -1,0 +1,97 @@
+@page "/"
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@implements IDisposable
+@inject Practice Practice
+@inject NavigationManager Nav
+
+<Masthead/>
+@if (_people is null)
+{
+    <p class="hint">@(_problem ?? "Asking the practice service who's who…")</p>
+}
+else
+{
+    <nav class="who" aria-label="who's shown">
+        @foreach (var (title, role) in Groups)
+        {
+            <div class="group">
+                <span>@title</span>
+                @foreach (var person in _people.Where(p => p.Role == role))
+                {
+                    <a class="chip @(Shown.Contains(person.Id) ? "on" : "")" href="@Toggled(person.Id)" title="@person.About">@ShortName(person)</a>
+                }
+            </div>
+        }
+    </nav>
+    <p class="hint legend">
+        <span class="withheld">withheld</span> by the policy (its tooltip says what it disclosed) · a row flashes as its
+        visit moves on · <strong>Check in</strong> and <strong>Call in</strong> send a command: the panel says when its
+        change was in front of you
+    </p>
+    @* Each panel a page of its own, in a frame: its own connection, signed in as its person (by passthrough), which the
+       practice service requires — a feed is its person's alone. *@
+    <div class="board">
+        @foreach (var id in Shown)
+        {
+            if (_people.FirstOrDefault(p => p.Id == id) is { } person)
+            {
+                <iframe @key="id" class="panel-frame" src="@($"as/{id}?embed=true")" title="@person.Name's feed"></iframe>
+            }
+        }
+    </div>
+}
+
+@code {
+    /// <summary>Who's shown at first: one check-in, as each sees it — reception, Jane's GP and another, Jane, the manager, the screen.</summary>
+    static readonly int[] Default = [101, 201, 202, 1001, 301, 901];
+
+    static readonly (string Title, string Role)[] Groups =
+        [("Reception", "reception"), ("GPs", "clinician"), ("Manager", "manager"), ("Patients", "patient"), ("Carers", "carer"), ("Screens", "screen")];
+
+    readonly CancellationTokenSource _cts = new();
+    Persona[]? _people;
+    string? _problem;
+
+    /// <summary>Who's shown: ?show=101,201,… (the chips toggle them), else the default.</summary>
+    [SupplyParameterFromQuery(Name = "show")]
+    public string? Show { get; set; }
+
+    List<int> Shown => Show is { Length: > 0 } show
+        ? [.. show.Split(',').Select(s => int.TryParse(s, out var id) ? id : 0).Where(id => id > 0).Distinct()]
+        : [.. Default];
+
+    protected override async Task OnInitializedAsync()
+    {
+        for (var delay = 500;; delay = Math.Min(delay * 2, 4000))
+            try
+            {
+                _people = await Practice.PersonasAsync(_cts.Token);
+                _problem = null;
+                return;
+            }
+            catch (Exception e) when (e is Grpc.Core.RpcException or HttpRequestException)
+            {
+                _problem = $"The practice service isn't answering at {string.Join(" or ", Practice.Addresses.Select(a => a.ToString()))} yet: asking again shortly.";
+                StateHasChanged();
+                try { await Task.Delay(delay, _cts.Token); }
+                catch (OperationCanceledException) { return; }
+            }
+            catch (OperationCanceledException) { return; }
+    }
+
+    string Toggled(int id)
+    {
+        var shown = Shown;
+        if (!shown.Remove(id)) shown.Add(id);
+        return Nav.GetUriWithQueryParameter("show", string.Join(',', shown));
+    }
+
+    static string ShortName(Persona p) => p.Role switch
+    {
+        "clinician" => $"Dr {p.Name.Split(' ')[^1]}",
+        "screen" => p.Site ?? p.Name,
+        _ => p.Name.Split(' ')[0]
+    };
+
+    public void Dispose() => _cts.Cancel();
+}

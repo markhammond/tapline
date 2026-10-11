@@ -1,0 +1,32 @@
+<Solution>
+    <Folder Name="/samples/">
+        <Project Path="samples/ActivityFeed.Contracts/ActivityFeed.Contracts.csproj" />
+        <Project Path="samples/ActivityFeed.Dispatcher/ActivityFeed.Dispatcher.csproj" />
+        <Project Path="samples/ActivityFeed.Headless/ActivityFeed.Headless.csproj" />
+        <Project Path="samples/ActivityFeed.Sample/ActivityFeed.Sample.csproj" />
+        <Project Path="samples/ActivityFeed.Service/ActivityFeed.Service.csproj" />
+        <Project Path="samples/BlazorRealtime.Sample/BlazorRealtime.Sample.csproj" />
+        <Project Path="samples/BlazingOrderBooks.Sample/BlazingOrderBooks.Sample.csproj" />
+        <Project Path="samples/PivotTable.Contracts/PivotTable.Contracts.csproj" />
+        <Project Path="samples/PivotTable.Headless/PivotTable.Headless.csproj" />
+        <Project Path="samples/PivotTable.Sample/PivotTable.Sample.csproj" />
+        <Project Path="samples/SignIn.Sample/SignIn.Sample.csproj" />
+    </Folder>
+    <Folder Name="/src/">
+        <Project Path="src/Tapline/Tapline.csproj" />
+        <Project Path="src/Tapline.AspNetCore/Tapline.AspNetCore.csproj" />
+        <Project Path="src/Tapline.Authentication/Tapline.Authentication.csproj" />
+        <Project Path="src/Tapline.Authentication.Opaque/Tapline.Authentication.Opaque.csproj" />
+        <Project Path="src/Tapline.Client/Tapline.Client.csproj" />
+        <Project Path="src/Tapline.MagicOnion/Tapline.MagicOnion.csproj" />
+        <Project Path="src/Tapline.MagicOnion.Providers/Tapline.MagicOnion.Providers.csproj" />
+        <Project Path="src/Tapline.MagicOnion.Server/Tapline.MagicOnion.Server.csproj" />
+        <Project Path="src/Tapline.Wasm/Tapline.Wasm.csproj" />
+        <Project Path="src\Tapline.BlazorRealtime\Tapline.BlazorRealtime.csproj" />
+    </Folder>
+    <Folder Name="/tests/">
+        <Project Path="tests/Opaque.Tests/Opaque.Tests.csproj" />
+        <Project Path="tests/PivotTable.Tests/PivotTable.Tests.csproj" />
+        <Project Path="tests/Tapline.Tests/Tapline.Tests.csproj" />
+    </Folder>
+</Solution>
