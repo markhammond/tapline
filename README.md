@@ -6,11 +6,7 @@ Targets .NET 10.
 
 **Tapline** is a transport-agnostic, zero-allocation real-time fan-out engine for .NET. It unifies shared state distribution and ordered messaging into a cohesive client layer, maximizing the throughput of your edge infrastructure while maintaining a (relatively) simple application integration model.
 
-<p align="center">
-  <a href="./samples/BlazorRealtime.Sample">
-    <img src="./assets/waveform.jpeg" width="85%" alt="Joy Division x Resonance">
-  </a>
-</p>
+![Joy Division x Resonance](./assets/waveform.jpeg)
 
 Experience it for yourself:
 ```bash
