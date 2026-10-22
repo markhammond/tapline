@@ -2,6 +2,7 @@ using System.Text;
 using Tapline;
 using Tapline.Authentication;
 using Tapline.Authentication.Opaque;
+using Tapline.Client.Opaque;
 using Tapline.Client;
 
 /// <summary>Tapline.Authentication.Opaque: password sign-in by OPAQUE through the router, the password never sent.</summary>

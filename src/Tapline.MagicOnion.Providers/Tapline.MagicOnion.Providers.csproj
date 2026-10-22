@@ -1,14 +1,10 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
-        <PackageLicenseExpression>Elastic-2.0</PackageLicenseExpression>
         <TargetFramework>net10.0</TargetFramework>
         <Nullable>enable</Nullable>
         <ImplicitUsings>enable</ImplicitUsings>
         <LangVersion>latest</LangVersion>
         <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
-        <PackageId>Tapline.MagicOnion.Providers</PackageId>
-        <PackageTags>$(PackageTags);grpc;magiconion</PackageTags>
-        <Description>A Tapline data provider in another process, over MagicOnion. The router's side: a provider it reaches at an address, its step 1s answered there and the topics it accepts onto mirrored into the router's own. The provider's: its own router, serving the routers that reach it.</Description>
     </PropertyGroup>
     <ItemGroup>
         <FrameworkReference Include="Microsoft.AspNetCore.App"/>

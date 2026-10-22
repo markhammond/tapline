@@ -1,17 +1,13 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
-        <PackageLicenseExpression>Elastic-2.0</PackageLicenseExpression>
         <TargetFramework>net10.0</TargetFramework>
         <Nullable>enable</Nullable>
         <ImplicitUsings>enable</ImplicitUsings>
         <LangVersion>latest</LangVersion>
         <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
-        <PackageId>Tapline.Wasm</PackageId>
-        <PackageTags>$(PackageTags);webassembly;wasm;wasmtime;sandbox</PackageTags>
-        <Description>WebAssembly custom functions for Tapline (Wasmtime): a data provider's folds, finalizers and stale-data functions as sandboxed modules, fuel- and memory-bounded on the router; a stale-data function shippable to browsers too.</Description>
     </PropertyGroup>
     <ItemGroup>
         <ProjectReference Include="../Tapline/Tapline.csproj"/>
-        <PackageReference Include="Wasmtime" Version="48.0.2"/>
+        <PackageReference Include="Wasmtime" Version="$(WasmtimeVersion)"/>
     </ItemGroup>
 </Project>

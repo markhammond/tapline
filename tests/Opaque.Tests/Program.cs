@@ -1,13 +1,13 @@
 // Copyright 2026 Mark Hammond. Licensed under the Apache License, Version 2.0 (see src/Tapline.Authentication.Opaque/LICENSE).
 //
-// Tapline.Authentication.Opaque's host (OpaqueCrypto: opaque.wasm in Wasmtime): registration and login with both sides
+// Tapline.Client.Opaque's host (OpaqueCrypto: opaque.wasm in Wasmtime): registration and login with both sides
 // here, every refusal, logins at once on many threads, passwords normalized — and the JavaScript host (Node, running the
 // page's opaque.mjs (the package's wwwroot)) as the client of a server here, the deployment's shape. `dotnet run --project tests/Opaque.Tests`.
 
 using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
-using Tapline.Authentication.Opaque;
+using Tapline.Client.Opaque;
 
 using var opaque = OpaqueCrypto.Load();
 var setup = opaque.ServerSetup();

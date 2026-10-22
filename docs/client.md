@@ -79,8 +79,8 @@ backlog without the throughput cap. It is ignored elsewhere (on macOS the option
 ```html
 <script src="@Assets["_framework/blazor.web.js"]" autostart="false"></script>
 <script type="module">
-  import { tapline } from './@Assets["_content/Tapline.AspNetCore/tapline.js"]';
-  import { startBlazor } from './@Assets["_content/BlazorRealtime/blazor-realtime.js"]';
+  import { tapline } from './@Assets["_content/Tapline/tapline.js"]';
+  import { startBlazor } from './@Assets["_content/Tapline/blazor-realtime.js"]';
   // tapline.subscribe(binding, (state, id) => ..., (error, lastState, id) => ..., (message, id, { seq, gap, mailbox }) => ...)
   // — binding = { tapId, topic, endpoint, service, nodeId, partition, stale } or a tap id; handlers first, then Tap.Activate
   // (endpoint ignored on a circuit); state is a Table replica (rows: Map → {key, row} bytes; .degraded), a Uint8Array,

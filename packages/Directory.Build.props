@@ -1,0 +1,28 @@
+<Project>
+    <!-- One project a package: it builds nothing of its own, but bundles the assemblies of src/ it references with
+         PrivateAssets="all" (their DLLs, XML docs and symbols; see Directory.Build.targets), and depends on the other
+         packages it references plainly. A bundled assembly's own dependencies aren't carried over: its package declares
+         them again (the same versions, from src/Directory.Build.props). -->
+    <Import Project="../src/Directory.Build.props"/>
+
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <IsPackable>true</IsPackable>
+        <EnableDefaultItems>false</EnableDefaultItems>
+        <GenerateDocumentationFile>false</GenerateDocumentationFile>
+        <PackageProjectUrl>https://github.com/markhammond/tapline</PackageProjectUrl>
+        <PackageTags>realtime;streaming;fan-out;pubsub;conflation;backpressure;tapline</PackageTags>
+        <PackageIcon>icon.png</PackageIcon>
+        <PackageReadmeFile>README.md</PackageReadmeFile>
+        <PackageReleaseNotes>Initial public release.</PackageReleaseNotes>
+        <IncludeSymbols>true</IncludeSymbols>
+        <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+
+        <!-- Checks each package as it's made (and, once a version is published, against it as a baseline). -->
+        <EnablePackageValidation>true</EnablePackageValidation>
+    </PropertyGroup>
+    <ItemGroup>
+        <None Include="$(MSBuildThisFileDirectory)../assets/logo-128.png" Pack="true" PackagePath="icon.png" Visible="false"/>
+        <None Include="README.md" Pack="true" PackagePath="/"/>
+    </ItemGroup>
+</Project>

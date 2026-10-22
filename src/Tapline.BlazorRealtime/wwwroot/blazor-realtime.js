@@ -3,8 +3,8 @@
 //
 //   <script src="_framework/blazor.web.js" autostart="false"></script>
 //   <script type="module">
-//     import { tapline } from './_content/Tapline.AspNetCore/tapline.js';
-//     import { startBlazor } from './_content/BlazorRealtime/blazor-realtime.js';
+//     import { tapline } from './_content/Tapline/tapline.js';
+//     import { startBlazor } from './_content/Tapline/blazor-realtime.js';
 //     startBlazor(Blazor, tapline);
 //   </script>
 

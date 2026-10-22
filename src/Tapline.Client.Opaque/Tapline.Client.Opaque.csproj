@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <!-- Copyright 2026 Mark Hammond. Licensed under the Apache License, Version 2.0 (see ../Tapline.Authentication.Opaque/LICENSE). -->
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <LangVersion>latest</LangVersion>
+        <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    </PropertyGroup>
+    <ItemGroup>
+        <ProjectReference Include="../Tapline.Client/Tapline.Client.csproj"/>
+        <PackageReference Include="Wasmtime" Version="$(WasmtimeVersion)"/>
+        <!-- (the module the browser runs too: built from ../Tapline.Authentication.Opaque/wasm, served from its wwwroot) -->
+        <EmbeddedResource Include="../Tapline.Authentication.Opaque/wwwroot/opaque.wasm" LogicalName="opaque.wasm"/>
+        <InternalsVisibleTo Include="Tapline.Tests"/>
+    </ItemGroup>
+</Project>

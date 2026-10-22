@@ -8,7 +8,7 @@ using System.Text;
 using Wasmtime;
 using WasmModule = Wasmtime.Module;
 
-namespace Tapline.Authentication.Opaque;
+namespace Tapline.Client.Opaque;
 
 /// <summary>Why a call was refused (see <see cref="OpaqueException" />).</summary>
 public enum OpaqueStatus

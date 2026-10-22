@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Hosting.Server.Features;
 using Tapline;
 using Tapline.Authentication;
 using Tapline.Authentication.Opaque;
+using Tapline.Client.Opaque;
 
 namespace SignIn.Sample;
 

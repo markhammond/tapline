@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <PackageId>Tapline.Client</PackageId>
+        <PackageLicenseExpression>Elastic-2.0</PackageLicenseExpression>
+        <PackageTags>$(PackageTags);client;grpc;magiconion</PackageTags>
+        <Description>Tapline's core and its .NET client: shared state fanned out to many clients, prioritised, conflated and ack-clocked, with ordered messaging beside it; the client's replicas of what it subscribed to, acknowledged frame by frame, resynced and resumed; and MagicOnion (gRPC) to carry it.</Description>
+    </PropertyGroup>
+    <ItemGroup>
+        <ProjectReference Include="../../src/Tapline/Tapline.csproj" PrivateAssets="all"/>
+        <ProjectReference Include="../../src/Tapline.Client/Tapline.Client.csproj" PrivateAssets="all"/>
+        <ProjectReference Include="../../src/Tapline.MagicOnion/Tapline.MagicOnion.csproj" PrivateAssets="all"/>
+        <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks.Abstractions" Version="$(HealthChecksVersion)"/>
+        <PackageReference Include="MagicOnion.Client" Version="$(MagicOnionVersion)"/>
+        <PackageReference Include="MessagePack" Version="$(MessagePackVersion)"/>
+    </ItemGroup>
+</Project>

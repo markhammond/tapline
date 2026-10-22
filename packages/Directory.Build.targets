@@ -1,0 +1,70 @@
+<Project>
+    <PropertyGroup>
+        <TargetsForTfmSpecificBuildOutput>$(TargetsForTfmSpecificBuildOutput);TaplineBundleBuildOutput</TargetsForTfmSpecificBuildOutput>
+        <TargetsForTfmSpecificDebugSymbolsInPackage>$(TargetsForTfmSpecificDebugSymbolsInPackage);TaplineBundleSymbols</TargetsForTfmSpecificDebugSymbolsInPackage>
+    </PropertyGroup>
+
+    <!-- The licence's text: the Elastic License 2.0's (LICENSE), and Apache-2.0's where the package has any
+         (Tapline.Authentication.Opaque's): LICENSE alone, or beside the Elastic License's, LICENSE-APACHE. -->
+    <PropertyGroup>
+        <_TaplineElastic>$(PackageLicenseExpression.Contains('Elastic-2.0'))</_TaplineElastic>
+        <_TaplineApache>$(PackageLicenseExpression.Contains('Apache-2.0'))</_TaplineApache>
+        <_TaplineApacheText>$(MSBuildThisFileDirectory)../src/Tapline.Authentication.Opaque/LICENSE</_TaplineApacheText>
+        <_TaplineApacheBeside>$(BaseIntermediateOutputPath)LICENSE-APACHE</_TaplineApacheBeside>
+    </PropertyGroup>
+    <ItemGroup>
+        <None Include="$(MSBuildThisFileDirectory)../LICENSE" Pack="true" PackagePath="/" Visible="false" Condition="$(_TaplineElastic)"/>
+        <None Include="$(_TaplineApacheText)" Pack="true" PackagePath="/" Visible="false" Condition="$(_TaplineApache) and !$(_TaplineElastic)"/>
+        <None Include="$(_TaplineApacheBeside)" Pack="true" PackagePath="/" Visible="false" Condition="$(_TaplineApache) and $(_TaplineElastic)"/>
+    </ItemGroup>
+    <Target Name="TaplineApacheBeside" BeforeTargets="GenerateNuspec" Condition="$(_TaplineApache) and $(_TaplineElastic)">
+        <Copy SourceFiles="$(_TaplineApacheText)" DestinationFiles="$(_TaplineApacheBeside)" SkipUnchangedFiles="true"/>
+    </Target>
+
+    <!-- A package's browser files are its own static web assets (Content linked into wwwroot), at the paths the projects
+         they come from serve them; the projects' own copies, referenced, aren't taken as well (the same paths twice). -->
+    <Target Name="TaplineOwnStaticWebAssetsOnly" AfterTargets="ResolveReferencedProjectsStaticWebAssetsConfiguration">
+        <ItemGroup>
+            <StaticWebAssetProjectConfiguration Remove="@(StaticWebAssetProjectConfiguration)"/>
+        </ItemGroup>
+    </Target>
+
+    <!-- The assemblies bundled: the projects referenced with PrivateAssets="all", each asked for its output (no build:
+         packing with NoBuild too), its XML docs and symbols beside it. -->
+    <Target Name="TaplineBundled">
+        <ItemGroup>
+            <_TaplineBundledProject Include="@(ProjectReference->'%(FullPath)')" Condition="'%(ProjectReference.PrivateAssets)' == 'all'"/>
+        </ItemGroup>
+        <Error Condition="'@(_TaplineBundledProject)' == ''" Text="$(MSBuildProjectName) bundles no assembly."/>
+        <MSBuild Projects="@(_TaplineBundledProject)" Targets="GetTargetPath" Properties="Configuration=$(Configuration)"
+                 RemoveProperties="TargetFramework;RuntimeIdentifier;NoBuild">
+            <Output TaskParameter="TargetOutputs" ItemName="_TaplineBundledDll"/>
+        </MSBuild>
+        <ItemGroup>
+            <_TaplineBundledCandidate Include="@(_TaplineBundledDll->'%(FullPath)');@(_TaplineBundledDll->'%(RootDir)%(Directory)%(Filename).xml');@(_TaplineBundledDll->'%(RootDir)%(Directory)%(Filename).pdb')"/>
+            <TaplineBundledFile Include="@(_TaplineBundledCandidate)" Condition="Exists('%(FullPath)')"/>
+        </ItemGroup>
+        <Error Condition="'@(TaplineBundledFile->WithMetadataValue('Extension', '.dll')->Count())' != '@(_TaplineBundledProject->Count())'"
+               Text="$(MSBuildProjectName): @(_TaplineBundledProject->Count()) projects bundled, but not each one's DLL built (@(_TaplineBundledDll))."/>
+    </Target>
+
+    <!-- lib/: the bundled DLLs and their XML docs, never this project's own (empty) assembly. -->
+    <Target Name="TaplineBundleBuildOutput" DependsOnTargets="TaplineBundled">
+        <ItemGroup>
+            <BuiltProjectOutputGroupOutput Remove="@(BuiltProjectOutputGroupOutput)"/>
+            <DocumentationProjectOutputGroupOutput Remove="@(DocumentationProjectOutputGroupOutput)"/>
+            <BuildOutputInPackage Include="@(TaplineBundledFile)" Condition="'%(Extension)' == '.dll' or '%(Extension)' == '.xml'"
+                                  TargetFramework="$(TargetFramework)"/>
+        </ItemGroup>
+        <Error Condition="'@(BuildOutputInPackage->WithMetadataValue('Extension', '.dll'))' == ''" Text="$(MSBuildProjectName): no DLL to pack."/>
+    </Target>
+
+    <!-- The .snupkg: the bundled assemblies' symbols. -->
+    <Target Name="TaplineBundleSymbols" DependsOnTargets="TaplineBundled">
+        <ItemGroup>
+            <DebugSymbolsProjectOutputGroupOutput Remove="@(DebugSymbolsProjectOutputGroupOutput)"/>
+            <TfmSpecificDebugSymbolsFile Include="@(TaplineBundledFile)" Condition="'%(Extension)' == '.pdb'"
+                                         TargetFramework="$(TargetFramework)"/>
+        </ItemGroup>
+    </Target>
+</Project>

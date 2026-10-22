@@ -1322,7 +1322,7 @@ same user (a later one sees the earlier's: `ModuleStep.Previous`); its messages 
 the identity's module is the stages' names joined by `+`, with all their claims. Your own module is a class with a
 name and a `StepAsync`: an LDAP bind, a code sent by mail. `PassthroughModule` is passthrough as a module.
 
-**Passwords, by OPAQUE** — Tapline.Authentication.Opaque. OPAQUE ([RFC 9807](https://www.rfc-editor.org/rfc/rfc9807.html))
+**Passwords, by OPAQUE** — Tapline.Wasm (the server's side) and Tapline.Client.Opaque (a .NET client's). OPAQUE ([RFC 9807](https://www.rfc-editor.org/rfc/rfc9807.html))
 is a password login in which the server never learns the password: the client stretches it (Argon2id, 64 MiB, 3 passes
 — some hundreds of milliseconds, on the client alone) and the router relays KE1, KE2 and KE3. `OpaqueModule`
 (`opaque`) signs in; `OpaqueRegistrationModule` (`opaque-register`) sets a password — for the user signed in (changing
@@ -1337,24 +1337,25 @@ var opaque = OpaqueCrypto.Load(); // once: compiling the module takes a moment
 service.Modules.Add(new OpaqueModule(opaque, store));
 service.Modules.Add(new OpaqueRegistrationModule(opaque, store) { Enroll = (token, step, ct) => invitations.RedeemAsync(token, ct) });
 
-// a headless client (Tapline.Client)
+// a .NET client (Tapline.Client.Opaque)
 var result = await client.SignInWithPasswordAsync(opaque, "north", "alice", password);
 ```
 
 In a page, the password must stay in the page: a plain form whose script signs in — never an interactive Blazor input,
-whose values go to the server over its circuit — with the package's scripts, served as static web assets:
+whose values go to the server over its circuit — with Tapline.Wasm's scripts, served as static web assets:
 
 ```js
-import {signInWithPassword, registerPassword} from './_content/Tapline.Authentication.Opaque/tapline-opaque.mjs';
+import {signInWithPassword, registerPassword} from './_content/Tapline.Wasm/tapline-opaque.mjs';
 const result = await signInWithPassword(tapline, 'north', userId, password); // { accepted, identity, reason, … }
 ```
 
 Serve them under a strict Content-Security-Policy: a host that served other code could still read what's typed.
 opaque-ke ([github.com/facebook/opaque-ke](https://github.com/facebook/opaque-ke)) was reviewed by NCC Group in 2021, at
-v0.5.0, for WhatsApp's encrypted backups; that review does not cover opaque-ke 4.0.1, which the package uses, nor the
-package's own code, which has not been reviewed. Its module is built reproducibly from
-`src/Tapline.Authentication.Opaque/wasm` (Rust, `build.sh`); the package is Apache-2.0, provided strictly on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-KIND, either express or implied, and lists the crates built into its module in `THIRD-PARTY-NOTICES.md`.
+v0.5.0, for WhatsApp's encrypted backups; that review does not cover opaque-ke 4.0.1, which Tapline uses, nor Tapline's
+own OPAQUE code, which has not been reviewed. The module is built reproducibly from
+`src/Tapline.Authentication.Opaque/wasm` (Rust, `build.sh`). That code is Apache-2.0, provided strictly on an "AS IS"
+BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied; the crates built into the module are
+listed in `THIRD-PARTY-NOTICES.md`.
 
 ## Reference: tables, folds and ingest
 

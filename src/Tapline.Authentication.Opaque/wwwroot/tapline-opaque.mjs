@@ -2,10 +2,10 @@
 //
 // Password sign-in by OPAQUE for tapline.js (Tapline.Authentication.Opaque's modules `opaque` and `opaque-register`):
 // the password stays in this page — stretched here (Argon2id), never sent; the router relays KE1, KE2 and KE3. Served
-// with the package, beside opaque.mjs and opaque.wasm (_content/Tapline.Authentication.Opaque/). Keep the password in a
+// with Tapline.Wasm, beside opaque.mjs and opaque.wasm (_content/Tapline.Wasm/). Keep the password in a
 // plain form whose script calls these — never an interactive Blazor input, whose values go to the server.
 //
-//   import {signInWithPassword, registerPassword} from './_content/Tapline.Authentication.Opaque/tapline-opaque.mjs';
+//   import {signInWithPassword, registerPassword} from './_content/Tapline.Wasm/tapline-opaque.mjs';
 //   const result = await signInWithPassword(tapline, 'north', userId, password);   // { accepted, identity, reason, … }
 
 import {loadOpaque} from './opaque.mjs';

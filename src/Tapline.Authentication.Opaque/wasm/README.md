@@ -1,24 +1,25 @@
-# Tapline.Authentication.Opaque — its WebAssembly module
+# OPAQUE — the WebAssembly module
 
 OPAQUE ([RFC 9807](https://www.rfc-editor.org/rfc/rfc9807.html)) — a password login in which the server never learns
 the password — as one WebAssembly module for the browser and for .NET: [opaque-ke](https://github.com/facebook/opaque-ke)
 4.0.1, built for `wasm32-unknown-unknown` behind a plain C ABI (no wasm-bindgen), with a host for each side: JavaScript
 (a page, or Node) and .NET (Wasmtime).
-It is what Tapline.Authentication.Opaque runs — its OPAQUE modules, its headless client, its browser scripts — and
-this folder is its source: the password stays in the client (a plain HTML page's script, or a headless client), and the
-router relays opaque bytes.
+It is what Tapline's password sign-in runs — Tapline.Authentication.Opaque's modules and browser scripts (in the
+Tapline.Wasm package), Tapline.Client.Opaque's .NET client — and this folder is its source: the password stays in the
+client (a plain HTML page's script, or a .NET client), and the router relays opaque bytes.
 
 **Disclaimer.** opaque-ke was reviewed by NCC Group in 2021, at v0.5.0 (its fixes in v1.2.0), for WhatsApp's
-encrypted backups. That review does not cover opaque-ke 4.0.1, which this package uses, nor this package's own code,
+encrypted backups. That review does not cover opaque-ke 4.0.1, which Tapline uses, nor Tapline's own OPAQUE code,
 which has not been reviewed.
 
 ## What's here
 
 | File | |
 |---|---|
-| `src/lib.rs`, `Cargo.toml`, `Cargo.lock`, `build.sh` | The module's source, and its build, which writes the package's `../wwwroot/opaque.wasm`. |
+| `src/lib.rs`, `Cargo.toml`, `Cargo.lock`, `build.sh` | The module's source, and its build, which writes `../wwwroot/opaque.wasm`. |
 | `test.mjs` | Registration and login end to end, and every refusal: `node src/Tapline.Authentication.Opaque/wasm/test.mjs` (Node's built-ins only). |
-| `..` | The package: `wwwroot/opaque.wasm` (SHA-256 below), `wwwroot/opaque.mjs` (its wrapper, for a browser or Node: `loadOpaque(bytes)`, then the eight steps below), `OpaqueCrypto` (the .NET host, Wasmtime), and the modules. |
+| `..` | Tapline.Authentication.Opaque: `wwwroot/opaque.wasm` (SHA-256 below), `wwwroot/opaque.mjs` (its wrapper, for a browser or Node: `loadOpaque(bytes)`, then the eight steps below), and the modules. |
+| `../../Tapline.Client.Opaque` | `OpaqueCrypto` (the .NET host, Wasmtime, the module built in), and the .NET client's sign-in. |
 | `../../../tests/Opaque.Tests` | The .NET host's tests, and Node running `opaque.mjs` as the client of a server there: `dotnet run --project tests/Opaque.Tests`. |
 | `../LICENSE`, `../THIRD-PARTY-NOTICES.md` | The license (Apache-2.0), and the crates built into the module. |
 
@@ -70,7 +71,7 @@ copied from it. Rate limits and lockouts are the server's to keep.
 
 ## In .NET
 
-`OpaqueCrypto.Load()` loads the module built into Tapline.Authentication.Opaque; its methods are the steps above, with
+`OpaqueCrypto.Load()` loads the module built into Tapline.Client.Opaque; its methods are the steps above, with
 byte arrays in and out (`OpaqueCrypto.Utf8(text)` for a password or a credential id: normalized, UTF-8). Each call runs in a Wasmtime store
 and instance of its own, so calls are thread-safe and nothing of one login is there for the next; its memory is bounded
 — the server's steps at 16 MiB, the client's, which stretch the password, at 128 MiB. A refusal is an `OpaqueException`

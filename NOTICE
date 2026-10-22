@@ -8,12 +8,13 @@ Tapline is licensed under the Elastic License 2.0 (LICENSE), except as below.
 Password sign-in by OPAQUE is licensed under the Apache License 2.0
 (src/Tapline.Authentication.Opaque/LICENSE):
 
+    src/Tapline.Client.Opaque/                 the .NET client's sign-in
     src/Tapline.Authentication.Opaque/         the server's module, and its
         wasm/                                  WebAssembly module's source,
                                                built on opaque-ke
 
-and so the package Tapline.Authentication.Opaque. The crates built into the
-WebAssembly module, and their licences, are listed in
+and so the package Tapline.Client.Opaque, and those parts of Tapline.Wasm. The
+crates built into the WebAssembly module, and their licences, are listed in
 src/Tapline.Authentication.Opaque/THIRD-PARTY-NOTICES.md.
 
 --------------------------------------------------------------------------------

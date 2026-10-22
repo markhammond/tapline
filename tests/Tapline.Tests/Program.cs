@@ -186,7 +186,7 @@ var tests = new (string Name, Func<Task> Run)[]
     ("Transport: end-to-end through HubConnectionContext + BlazorPack with live updates", T.EndToEnd),
     ("DI: AddBlazorRealtime wraps blazorpack and the lifetime manager; the circuit hub's SignalR timeouts (10 s, 3 s pings) unless the app set its own",
         T.DependencyInjection),
-    ("Packages: core references the BCL alone, Tapline.Client core, the BCL and the health checks' abstractions (its router check), Tapline.Authentication core and the BCL, Tapline.Authentication.Opaque those, Tapline.Client and Wasmtime, Tapline.AspNetCore nothing of Blazor (Components, SignalR, JS interop, Tapline.BlazorRealtime); internals shared with the tests alone — no package with another",
+    ("Packages: core references the BCL alone, Tapline.Client core, the BCL and the health checks' abstractions (its router check), Tapline.Client.Opaque core, Tapline.Client and Wasmtime, Tapline.Authentication core and the BCL, Tapline.Authentication.Opaque those and Tapline.Client.Opaque, Tapline.AspNetCore nothing of Blazor (Components, SignalR, JS interop, Tapline.BlazorRealtime); the client's packages (Tapline.Client, Tapline.Client.Opaque) nothing of the server's or of ASP.NET Core; internals shared with the tests alone — no assembly with another",
         T.PackageSplit),
     ("Tapline.Client: a table, a value, a message topic and a mailbox replicated through an outlet under churn — every record verified (one snapshot, then deltas), every frame acknowledged; subscribed before bound, activated once bound; a delta that doesn't check out resynced once, healed by a snapshot; a reconnect resumed from the last frame received (no snapshot, nothing lost); a rendezvous after the state it named; dropped: closed",
         T.ClientReplicas),
@@ -6287,15 +6287,38 @@ internal static partial class T
         Assert(authentication.All(n =>
                 n is "Tapline" or "System" or "netstandard" or "mscorlib" || n.StartsWith("System.", StringComparison.Ordinal)),
             $"Tapline.Authentication references core and the BCL alone: {string.Join(", ", authentication)}");
+        var clientOpaque = References(typeof(Tapline.Client.Opaque.OpaqueCrypto));
+        Assert(clientOpaque.All(n =>
+                n is "Tapline" or "Tapline.Client" or "Wasmtime.Dotnet" or "Wasmtime" or "System" or "netstandard"
+                    or "mscorlib" || n.StartsWith("System.", StringComparison.Ordinal)),
+            $"Tapline.Client.Opaque references core, Tapline.Client, Wasmtime and the BCL alone: {string.Join(", ", clientOpaque)}");
         var opaque = References(typeof(Tapline.Authentication.Opaque.OpaqueModule));
         Assert(opaque.All(n =>
-                n is "Tapline" or "Tapline.Authentication" or "Tapline.Client" or "Wasmtime.Dotnet" or "Wasmtime" or "System"
-                    or "netstandard" or "mscorlib" || n.StartsWith("System.", StringComparison.Ordinal)),
-            $"Tapline.Authentication.Opaque references Tapline.Authentication, Tapline.Client, Wasmtime and the BCL alone: {string.Join(", ", opaque)}");
+                n is "Tapline" or "Tapline.Authentication" or "Tapline.Client.Opaque" or "System" or "netstandard"
+                    or "mscorlib" || n.StartsWith("System.", StringComparison.Ordinal)),
+            $"Tapline.Authentication.Opaque references core, Tapline.Authentication, Tapline.Client.Opaque and the BCL alone: {string.Join(", ", opaque)}");
+        // The client's packages (Tapline.Client: core, the client, MagicOnion's client side; Tapline.Client.Opaque) take
+        // nothing of the server's (Tapline, Tapline.Wasm) nor of ASP.NET Core.
+        string[] server =
+        [
+            "Tapline.AspNetCore", "Tapline.BlazorRealtime", "Tapline.Authentication", "Tapline.MagicOnion.Server",
+            "Tapline.MagicOnion.Providers", "Tapline.Wasm", "Tapline.Authentication.Opaque"
+        ];
+        foreach (var type in new[]
+                 {
+                     typeof(Publisher), typeof(TaplineClient), typeof(Tapline.MagicOnion.TaplineStreamConnection),
+                     typeof(Tapline.Client.Opaque.OpaqueCrypto)
+                 })
+        {
+            var taken = References(type)
+                .Where(n => server.Contains(n) || n.StartsWith("Microsoft.AspNetCore", StringComparison.Ordinal)).ToArray();
+            Assert(taken.Length == 0,
+                $"{type.Assembly.GetName().Name} takes nothing of the server's packages: {string.Join(", ", taken)}");
+        }
         foreach (var package in new[]
                  {
                      typeof(Publisher), typeof(TaplineOptions), typeof(BlazorRealtimeOptions), typeof(TaplineClient),
-                     typeof(Tapline.Authentication.AuthenticationService),
+                     typeof(Tapline.Authentication.AuthenticationService), typeof(Tapline.Client.Opaque.OpaqueCrypto),
                      typeof(Tapline.Authentication.Opaque.OpaqueModule)
                  })
         {
