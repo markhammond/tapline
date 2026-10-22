@@ -1,5 +1,7 @@
 # Tapline — Real-time, last-mile data distribution for .NET
 
+[![NuGet](https://img.shields.io/nuget/v/Tapline.svg)](https://www.nuget.org/packages/Tapline) [![ci](https://github.com/markhammond/tapline/actions/workflows/ci.yml/badge.svg)](https://github.com/markhammond/tapline/actions/workflows/ci.yml)
+
 Targets .NET 10.
 
 **Tapline** is a transport-agnostic, zero-allocation real-time fan-out engine for .NET. It unifies shared state distribution and ordered messaging into a cohesive client layer, maximizing the throughput of your edge infrastructure while maintaining a (relatively) simple application integration model.
@@ -140,21 +142,18 @@ A service of many subscribers goes through a data provider, which decides who ma
 
 ## Batteries included
 
-Take only the packages your transport needs:
+Four packages. A server takes `Tapline`, a .NET client `Tapline.Client`; the two that bring Wasmtime are taken only as
+needed: `Tapline.Wasm` by a server, `Tapline.Client.Opaque` by a client.
 
 | Package | For |
 |---|---|
-| `Tapline` | the core: sources (values and tables, with folds), message topics and mailboxes, outlets and the router (`Publisher`) |
-| `Tapline.Wasm` | folds, their finalizers and stale-data functions as WebAssembly modules, sandboxed and fuel-bounded |
-| `Tapline.AspNetCore` | the router hosted in ASP.NET Core: its identity, heartbeats and health, out-of-band fetches, the viewer, and the browser client (`tapline.js`) |
-| `Tapline.BlazorRealtime` | Tapline over a Blazor Server circuit's own connection: no second transport, Blazor's messages never reordered |
-| `Tapline.Client` | the .NET client, over whatever carries its frames |
-| `Tapline.MagicOnion`, `Tapline.MagicOnion.Server` | Tapline.Client over MagicOnion (gRPC): the client's side and the router's |
-| `Tapline.MagicOnion.Providers` | a data provider in a process of its own |
-| `Tapline.Authentication` | sign-in by modules: passkeys, passthrough, your own |
-| `Tapline.Authentication.Opaque` | password sign-in by OPAQUE (RFC 9807) |
+| `Tapline` | the router hosted in ASP.NET Core, over a Blazor Server circuit's own connection or MagicOnion (gRPC); data providers in a process of their own; sign-in by modules (passkeys, passthrough, your own); the viewer and the browser client (`tapline.js`) |
+| `Tapline.Client` | the core (sources, message topics and mailboxes, outlets and the router, `Publisher`) and the .NET client, over MagicOnion or whatever carries its frames |
+| `Tapline.Wasm` | folds, their finalizers and stale-data functions as WebAssembly modules, sandboxed and fuel-bounded; password sign-in by OPAQUE (RFC 9807) |
+| `Tapline.Client.Opaque` | a .NET client's password sign-in by OPAQUE |
 
-What each contains: [Packages](docs/architecture.md#packages).
+`Tapline` depends on `Tapline.Client`, and `Tapline.Wasm` on `Tapline` and `Tapline.Client.Opaque`. What each
+contains: [Packages](docs/architecture.md#packages).
 
 ## Vocabulary
 
@@ -183,7 +182,8 @@ What each contains: [Packages](docs/architecture.md#packages).
 
 ## License
 
-Tapline is under the [Eclipse Public License 2.0](LICENSE), except `Tapline.Authentication.Opaque`, which is
-Apache-2.0 (the crates built into its WebAssembly module are listed in its
+Tapline is under the [Eclipse Public License 2.0](LICENSE), except password sign-in by OPAQUE
+(`Tapline.Client.Opaque` and `Tapline.Authentication.Opaque`), which is Apache-2.0 (the crates built into its
+WebAssembly module are listed in its
 [THIRD-PARTY-NOTICES.md](src/Tapline.Authentication.Opaque/THIRD-PARTY-NOTICES.md)), and the
 [BlazorRealtime](samples/BlazorRealtime.Sample/LICENSE.md) sample, which is CC BY-NC-SA 4.0.

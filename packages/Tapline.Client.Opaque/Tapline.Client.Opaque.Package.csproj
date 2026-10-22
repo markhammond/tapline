@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <!-- Copyright 2026 Mark Hammond. Licensed under the Apache License, Version 2.0 (see ../../src/Tapline.Authentication.Opaque/LICENSE). -->
+    <PropertyGroup>
+        <PackageId>Tapline.Client.Opaque</PackageId>
+        <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+        <PackageTags>$(PackageTags);client;authentication;opaque;rfc9807;password;pake;webassembly</PackageTags>
+        <Description>A .NET client's password sign-in to Tapline by OPAQUE (RFC 9807), the password never leaving it: opaque-ke 4 (ristretto255, Argon2id) as WebAssembly, run by Wasmtime — the module Tapline.Wasm's sign-in serves the browser.</Description>
+    </PropertyGroup>
+    <ItemGroup>
+        <ProjectReference Include="../../src/Tapline.Client.Opaque/Tapline.Client.Opaque.csproj" PrivateAssets="all"/>
+        <ProjectReference Include="../Tapline.Client/Tapline.Client.Package.csproj"/>
+        <PackageReference Include="Wasmtime" Version="$(WasmtimeVersion)"/>
+        <None Include="../../src/Tapline.Authentication.Opaque/THIRD-PARTY-NOTICES.md" Pack="true" PackagePath="/"/>
+    </ItemGroup>
+</Project>

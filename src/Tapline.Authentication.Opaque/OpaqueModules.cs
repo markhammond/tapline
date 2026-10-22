@@ -4,7 +4,7 @@ using System.Buffers.Binary;
 using System.Collections.Concurrent;
 using System.Security.Cryptography;
 using System.Text;
-using Tapline.Client;
+using Tapline.Client.Opaque;
 
 namespace Tapline.Authentication.Opaque;
 
@@ -53,54 +53,6 @@ public sealed class InMemoryOpaqueStore : IOpaqueStore
 }
 
 /// <summary>
-///     The OPAQUE modules' messages, inside a sign-in's (<see cref="AuthMessages" />) — a user id or an enrollment token
-///     first, as <c>u16 length | UTF-8</c> (little-endian), then the protocol's own message:
-///     <code>
-/// opaque           client: id | KE1    server: KE2    client: KE3
-/// opaque-register  client: token | registration request    server: id | registration response    client: upload
-/// </code>
-///     The id is the user's (NFC, UTF-8: the credential id their password file is kept under); the token, empty for a
-///     user signed in to the realm already.
-/// </summary>
-public static class OpaqueMessages
-{
-    public static byte[] Framed(ReadOnlySpan<byte> first, ReadOnlySpan<byte> rest)
-    {
-        if (first.Length > ushort.MaxValue) throw new ArgumentException("At most 65,535 bytes.", nameof(first));
-        var b = new byte[2 + first.Length + rest.Length];
-        BinaryPrimitives.WriteUInt16LittleEndian(b, (ushort)first.Length);
-        first.CopyTo(b.AsSpan(2));
-        rest.CopyTo(b.AsSpan(2 + first.Length));
-        return b;
-    }
-
-    public static bool TryRead(ReadOnlySpan<byte> message, out byte[] first, out byte[] rest)
-    {
-        (first, rest) = ([], []);
-        if (message.Length < 2) return false;
-        int n = BinaryPrimitives.ReadUInt16LittleEndian(message);
-        if (2 + n > message.Length) return false;
-        (first, rest) = (message.Slice(2, n).ToArray(), message[(2 + n)..].ToArray());
-        return true;
-    }
-
-    internal static string? UserId(byte[] utf8)
-    {
-        try
-        {
-            var id = new UTF8Encoding(false, true).GetString(utf8);
-            return id.Length > 0 && utf8.Length <= ClientIdentity.MaxName && id.IsNormalized(NormalizationForm.FormC)
-                ? id
-                : null;
-        }
-        catch (DecoderFallbackException)
-        {
-            return null;
-        }
-    }
-}
-
-/// <summary>
 ///     Signing in with a password by OPAQUE (<c>opaque</c>; RFC 9807): the password never leaves the client — the router
 ///     relays KE1, KE2 and KE3, and this module (the server) proves nothing but that the client knew the password the
 ///     user registered. The login is bound to the connection (its context, <see cref="AuthStep.Context" />). A user with
@@ -110,7 +62,7 @@ public static class OpaqueMessages
 /// </summary>
 public sealed class OpaqueModule(OpaqueCrypto opaque, IOpaqueStore store) : IAuthModule
 {
-    public const string ModuleName = "opaque";
+    public const string ModuleName = OpaqueMessages.SignInModule;
     public string Name => ModuleName;
 
     public async ValueTask<ModuleAnswer> StepAsync(ModuleStep step, CancellationToken cancellationToken)
@@ -119,7 +71,7 @@ public sealed class OpaqueModule(OpaqueCrypto opaque, IOpaqueStore store) : IAut
         if (step.Round == 0)
         {
             if (!OpaqueMessages.TryRead(step.Payload.Span, out var id, out var ke1) ||
-                OpaqueMessages.UserId(id) is not { } userId)
+                OpaqueUserIds.Parse(id) is not { } userId)
                 return ModuleAnswer.Refuse("Not a password sign-in.");
             var setup = await store.SetupAsync(opaque.ServerSetup, cancellationToken).ConfigureAwait(false);
             var file = await store.PasswordFileAsync(userId, cancellationToken).ConfigureAwait(false);
@@ -163,7 +115,7 @@ public sealed class OpaqueModule(OpaqueCrypto opaque, IOpaqueStore store) : IAut
 /// </summary>
 public sealed class OpaqueRegistrationModule(OpaqueCrypto opaque, IOpaqueStore store) : IAuthModule
 {
-    public const string ModuleName = "opaque-register";
+    public const string ModuleName = OpaqueMessages.RegistrationModule;
     public string Name => ModuleName;
 
     /// <summary>
@@ -215,63 +167,21 @@ public sealed class OpaqueRegistrationModule(OpaqueCrypto opaque, IOpaqueStore s
     }
 }
 
-/// <summary>A headless client's side (Tapline.Client): signing in with a password, and setting one, by OPAQUE.</summary>
-public static class OpaqueSignIn
+/// <summary>A user id as a sign-in carries it: NFC, UTF-8, at most <see cref="ClientIdentity.MaxName" /> bytes.</summary>
+internal static class OpaqueUserIds
 {
-    /// <summary>
-    ///     Signs in to <paramref name="realm" /> as <paramref name="userId" /> with <paramref name="password" />, by OPAQUE:
-    ///     the password stretched here (Argon2id, some hundreds of milliseconds), never sent. A wrong password — or no such
-    ///     user — is a refusal, <c>Wrong user id or password.</c>
-    /// </summary>
-    public static async Task<SignInResult> SignInWithPasswordAsync(this TaplineClient client, OpaqueCrypto opaque,
-        string realm, string userId, string password, bool renewal = false,
-        CancellationToken cancellationToken = default)
+    public static string? Parse(byte[] utf8)
     {
-        var context = client.SignInContext(realm) ?? throw new InvalidOperationException("Not bound to a router yet.");
-        var secret = OpaqueCrypto.Utf8(password);
         try
         {
-            var start = opaque.ClientLoginStart(secret);
-            var first = OpaqueMessages.Framed(OpaqueCrypto.Utf8(userId), start.Message);
-            return await client.SignInAsync(realm, OpaqueModule.ModuleName, first,
-                (ke2, _) => new ValueTask<ReadOnlyMemory<byte>>(
-                    opaque.ClientLoginFinish(start.State, secret, ke2.ToArray(), context).Finalization),
-                renewal, cancellationToken).ConfigureAwait(false);
+            var id = new UTF8Encoding(false, true).GetString(utf8);
+            return id.Length > 0 && utf8.Length <= ClientIdentity.MaxName && id.IsNormalized(NormalizationForm.FormC)
+                ? id
+                : null;
         }
-        catch (OpaqueException e) when (e.InvalidLogin)
+        catch (DecoderFallbackException)
         {
-            return new SignInResult(false, null, default, "Wrong user id or password.");
-        }
-        finally
-        {
-            CryptographicOperations.ZeroMemory(secret);
-        }
-    }
-
-    /// <summary>
-    ///     Sets <paramref name="password" /> in <paramref name="realm" /> — for the user signed in, or for whoever
-    ///     <paramref name="enrollment" />'s token is for — by OPAQUE, and signs in by it.
-    /// </summary>
-    public static async Task<SignInResult> RegisterPasswordAsync(this TaplineClient client, OpaqueCrypto opaque,
-        string realm, string password, ReadOnlyMemory<byte> enrollment = default,
-        CancellationToken cancellationToken = default)
-    {
-        var secret = OpaqueCrypto.Utf8(password);
-        try
-        {
-            var start = opaque.ClientRegistrationStart(secret);
-            return await client.SignInAsync(realm, OpaqueRegistrationModule.ModuleName,
-                OpaqueMessages.Framed(enrollment.Span, start.Message), (message, cancellation) =>
-                {
-                    if (!OpaqueMessages.TryRead(message.Span, out _, out var response))
-                        throw new InvalidOperationException("Not a password registration's response.");
-                    return new ValueTask<ReadOnlyMemory<byte>>(
-                        opaque.ClientRegistrationFinish(start.State, secret, response).Upload);
-                }, false, cancellationToken).ConfigureAwait(false);
-        }
-        finally
-        {
-            CryptographicOperations.ZeroMemory(secret);
+            return null;
         }
     }
 }

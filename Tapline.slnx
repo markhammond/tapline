@@ -1,4 +1,10 @@
 <Solution>
+    <Folder Name="/packages/">
+        <Project Path="packages/Tapline/Tapline.Package.csproj" />
+        <Project Path="packages/Tapline.Client/Tapline.Client.Package.csproj" />
+        <Project Path="packages/Tapline.Client.Opaque/Tapline.Client.Opaque.Package.csproj" />
+        <Project Path="packages/Tapline.Wasm/Tapline.Wasm.Package.csproj" />
+    </Folder>
     <Folder Name="/samples/">
         <Project Path="samples/ActivityFeed.Contracts/ActivityFeed.Contracts.csproj" />
         <Project Path="samples/ActivityFeed.Dispatcher/ActivityFeed.Dispatcher.csproj" />
@@ -18,11 +24,12 @@
         <Project Path="src/Tapline.Authentication/Tapline.Authentication.csproj" />
         <Project Path="src/Tapline.Authentication.Opaque/Tapline.Authentication.Opaque.csproj" />
         <Project Path="src/Tapline.Client/Tapline.Client.csproj" />
+        <Project Path="src/Tapline.Client.Opaque/Tapline.Client.Opaque.csproj" />
         <Project Path="src/Tapline.MagicOnion/Tapline.MagicOnion.csproj" />
         <Project Path="src/Tapline.MagicOnion.Providers/Tapline.MagicOnion.Providers.csproj" />
         <Project Path="src/Tapline.MagicOnion.Server/Tapline.MagicOnion.Server.csproj" />
         <Project Path="src/Tapline.Wasm/Tapline.Wasm.csproj" />
-        <Project Path="src\Tapline.BlazorRealtime\Tapline.BlazorRealtime.csproj" />
+        <Project Path="src/Tapline.BlazorRealtime/Tapline.BlazorRealtime.csproj" />
     </Folder>
     <Folder Name="/tests/">
         <Project Path="tests/Opaque.Tests/Opaque.Tests.csproj" />

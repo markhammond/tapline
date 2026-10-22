@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+    <PropertyGroup>
+        <PackageId>Tapline.Wasm</PackageId>
+        <!-- (Tapline.Wasm's folds EPL-2.0; Tapline.Authentication.Opaque, Apache-2.0) -->
+        <PackageLicenseExpression>EPL-2.0 AND Apache-2.0</PackageLicenseExpression>
+        <PackageTags>$(PackageTags);webassembly;wasm;wasmtime;sandbox;authentication;opaque;rfc9807;password;pake</PackageTags>
+        <Description>Tapline's WebAssembly, run by Wasmtime: a data provider's folds, finalizers and stale-data functions as sandboxed modules, fuel- and memory-bounded on the router; and password sign-in by OPAQUE (RFC 9807), a module of Tapline's authentication in which the password never leaves the client — on the server, and in the browser (opaque.mjs, tapline-opaque.mjs).</Description>
+    </PropertyGroup>
+    <ItemGroup>
+        <ProjectReference Include="../../src/Tapline.Wasm/Tapline.Wasm.csproj" PrivateAssets="all"/>
+        <ProjectReference Include="../../src/Tapline.Authentication.Opaque/Tapline.Authentication.Opaque.csproj" PrivateAssets="all"/>
+        <ProjectReference Include="../Tapline/Tapline.Package.csproj"/>
+        <ProjectReference Include="../Tapline.Client.Opaque/Tapline.Client.Opaque.Package.csproj"/>
+        <FrameworkReference Include="Microsoft.AspNetCore.App"/>
+        <PackageReference Include="Wasmtime" Version="$(WasmtimeVersion)"/>
+        <None Include="../../src/Tapline.Authentication.Opaque/THIRD-PARTY-NOTICES.md" Pack="true" PackagePath="/"/>
+        <!-- The browser's side of password sign-in, served at _content/Tapline.Wasm/ (as the project serves it). -->
+        <Content Include="../../src/Tapline.Authentication.Opaque/wwwroot/opaque.mjs" Link="wwwroot/opaque.mjs"/>
+        <Content Include="../../src/Tapline.Authentication.Opaque/wwwroot/opaque.wasm" Link="wwwroot/opaque.wasm"/>
+        <Content Include="../../src/Tapline.Authentication.Opaque/wwwroot/tapline-opaque.mjs" Link="wwwroot/tapline-opaque.mjs"/>
+    </ItemGroup>
+</Project>

@@ -1,18 +1,14 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
-        <PackageLicenseExpression>EPL-2.0</PackageLicenseExpression>
         <TargetFramework>net10.0</TargetFramework>
         <Nullable>enable</Nullable>
         <ImplicitUsings>enable</ImplicitUsings>
         <LangVersion>latest</LangVersion>
         <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
-        <PackageId>Tapline.MagicOnion.Server</PackageId>
-        <PackageTags>$(PackageTags);grpc;magiconion</PackageTags>
-        <Description>Tapline over MagicOnion, the router's side: the stream service — a session's outlet held across its calls, frames written one at a time as the call takes them, control messages applied as they're read.</Description>
     </PropertyGroup>
     <ItemGroup>
         <FrameworkReference Include="Microsoft.AspNetCore.App"/>
-        <PackageReference Include="MagicOnion.Server" Version="7.11.0"/>
+        <PackageReference Include="MagicOnion.Server" Version="$(MagicOnionVersion)"/>
         <ProjectReference Include="../Tapline.AspNetCore/Tapline.AspNetCore.csproj"/>
         <ProjectReference Include="../Tapline.MagicOnion/Tapline.MagicOnion.csproj"/>
     </ItemGroup>

@@ -13,10 +13,10 @@
 <Routes/>
 <script src="@Assets["_framework/blazor.web.js"]" autostart="false"></script>
 <script type="module">
-    import {tapline} from './@Assets["_content/Tapline.AspNetCore/tapline.js"]';
-    import {startBlazor} from './@Assets["_content/Tapline.BlazorRealtime/blazor-realtime.js"]';
+    import {tapline} from './@Assets["_content/Tapline/tapline.js"]';
+    import {startBlazor} from './@Assets["_content/Tapline/blazor-realtime.js"]';
     import {createSignIn} from './@Assets["signin.js"]';
-    import * as passwords from './@Assets["_content/Tapline.Authentication.Opaque/tapline-opaque.mjs"]';
+    import * as passwords from './@Assets["_content/Tapline.Wasm/tapline-opaque.mjs"]';
 
     window.signInView = createSignIn(tapline, passwords);           // wwwroot/signin.js
     startBlazor(Blazor, tapline);

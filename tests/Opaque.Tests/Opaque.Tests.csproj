@@ -9,6 +9,6 @@
         <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     </PropertyGroup>
     <ItemGroup>
-        <ProjectReference Include="../../src/Tapline.Authentication.Opaque/Tapline.Authentication.Opaque.csproj"/>
+        <ProjectReference Include="../../src/Tapline.Client.Opaque/Tapline.Client.Opaque.csproj"/>
     </ItemGroup>
 </Project>
