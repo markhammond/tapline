@@ -176,6 +176,20 @@ contains: [Packages](docs/architecture.md#packages).
 - [Roadmap](docs/roadmap.md) — designs accepted but not built yet.
 - [Caveats](docs/architecture.md#caveats) — known limits, and what to keep in mind.
 
+## Food for thought
+
+Projects that challenged conventional wisdom, inverted the typical solution, and shaped Tapline:
+
+- [**Redis**](https://github.com/redis/redis) — _the_ data structure server: sandboxed scripting, transactional
+  watches, incremental rehashing and probabilistic expiry, to name a few.
+- [**Nchan**](https://github.com/slact/nchan) — a scalable, flexible pub/sub server with a delectable API.
+- [**Cap'n Proto**](https://github.com/capnproto/capnproto) — ludicrous speed, and time-traveling RPC.
+- [**Phoenix LiveView**](https://github.com/phoenixframework/phoenix_live_view) — rich, real-time UIs rendered on
+  the server, only the diffs sent.
+- [**SEDA**](https://dl.acm.org/doi/10.1145/502059.502057) — the staged event-driven architecture.
+- [**Stream**](https://github.com/GetStream) — activity feeds as an API.
+- And numerous mad-science experiments.
+
 ## License
 
 Tapline is source available under the [Elastic License 2.0](LICENSE) (ELv2), except password sign-in by OPAQUE
