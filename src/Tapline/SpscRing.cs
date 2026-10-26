@@ -66,7 +66,7 @@ public sealed class SpscRing<T>
         return TryWrite(item) ? default : WriteSlowAsync(item, cancellationToken);
     }
 
-    [AsyncMethodBuilder(typeof(PoolingAsyncValueTaskMethodBuilder))] // (a wait's state machine pooled: nothing allocated)
+    [AsyncMethodBuilder(typeof(PoolingAsyncValueTaskMethodBuilder))] // (a wait's state machine pooled: nothing allocated, compiled optimised)
     private async ValueTask WriteSlowAsync(T item, CancellationToken cancellationToken)
     {
         while (!TryWrite(item))
@@ -128,7 +128,7 @@ public sealed class SpscRing<T>
         return TryRead(out var item) ? new ValueTask<T>(item) : ReadSlowAsync(cancellationToken);
     }
 
-    [AsyncMethodBuilder(typeof(PoolingAsyncValueTaskMethodBuilder<>))] // (a wait's state machine pooled: nothing allocated)
+    [AsyncMethodBuilder(typeof(PoolingAsyncValueTaskMethodBuilder<>))] // (a wait's state machine pooled: nothing allocated, compiled optimised)
     private async ValueTask<T> ReadSlowAsync(CancellationToken cancellationToken)
     {
         while (true)

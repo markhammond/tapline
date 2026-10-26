@@ -204,9 +204,14 @@ internal static partial class T
         await writer;
         var (read, outOfOrder) = await reader;
         var allocated = GC.GetTotalAllocatedBytes(true) - before;
-        Console.WriteLine($"  spsc ring: {Items:N0} items through 8 slots in {timer.ElapsedMilliseconds:N0} ms, {allocated:N0} B allocated");
+        // Its waits pooled: each side's RingWaiter reused, and a full ring's write (WriteSlowAsync) a pooled builder's — a
+        // struct state machine where the ring is compiled optimised. Unoptimised, each write that finds it full allocates
+        // its own: not held to the bound there.
+        var optimised = Optimised(typeof(SpscRing<>).Assembly);
+        Console.WriteLine($"  spsc ring: {Items:N0} items through 8 slots in {timer.ElapsedMilliseconds:N0} ms, {allocated:N0} B allocated" +
+                          (optimised ? "" : " (unoptimised: a state machine for each write that found the ring full; held to the bound optimised)"));
         Assert(read == Items && outOfOrder == 0, $"every item, in order: {read:N0} read, {outOfOrder} out of order");
-        Assert(allocated < 256 * 1024,
+        Assert(!optimised || allocated < 256 * 1024,
             $"a million items through eight slots, both sides waiting: {allocated:N0} B allocated (the process's: its waits pooled)");
         Assert(!await ring.WaitToReadAsync() && ring.IsCompleted, "completed and empty: reading ends");
 

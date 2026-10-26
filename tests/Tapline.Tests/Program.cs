@@ -530,6 +530,17 @@ internal static partial class T
         return GC.GetAllocatedBytesForCurrentThread();
     }
 
+    /// <summary>
+    ///     Whether <paramref name="assembly" /> was compiled optimised (Release). Unoptimised (Debug), the C# compiler makes
+    ///     each async method's state machine a class, allocated at every call (for Edit and Continue), so a pooled method
+    ///     builder (<see cref="PoolingAsyncValueTaskMethodBuilder" />) has nothing to pool: only optimised is a method's
+    ///     wait allocation-free.
+    /// </summary>
+    private static bool Optimised(Assembly assembly)
+    {
+        return assembly.GetCustomAttribute<DebuggableAttribute>() is not { IsJITOptimizerDisabled: true };
+    }
+
     /// <summary>A free TCP port on the loopback, for a listener of a test's own (an ops port, say).</summary>
     private static int FreePort()
     {

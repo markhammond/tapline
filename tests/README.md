@@ -9,7 +9,11 @@ how it encodes every control invocation tapline.js sends over a circuit, at each
 envelope — is captured in `tests/js/fixtures/signalr.json` (client 10.0.11), which the C# tests hold the library to.
 `tests/js/capture-signalr.mjs` says how to capture it again, outside the repository. (`Tap.Auth`'s bytes argument is
 not in that capture yet: the tests write it as MessagePack's bin8/bin16/bin32, which is how the client encodes a
-`Uint8Array`; nor is `Tap.Sync`, four integers, written as the captured calls' are.) Highlights:
+`Uint8Array`; nor is `Tap.Sync`, four integers, written as the captured calls' are.) The suite runs in Debug, its
+assertions live. A wait through a pooled async builder allocates nothing only where the C# compiler makes its state
+machine a struct, as it does compiling optimised: the SpscRing round trip — a million items through eight slots, both
+sides waiting — is held to its allocation bound (256 KB) with `-c Release`, where it allocates some KB at most, and in
+Debug reports what the writes that found the ring full allocated. Highlights:
 
 - Transactions across sources: a writer moving value between positions and cash in 40,000 transactions, watched
   concurrently by an account watch — 0 torn deliveries (two independent taps on the same tables were torn in some
