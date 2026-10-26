@@ -1,0 +1,99 @@
+@page "/"
+@rendermode InteractiveServer
+@inject Orders Source
+
+@*
+    The orders, newest first, live: a LiveGrid over the sample's computed source. Sort by a heading (shift-click adds
+    it to the sort), filter by side or status in their headings, choose columns below the rows, select (⌘ or Ctrl
+    adds), and open an order by its number (a link) or by Enter.
+*@
+
+<div class="bar">
+    <b>Orders</b>
+    <form @onsubmit="RevealAsync">
+        <label>Order <input type="number" min="0" @bind="_reveal" style="width: 9em"/></label>
+        <button type="submit">Show it</button>
+        @if (_revealed is { } said)
+        {
+            <span>@said</span>
+        }
+    </form>
+    <span>@_selected.Count selected</span>
+    @if (_opened is { } opened)
+    {
+        <span>Opened order @opened.ToString("N0")</span>
+    }
+</div>
+
+<LiveGrid TKey="long" TRow="OrderRow" @ref="_grid" Source="Source" Class="orders" RowHeight="28" AriaLabel="Orders"
+          @bind-Sort="_sort" Filter="_filter" Selection="GridSelection.Multiple" @bind-Selected="_selected"
+          ArrivedAt="placed" OnRowActivate="Open">
+    <Columns>
+        <LiveColumn Name="placed" Label="Placed" Kind="CellKind.Time" Frozen/>
+        <LiveColumn Name="number" Label="Order" Frozen Link/>
+        <LiveColumn Name="client" Label="Client" Width="200"/>
+        <LiveColumn Name="side" Label="Side" Filterable/>
+        <LiveColumn Name="qty" Label="Qty" Scale="4" Decimals="4"/>
+        <LiveColumn Name="filled" Label="Filled" Scale="4" Decimals="4"/>
+        <LiveColumn Name="fill" Label="Fill %" Kind="CellKind.Percent" Of="Filled" Over="Qty" Decimals="1"/>
+        <LiveColumn Name="price" Label="Price" Scale="8" Figures="6"/>
+        <LiveColumn Name="status" Label="Status" Filterable/>
+    </Columns>
+    <HeadingTemplate Context="h">
+        @if (h.Name == "side")
+        {
+            <select aria-label="Side shown" @onchange="e => _filter = _filter with { Side = Parse<OrderSide>(e.Value) }">
+                <option value="">all</option>
+                @foreach (var side in Enum.GetValues<OrderSide>())
+                {
+                    <option value="@side" selected="@(_filter.Side == side)">@side</option>
+                }
+            </select>
+        }
+        else if (h.Name == "status")
+        {
+            <select aria-label="Status shown" @onchange="e => _filter = _filter with { Status = Parse<OrderStatus>(e.Value) }">
+                <option value="">all</option>
+                @foreach (var status in Enum.GetValues<OrderStatus>())
+                {
+                    <option value="@status" selected="@(_filter.Status == status)">@status</option>
+                }
+            </select>
+        }
+    </HeadingTemplate>
+    <StatusTemplate Context="s">
+        @s.Total.ToString("N0") orders ·
+        @(s.Live ? "live" : s.Above > 0 ? $"held, {s.Above:N0} new above" : "held") ·
+        @(s.Freshness switch { GridFreshness.Fresh => "up to date", GridFreshness.Behind => "catching up", _ => "…" })
+        @if (s.Refusal is { } why)
+        {
+            <span> · <b>@why</b></span>
+        }
+    </StatusTemplate>
+</LiveGrid>
+
+@code {
+    private LiveGrid<long, OrderRow>? _grid;
+    private IReadOnlyList<Tapline.Grid.SortKey> _sort = [];
+    private OrderFilter _filter = new();
+    private IReadOnlyCollection<long> _selected = [];
+    private long _reveal;
+    private string? _revealed;
+    private long? _opened;
+
+    private static T? Parse<T>(object? value) where T : struct, Enum
+    {
+        return Enum.TryParse<T>(value as string, out var parsed) ? parsed : null;
+    }
+
+    private async Task RevealAsync()
+    {
+        _revealed = _grid is not null && await _grid.RevealAsync(_reveal) ? null : $"Order {_reveal:N0} isn't in this view.";
+    }
+
+    private void Open(LiveGridRowEvent<long> e)
+    {
+        _opened = e.Key;
+    }
+
+}

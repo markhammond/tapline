@@ -38,6 +38,7 @@ public sealed class GridSession<TKey, TRow> : IAsyncDisposable
     private CancellationTokenSource? _cancel; // the read in flight's (null: taken, to be cancelled)
     private int _changed;
     private bool _disposed, _reading, _requested, _viewChanged, _visible = true;
+    private int _views; // how often the view has been set: the page's requests carry the one they're in
     private Locating? _locating;
     private long _readFrom, _readTo; // the window being read, in view positions: a request not touching it is a jump
     private GridRequest _request;
@@ -135,7 +136,7 @@ public sealed class GridSession<TKey, TRow> : IAsyncDisposable
     /// <summary>Answers applied (for tests: one has once this moves).</summary>
     internal int Answers;
 
-    /// <summary>Nothing asked of the loop and nothing read (for tests): a jump's rest read too.</summary>
+    /// <summary>Nothing asked of the loop and nothing read (for tests): the rest of a window read too.</summary>
     internal bool Settled
     {
         get
@@ -172,8 +173,9 @@ public sealed class GridSession<TKey, TRow> : IAsyncDisposable
 
     /// <summary>
     ///     The page asks for a window: read next, the latest asked for — once the read in flight is done, or at once if
-    ///     this is a jump (its window doesn't touch the one being read: that read is cancelled). Refused (thrown) if it
-    ///     spans more than <see cref="GridOptions.MaxWindowRows" /> or a count is negative.
+    ///     this is a jump (its window doesn't touch the one being read: that read is cancelled). Asked in a view since
+    ///     replaced (<see cref="GridRequest.View" />), it's dropped, unanswered. Refused (thrown) if it spans more than
+    ///     <see cref="GridOptions.MaxWindowRows" /> or a count is negative.
     /// </summary>
     public void Request(in GridRequest request)
     {
@@ -185,7 +187,7 @@ public sealed class GridSession<TKey, TRow> : IAsyncDisposable
         CancellationTokenSource? superseded;
         lock (_gate)
         {
-            if (_disposed) return;
+            if (_disposed || request.View != _views) return; // (its positions are another view's)
             _request = request;
             _requested = true;
             var (from, to) = Span(request);
@@ -196,21 +198,29 @@ public sealed class GridSession<TKey, TRow> : IAsyncDisposable
         _wake.Set();
     }
 
-    /// <summary>A new sort or filter: the window goes back to the top, read at once, the read in flight cancelled.</summary>
-    public void SetView(GridView view)
+    /// <summary>
+    ///     A new sort or filter: the window goes back to the top, read at once, the read in flight cancelled, a request
+    ///     waiting dropped. Its number, which the page's requests carry from now (<see cref="GridRequest.View" />), and the
+    ///     order its rows are of (<see cref="GridOrderHeader.View" />).
+    /// </summary>
+    public int SetView(GridView view)
     {
         ArgumentNullException.ThrowIfNull(view);
         CancellationTokenSource? superseded;
+        int views;
         lock (_gate)
         {
-            if (_disposed) return;
+            if (_disposed) return _views;
             _view = view;
+            views = ++_views;
             _viewChanged = true;
+            _requested = false; // (in the view replaced: its positions are another sort's)
             superseded = TakeRead();
         }
 
         Cancel(superseded);
         _wake.Set();
+        return views;
     }
 
     /// <summary>
@@ -318,7 +328,7 @@ public sealed class GridSession<TKey, TRow> : IAsyncDisposable
                         if (reset)
                         {
                             _viewChanged = false;
-                            _window.Reset();
+                            _window.Reset(_views);
                         }
 
                         view = _view;

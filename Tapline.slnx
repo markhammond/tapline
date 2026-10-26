@@ -13,6 +13,7 @@
         <Project Path="samples/ActivityFeed.Service/ActivityFeed.Service.csproj" />
         <Project Path="samples/BlazorRealtime.Sample/BlazorRealtime.Sample.csproj" />
         <Project Path="samples/BlazingOrderBooks.Sample/BlazingOrderBooks.Sample.csproj" />
+        <Project Path="samples/LiveGrid.Sample/LiveGrid.Sample.csproj" />
         <Project Path="samples/PivotTable.Contracts/PivotTable.Contracts.csproj" />
         <Project Path="samples/PivotTable.Headless/PivotTable.Headless.csproj" />
         <Project Path="samples/PivotTable.Sample/PivotTable.Sample.csproj" />

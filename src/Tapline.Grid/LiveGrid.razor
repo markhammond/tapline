@@ -1,0 +1,133 @@
+@namespace Tapline.Grid
+@typeparam TKey where TKey : unmanaged, IEquatable<TKey>
+@typeparam TRow where TRow : unmanaged
+@using Microsoft.AspNetCore.Components.Rendering
+@using Microsoft.AspNetCore.Components.Web
+
+<CascadingValue Value="_registry" IsFixed="true">@Columns</CascadingValue>
+@((RenderFragment)Deferred)
+
+@code {
+
+    /// <summary>The grid in a render of its own (<see cref="GridDeferred" />): after its columns have registered.</summary>
+    private void Deferred(RenderTreeBuilder builder)
+    {
+        builder.OpenComponent<GridDeferred>(0);
+        builder.AddComponentParameter(1, nameof(GridDeferred.Render), (RenderFragment)RenderGrid);
+        builder.CloseComponent();
+    }
+
+    /// <summary>The status, rendered by a component of its own as it changes (<see cref="GridStatusView" />).</summary>
+    private void StatusView(RenderTreeBuilder builder)
+    {
+        builder.OpenComponent<GridStatusView>(0);
+        builder.AddComponentParameter(1, nameof(GridStatusView.Source), (IGridStatusSource)this);
+        builder.AddComponentParameter(2, nameof(GridStatusView.Template), StatusTemplate);
+        builder.CloseComponent();
+    }
+
+    /// <summary>The grid, rendered after its columns have registered — or why it can't show its rows.</summary>
+    private void RenderGrid(RenderTreeBuilder builder)
+    {
+        ResolveColumns();
+        builder.AddContent(0, Refusal is null ? GridMarkup : RefusedMarkup);
+    }
+
+    private RenderFragment RefusedMarkup => @<div @attributes="AdditionalAttributes" class="live-grid live-grid-refused @Class" style="@Style" role="alert">
+        <strong>LiveGrid can't show its rows:</strong> @Refusal
+    </div>;
+
+    // The grid element carries no style of Blazor's: the page's module keeps its custom properties (widths, frozen
+    // offsets) there, and its aria-rowcount and aria-activedescendant.
+    private RenderFragment GridMarkup => @<div @attributes="AdditionalAttributes" class="live-grid @Class" style="@Style">
+        <div class="tg-grid" role="grid" tabindex="0" aria-label="@AriaLabel" aria-colcount="@_shown.Length"
+             aria-multiselectable="@(Selection == GridSelection.Multiple ? "true" : null)" @ref="_host">
+            <div class="tg-head" role="rowgroup" @ref="_head">
+                <div class="tg-head-row" role="row" aria-rowindex="1">
+                    @for (var i = 0; i < _shown.Length; i++)
+                    {
+                        var index = i;
+                        var column = _shown[i];
+                        var rank = SortRank(column.Name);
+                        <div @key="column.Name" class="@HeadingClass(column)" role="columnheader" aria-colindex="@(index + 1)"
+                             aria-sort="@AriaSort(column)" style="@HeadingStyle(column, index)">
+                            @if (column.Sortable)
+                            {
+                                <button type="button" class="tg-sort" aria-label="@SortLabel(column, rank)" title="@SortHint(rank)"
+                                        @onclick="e => SortByAsync(column, e.ShiftKey)">
+                                    <span class="tg-label">@column.Label</span>
+                                    <span class="tg-arrow" aria-hidden="true">@(rank == 0 ? "" : _sort[rank - 1].Descending ? "▼" : "▲")</span>
+                                    @if (rank > 0 && _sort.Count > 1)
+                                    {
+                                        <span class="tg-rank" aria-hidden="true">@rank</span>
+                                    }
+                                </button>
+                            }
+                            else
+                            {
+                                <span class="tg-label">@column.Label</span>
+                            }
+                            @HeadingTemplate?.Invoke(HeadingOf(column))
+                        </div>
+                    }
+                </div>
+            </div>
+            <div class="tg-body" @ref="_body"></div>
+        </div>
+        @if (StatusTemplate is not null || ColumnChooser)
+        {
+            <div class="tg-foot">
+                <div class="tg-status">
+                    @if (StatusTemplate is not null)
+                    {
+                        @((RenderFragment)StatusView)
+                    }
+                </div>
+                @if (ColumnChooser)
+                {
+                    <details class="tg-chooser">
+                        <summary>Columns</summary>
+                        <div class="tg-chooser-list" role="group" aria-label="Columns shown">
+                            @foreach (var column in _columns)
+                            {
+                                <label @key="column.Name">
+                                    <input type="checkbox" checked="@Shown(column)" disabled="@(_shown.Length == 1 && Shown(column))"
+                                           @onchange="e => ShowColumn(column, e.Value is true)"/>
+                                    @column.Label
+                                </label>
+                            }
+                        </div>
+                    </details>
+                }
+            </div>
+        }
+    </div>;
+
+    private static bool Right(GridColumn column)
+    {
+        return column.Align == "right" || (column.Align != "left" && column.Kind is "int" or "fixed" or "float" or "percent");
+    }
+
+    private static string HeadingClass(GridColumn column)
+    {
+        return "tg-heading" + (column.Frozen ? " tg-frozen" : "") + (Right(column) ? " tg-right" : "");
+    }
+
+    private static string HeadingStyle(GridColumn column, int index)
+    {
+        return $"width: var(--tg-w{index}, {column.Width ?? 120}px)" + (column.Frozen ? $"; left: var(--tg-left{index}, 0px)" : "");
+    }
+
+    private string SortLabel(GridColumn column, int rank)
+    {
+        if (rank == 0) return $"{column.Label}: sort by it";
+        var way = _sort[rank - 1].Descending ? "descending" : "ascending";
+        return _sort.Count == 1 ? $"{column.Label}: sorted {way}" : $"{column.Label}: sorted {way}, {rank} of {_sort.Count}";
+    }
+
+    private static string SortHint(int rank)
+    {
+        return rank == 0 ? "Sort by this (shift-click: add it to the sort)" : "Click: sort by this alone; shift-click: reverse it, or take it out";
+    }
+
+}

@@ -1,8 +1,9 @@
 // tapline-grid.js — Tapline.Grid's page body: a LiveGrid's rows, drawn on the page from a Tapline replica of the window
 // its server keeps for it (a rows table and their order, read through one watch with { changed: true }), and the
 // windows it asks for as the reader scrolls. Blazor renders the grid's chrome (headings, filters, status); this draws
-// the body inside an element Blazor leaves empty. It takes nothing page-wide: no title or icon, no keys of the
-// document's; its one document listener (visibilitychange) is added beside any others.
+// the body inside an element Blazor leaves empty, and takes the grid's keys, clicks and focus, by row key (createGrid
+// joins it to its LiveGrid). It takes nothing page-wide: no title or icon, no keys of the document's; its one document
+// listener (visibilitychange) is added beside any others.
 //
 // The arithmetic is pure, exported, and tested in Node: scrolling scaled past the browser's height cap (Scroller), the
 // pre-fetch adapting to the link (Prefetch), the window asked for (windowFor), requests held to an interval and by the
@@ -235,7 +236,7 @@ export function windowFor(first, rows, down, prefetch, lead = 0, most = Infinity
 }
 
 const sameWindow = (a, b) => a.first === b.first && a.count === b.count && a.before === b.before && a.after === b.after &&
-    a.holds === b.holds && a.letIn === b.letIn;
+    a.holds === b.holds && a.letIn === b.letIn && a.view === b.view;
 
 /**
  * The windows asked for as the reader scrolls: what's wanted meanwhile coalesced, sent at most once a `minInterval`
@@ -321,8 +322,8 @@ const i64 = (dv, o) => dv.getInt32(o + 4, true) * TWO32 + dv.getUint32(o, true);
 
 /**
  * A grid's order value (Tapline.Grid's GridOrder): u8 format (1) | u8 flags (1 live, 2 stale) | u8 the total's kind |
- * u8 key size | u32 keys | i64 first | i64 total | i64 let in | u32 holds | u32 | the keys — each as the rows table's
- * replica keys it (its bytes as latin1). Null if it isn't one.
+ * u8 key size | u32 keys | i64 first | i64 total | i64 let in | u32 holds | u32 view | the keys — each as the rows
+ * table's replica keys it (its bytes as latin1). Null if it isn't one.
  */
 export function readOrder(bytes) {
     if (!(bytes instanceof Uint8Array) || bytes.length < 40 || bytes[0] !== 1) return null;
@@ -333,7 +334,8 @@ export function readOrder(bytes) {
     for (let i = 0, o = 40; i < count; i++, o += keySize) keys[i] = latin1(bytes, o, keySize);
     return {
         live: (bytes[1] & 1) !== 0, stale: (bytes[1] & 2) !== 0, totalKind: bytes[2], keySize, count,
-        first: i64(dv, 8), total: i64(dv, 16), letIn: i64(dv, 24), holds: dv.getInt32(32, true), keys
+        first: i64(dv, 8), total: i64(dv, 16), letIn: i64(dv, 24), holds: dv.getInt32(32, true), view: dv.getInt32(36, true),
+        keys
     };
 }
 
@@ -378,55 +380,77 @@ export function significant(value, scale, figures = 6, digits = 8) {
 const pad = (n, w = 2) => String(n).padStart(w, '0');
 const utf8 = new TextDecoder();
 
-/** A column's integer: `size` bytes, little-endian, signed (8: a BigInt), and the least of its size "no value". */
-function integer(dv, o, size) {
+/** A column's integer: `size` bytes, little-endian, signed unless `unsigned` (8: a BigInt). */
+function integer(dv, o, size, unsigned = false) {
     switch (size) {
         case 1:
-            return dv.getInt8(o);
+            return unsigned ? dv.getUint8(o) : dv.getInt8(o);
         case 2:
-            return dv.getInt16(o, true);
+            return unsigned ? dv.getUint16(o, true) : dv.getInt16(o, true);
         case 4:
-            return dv.getInt32(o, true);
+            return unsigned ? dv.getUint32(o, true) : dv.getInt32(o, true);
         default:
-            return dv.getBigInt64(o, true);
+            return unsigned ? dv.getBigUint64(o, true) : dv.getBigInt64(o, true);
     }
 }
+
+/** A float32's shortest text that reads back as it: 0.1, not 0.10000000149011612. */
+function shortest32(v) {
+    for (let p = 1; p < 9; p++) {
+        const text = v.toPrecision(p);
+        if (Math.fround(Number(text)) === v) return String(Number(text));
+    }
+    return String(Number(v.toPrecision(9)));
+}
+
+const TICKS_1970 = 621_355_968_000_000_000n, TICKS_MASK = (1n << 62n) - 1n;
+const hex2 = b => b.toString(16).padStart(2, '0');
 
 const NONE = {1: -128, 2: -32768, 4: -2147483648, 8: -(2n ** 63n)};
 
 /**
  * What a cell shows, and on hover: { text, title, cut } from the row's bytes, by the column's kind —
- * int (an integer, `size` bytes: 1, 2, 4, 8), fixed (scaled by 10^scale: to `decimals` places, or `figures`
- * significant), float (f64), time (µs since 1970, UTC: today's date an ellipsis, the microseconds on hover), bool,
- * enum (an index into the column's `dictionary`), text (`size` bytes: a length, 0x80 in it if the text was cut, then
- * UTF-8), percent (of one column over another, by name). The least integer of its size is no value.
+ * int (an integer, `size` bytes: 1, 2, 4, 8; `unsigned`), fixed (scaled by 10^scale: to `decimals` places, or
+ * `figures` significant), float (`size` 8 or 4), time (µs since 1970, or with `unit` 'ticks' a .NET DateTime; shown as
+ * UTC: today's date an ellipsis, the microseconds on hover), bool, enum (the column's `dictionary` entry for the
+ * value), text (`size` bytes: a length, 0x80 in it if the text was cut, then UTF-8), percent (of one integer over
+ * another: `of` and `over`, a column's name or { offset, size, unsigned }), uuid (a .NET Guid's 16 bytes). A signed
+ * integer's least value is no value, as are a zero DateTime and an empty Guid.
  */
 export function formatCell(column, row, dv, columns, now = new Date()) {
     const o = column.offset ?? 0, size = column.size ?? 8;
     switch (column.kind) {
         case 'int': {
-            const v = integer(dv, o, size);
-            if (v === NONE[size] || v === BigInt(NONE[8])) return {text: ''};
+            const v = integer(dv, o, size, column.unsigned);
+            if (!column.unsigned && (v === NONE[size] || v === BigInt(NONE[8]))) return {text: ''};
             return {text: group(String(v).replace('-', '')).replace(/^/, v < 0 ? '-' : '')};
         }
         case 'fixed': {
-            const v = integer(dv, o, size);
-            if (v === NONE[size]) return {text: ''};
+            const v = BigInt(integer(dv, o, size, column.unsigned));
+            if (!column.unsigned && v === BigInt(NONE[size])) return {text: ''};
             const scale = column.scale ?? 0;
             const text = column.figures ? significant(v, scale, column.figures) : finance(v, scale, column.decimals ?? scale);
             return {text, title: finance(v, scale, scale)};
         }
         case 'float': {
-            const v = dv.getFloat64(o, true);
+            const v = column.size === 4 ? dv.getFloat32(o, true) : dv.getFloat64(o, true);
             if (Number.isNaN(v)) return {text: ''};
+            const exact = column.size === 4 ? shortest32(v) : String(v);
             const text = v.toFixed(column.decimals ?? 2).replace(/\.?0+$/, '');
             const [whole, fraction] = text.replace('-', '').split('.');
-            if (/^0*$/.test(whole) && !fraction) return {text: NOUGHT, title: String(v)};
-            return {text: (v < 0 ? '-' : '') + (/^0+$/.test(whole) ? '' : group(whole)) + (fraction ? '.' + fraction : ''), title: String(v)};
+            if (/^0*$/.test(whole) && !fraction) return {text: NOUGHT, title: exact};
+            return {text: (v < 0 ? '-' : '') + (/^0+$/.test(whole) ? '' : group(whole)) + (fraction ? '.' + fraction : ''), title: exact};
         }
         case 'time': {
-            const v = dv.getBigInt64(o, true);
-            if (v === NONE[8]) return {text: ''};
+            let v;
+            if (column.unit === 'ticks') {                     // (a DateTime: 100 ns since 0001, its kind in the top two bits)
+                const ticks = dv.getBigUint64(o, true) & TICKS_MASK;
+                if (ticks === 0n) return {text: ''};
+                v = (ticks - TICKS_1970) / 10n;
+            } else {
+                v = dv.getBigInt64(o, true);
+                if (v === NONE[8]) return {text: ''};
+            }
             const d = new Date(Number(v / 1000n)), micros = Number(((v % 1_000_000n) + 1_000_000n) % 1_000_000n);
             const date = `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`;
             const time = `${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())}`;
@@ -436,8 +460,8 @@ export function formatCell(column, row, dv, columns, now = new Date()) {
         case 'bool':
             return dv.getUint8(o) ? {text: '✓', title: 'yes'} : {text: '', title: 'no'};
         case 'enum': {
-            const i = size === 2 ? dv.getUint16(o, true) : dv.getUint8(o);
-            return {text: column.dictionary?.[i] ?? `#${i}`};
+            const v = integer(dv, o, column.size ?? 1, column.unsigned ?? true);
+            return {text: column.dictionary?.[String(v)] ?? `#${v}`};
         }
         case 'text': {
             const n = row[o] & 0x7f, cut = (row[o] & 0x80) !== 0;
@@ -445,11 +469,20 @@ export function formatCell(column, row, dv, columns, now = new Date()) {
             return cut ? {text: text + '…', title: text + '…', cut: true} : {text, title: text.length > 12 ? text : undefined};
         }
         case 'percent': {
-            const of = columns.find(c => c.name === column.of), over = columns.find(c => c.name === column.over);
+            const field = f => typeof f === 'string' ? columns.find(c => c.name === f) : f;
+            const of = field(column.of), over = field(column.over);
             if (!of || !over) return {text: ''};
-            const a = Number(integer(dv, of.offset ?? 0, of.size ?? 8)), b = Number(integer(dv, over.offset ?? 0, over.size ?? 8));
+            const a = Number(integer(dv, of.offset ?? 0, of.size ?? 8, of.unsigned)), b = Number(integer(dv, over.offset ?? 0, over.size ?? 8, over.unsigned));
             if (!(a > 0 && b > 0)) return {text: NOUGHT};
             return {text: finance(BigInt(Math.round(a / b * 100 * 10 ** (column.decimals ?? 1))), column.decimals ?? 1, column.decimals ?? 1) + '%'};
+        }
+        case 'uuid': {
+            const b = row.subarray(o, o + 16);
+            if (b.every(x => x === 0)) return {text: ''};
+            const h = i => hex2(b[i]);
+            const text = `${h(3)}${h(2)}${h(1)}${h(0)}-${h(5)}${h(4)}-${h(7)}${h(6)}-${h(8)}${h(9)}-` +
+                `${h(10)}${h(11)}${h(12)}${h(13)}${h(14)}${h(15)}`;
+            return {text, title: text};
         }
         default:
             return {text: ''};
@@ -458,25 +491,76 @@ export function formatCell(column, row, dv, columns, now = new Date()) {
 
 // ───────────── the body ─────────────
 
-const FLASH_ROW_MS = 3_000, QUIET_MS = 1_000;
+const QUIET_MS = 1_000;
+const HEARD_KEPT_MS = 60_000;              // (when a change was heard of, kept this long: longer than any flash)
+const STAMP_SKEW_MS = 2_000;               // (a row arriving stamped further ahead than this: the page's clock is behind)
+
+/** A row's arrival, by its `stamp` field ({ offset, size, unit }, as a time column's), in ms since 1970: null for none. */
+export function stampOf(stamp, row, dv) {
+    const o = stamp.offset ?? 0;
+    if (o + 8 > row.length) return null;
+    if (stamp.unit === 'ticks') {                          // (a .NET DateTime: 100 ns since 0001, its kind in the top bits)
+        const ticks = dv.getBigUint64(o, true) & TICKS_MASK;
+        return ticks === 0n ? null : Number((ticks - TICKS_1970) / 10n) / 1000;   // (µs, exact, then ms)
+    }
+    const v = dv.getBigInt64(o, true);                     // (µs since 1970)
+    return v === NONE[8] ? null : Number(v) / 1000;
+}
+
+/**
+ * A flash `elapsed` ms after what it shows happened, `duration` ms long: the animation delay that shows it where it has
+ * got to (negative: under way), or null if it's over — so pages side by side, or one reloaded, show it alike.
+ */
+export function flashDelay(elapsed, duration) {
+    if (!(duration > 0) || elapsed >= duration) return null;
+    return elapsed > 0 ? -elapsed : 0;
+}
+
+/** A CSS time's milliseconds ('5s', '2400ms'; the first of a list): 0 for none. */
+export function cssMs(time) {
+    const m = /^\s*(-?[\d.]+)(ms|s)/.exec(time ?? '');
+    return m ? Number(m[1]) * (m[2] === 's' ? 1000 : 1) : 0;
+}
 const NUMERIC = new Set(['int', 'fixed', 'float', 'percent']);
+let grids = 0;                             // (ids for rows' elements: aria-activedescendant names one)
 
 /**
  * A LiveGrid's body: the rows of its window, drawn from the replica of its watch (rows table, order value), in an
  * element the chrome leaves empty. Options:
- *   columns    [{ name, label, kind, offset, size, scale, decimals, figures, dictionary, of, over, width, frozen, align }]
+ *   columns    [{ name, label, kind, offset, size, unsigned, scale, decimals, figures, unit, dictionary, of, over, width,
+ *                frozen, align, link }] (formatCell)
  *   rowHeight  px, one for every row
- *   tapline    the page's TaplineClient (tapline.js); binding: the grid's watch (its session's Binding)
- *   request(request)           sends a window request to the session: { id, first, count, before, after, holds, letIn }
- *   maxRows                    the session's most rows a window (GridOptions.MaxWindowRows): never asked for more
+ *   tapline    the page's TaplineClient (tapline.js; globalThis.tapline if none); binding: the grid's watch (its
+ *              session's Binding)
+ *   request(request)   sends a window request to the session: { id, first, count, before, after, holds, letIn, view }
+ *   maxRows    the session's most rows a window (GridOptions.MaxWindowRows): never asked for more
  *   minInterval, maxOutstanding  requests at most once this many ms (50), and while fewer are unanswered (4)
- *   visible(visible)           the page shown or hidden (the session stops reading the source's changes while hidden)
- *   status(status)             what the chrome shows: { total, totalKind, live, stale, holds, letIn, fresh, blanks }
+ *   visible(visible)   the page shown or hidden (the session stops reading the source's changes while hidden)
+ *   status(status)     what the chrome shows: { total, totalKind, live, stale, holds, letIn, fresh, blanks }
+ *   host       the grid's element, around the body and its headings (the body's own if none): the widths, frozen
+ *              offsets and row height are its custom properties (--tg-w<i>, --tg-left<i>, --tg-width, --tg-row-height,
+ *              --tg-scrollbar), it takes the keys, and it's the grid to assistive technology (aria-rowcount,
+ *              aria-activedescendant)
+ *   head       the headings' element: scrolled sideways with the rows (its frozen headings sticky in it)
+ *   headerRows rows of headings above the body: the rows' aria-rowindex counts them
+ *   view       the view (sort and filter) asked in at first: its number (GridSession.SetView); orders of an earlier
+ *              one are passed over
+ *   arrivedAt  the rows' arrival time, if they carry one ({ offset, size, unit }, as a time column's): a row's arrival
+ *              flash runs from it wherever the row is drawn — pages side by side, or one reloaded, flash alike
+ *              (unless a row arrives stamped more than 2 s in the page's future: its clock is behind, and the page
+ *              runs flashes from when it heard of the changes, as it does without stamps)
+ *   selection  'none', 'single' or 'multiple'; selected: the keys selected at first (setSelection after)
+ *   rowClick({ key, column, ctrl, shift, meta, alt }), rowActivate({ key, column }), rowSelect({ key })
+ *              a row clicked, activated (a double click, Enter, a link column's cell) or selected (Space): by key, its
+ *              column named where there is one
  */
 export class GridBody {
     constructor(root, options) {
         this.root = root;
         this.options = options;
+        this.host = options.host ?? root;
+        this.head = options.head ?? null;
+        this.headerRows = options.headerRows ?? 0;
         this.columns = options.columns;
         this.rowHeight = options.rowHeight ?? 30;
         this.tapline = options.tapline ?? globalThis.tapline;
@@ -486,44 +570,65 @@ export class GridBody {
         this.velocity = new Velocity();
         this.requests = new Requests(request => this.#ask(request),
             {minInterval: options.minInterval ?? 50, maxOutstanding: options.maxOutstanding ?? 4});
-        this.order = null;                 // the order applied: { first, keys, total, live, letIn, holds, … }
+        this.view = options.view ?? 0;     // the view asked in: its number
+        this.order = null;                 // the order applied: { first, keys, total, live, letIn, holds, view, … }
         this.table = null;                 // the rows table's replica
-        this.pool = [];                    // row elements: { el, cells, key, bytes, position, y }
+        this.pool = [];                    // row elements: { el, cells, key, bytes, last, position, y, selected, focused }
+        this.rowOf = new Map();            // a row element → its pool entry
         this.changed = new Set();          // keys changed since last drawn
         this.whole = true;                 // a state handed over whole: every row drawn afresh
-        this.arrived = new Set();          // keys new at the live top, to flash when next drawn
+        this.arrived = new Map();          // keys new at the live top → when heard of (ms since 1970), till drawn
+        this.changedAt = new Map();        // keys changed → when heard of: their cells' flashes run from it
+        this.stamp = options.arrivedAt ?? null;   // the rows' own arrival time, if they carry one (arrivedAt)
+        this.stamped = !!this.stamp;       // (its stamps trusted: none from the page's future yet)
+        this.durations = new Map();        // a flash's duration as the page's CSS has it (ms)
         this.down = true;                  // the reader's direction
         this.frame = 0;                    // requestAnimationFrame id, while one is due
-        this.widths = null;                // px a column, once measured
+        this.widths = new Map();           // column name → px: given, or measured once from the first rows answered, then held
         this.blanks = 0;                   // frames with a placeholder in view (blank sightings)
         this.fresh = 'unknown';            // 'fresh' (Tap.Sync answered) | 'checking' | 'behind' | 'unknown'
         this.hidden = false;
         this.disposed = false;
         this.waits = new Map();            // request id → AbortController of its rendezvous wait
+        this.selection = options.selection ?? 'none';
+        this.selected = new Set(options.selected ?? []);
+        this.focusKey = null;              // the row the keys move from, by key: followed as it moves
+        this.focusAt = null;               // its position, as last known (or one moved to and not answered yet)
+        this.active = null;                // the focused row's element id, as aria-activedescendant has it
+        this.scrollLeft = 0;
+        this.rowCount = -1;
+        this.id = `tg${++grids}`;
     }
 
     /** Builds the body, subscribes to the watch, and asks for the first window — measured first, in the same task. */
     start() {
-        const root = this.root;
+        const root = this.root, host = this.host;
         root.classList.add('tapline-grid');
-        root.style.setProperty('--tg-row-height', `${this.rowHeight}px`);
+        host.style.setProperty('--tg-row-height', `${this.rowHeight}px`);
         root.replaceChildren();
-        this.scrollerEl = Object.assign(document.createElement('div'), {className: 'tg-scroller', tabIndex: 0});
+        this.scrollerEl = Object.assign(document.createElement('div'), {className: 'tg-scroller', tabIndex: host === root ? 0 : -1});
         this.surfaceEl = Object.assign(document.createElement('div'), {className: 'tg-surface'});
         this.layerEl = Object.assign(document.createElement('div'), {className: 'tg-rows'});
         this.scrollerEl.setAttribute('role', 'rowgroup');
         this.surfaceEl.append(this.layerEl);
         this.scrollerEl.append(this.surfaceEl);
         root.append(this.scrollerEl);
+        this.keys = host === root ? this.scrollerEl : host;   // (what takes the keys: the grid, or the body alone)
         this.#styleColumns();
 
         this.onScroll = () => this.#scrolled();
         this.onWheel = e => this.#wheel(e);
         this.onKey = e => this.#key(e);
+        this.onClick = e => this.#click(e);
+        this.onDouble = e => this.#double(e);
+        this.onFocus = () => this.keys.focus({preventScroll: true});   // (clicked: the grid takes the focus, not its scroller)
         this.onVisibility = () => this.#visibility();
         this.scrollerEl.addEventListener('scroll', this.onScroll, {passive: true});
         this.scrollerEl.addEventListener('wheel', this.onWheel, {passive: false});
-        this.scrollerEl.addEventListener('keydown', this.onKey);
+        this.keys.addEventListener('keydown', this.onKey);
+        this.layerEl.addEventListener('click', this.onClick);
+        this.layerEl.addEventListener('dblclick', this.onDouble);
+        if (this.keys !== this.scrollerEl) this.scrollerEl.addEventListener('focus', this.onFocus);
         document.addEventListener('visibilitychange', this.onVisibility);
         this.hidden = document.visibilityState === 'hidden';
         this.resizer = new ResizeObserver(() => this.#resized());
@@ -534,26 +639,44 @@ export class GridBody {
         this.#resized();                   // measured, then the first window asked for: never "asked for nothing"
     }
 
-    /** A new sort or filter: back to the top, its rows placeholders until the new top arrives. */
-    reset() {
-        for (const id of this.requests.reset()) this.#settle(id);
+    /**
+     * A new sort or filter, the `view`th (the next, if not said): back to the top, its rows placeholders until its top
+     * arrives — unless its order came first, and was taken as the word of it.
+     */
+    reset(view = this.view + 1) {
+        if (view <= this.view) return;
+        this.#newView(view);
         this.order = null;
         this.whole = true;
-        this.arrived.clear();
-        this.velocity.reset();
-        this.scrollerEl.scrollTop = this.scroller.to(0);
         this.#want();
         this.#schedule();
     }
 
-    /** A new set of columns: drawn afresh, their widths measured again. */
+    /** A new set of columns: drawn afresh; widths measured for those not measured before. */
     setColumns(columns) {
         this.columns = columns;
-        this.widths = null;
         for (const r of this.pool) r.el.remove();
         this.pool = [];
+        this.rowOf.clear();
         this.whole = true;
         this.#styleColumns();
+        this.#schedule();
+    }
+
+    /** The keys selected (the grid's word, after a click's or a key's shown at once). */
+    setSelection(keys) {
+        this.selected = new Set(keys);
+        this.#paint();
+    }
+
+    /** Brings a row into view (LiveGrid.RevealAsync): `position` placed `above` rows from the top, and focused. */
+    reveal(position, above, key) {
+        this.focusKey = key ?? null;
+        this.focusAt = position;
+        this.velocity.reset();
+        this.down = true;
+        this.scrollerEl.scrollTop = this.scroller.to(clamp(position - (above ?? 0), 0, Math.max(0, this.scroller.lastTop)));
+        this.#want();
         this.#schedule();
     }
 
@@ -566,8 +689,12 @@ export class GridBody {
         this.resizer?.disconnect();
         this.scrollerEl?.removeEventListener('scroll', this.onScroll);
         this.scrollerEl?.removeEventListener('wheel', this.onWheel);
-        this.scrollerEl?.removeEventListener('keydown', this.onKey);
+        this.scrollerEl?.removeEventListener('focus', this.onFocus);
+        this.keys?.removeEventListener('keydown', this.onKey);
+        this.layerEl?.removeEventListener('click', this.onClick);
+        this.layerEl?.removeEventListener('dblclick', this.onDouble);
         document.removeEventListener('visibilitychange', this.onVisibility);
+        if (this.host !== this.root) this.host.removeAttribute('aria-activedescendant');
         this.root.replaceChildren();
     }
 
@@ -576,10 +703,16 @@ export class GridBody {
     #state(group, info) {
         const [table, orderBytes] = group.members;
         if (table) this.table = table;
-        const changed = info?.changed;
-        if (orderBytes instanceof Uint8Array && (!changed || changed[1] !== false)) this.#order(readOrder(orderBytes));
-        if (changed?.[0] instanceof Set) for (const key of changed[0]) this.changed.add(key);
-        else this.whole = true;            // (handed over whole: drawn whole)
+        const changed = info?.changed, now = Date.now();
+        if (orderBytes instanceof Uint8Array && (!changed || changed[1] !== false)) this.#order(readOrder(orderBytes), now);
+        if (changed?.[0] instanceof Set) {
+            for (const key of changed[0]) {
+                this.changed.add(key);
+                this.changedAt.delete(key); // (to the end: the map kept in the order heard)
+                this.changedAt.set(key, now);
+            }
+        } else this.whole = true;          // (handed over whole: drawn whole)
+        this.#forget(now);
         if (this.fresh !== 'fresh' && !info?.stale) {
             this.fresh = 'fresh';          // (a state from the router; quiet a second, Tap.Sync says whether there's more)
             this.#report();
@@ -588,23 +721,72 @@ export class GridBody {
         this.#schedule();
     }
 
-    #order(order) {
-        if (!order) return;
+    #order(order, now) {
+        if (!order || order.view < this.view) return;   // (of a view replaced)
+        if (order.view > this.view) {                    // (the new view's, ahead of the word of it: taken as that)
+            this.#newView(order.view);
+            this.order = null;
+            this.whole = true;
+        }
         const was = this.order;
         if (order.total !== this.scroller.total) {
             this.scroller.setTotal(order.total);
             this.surfaceEl.style.height = `${this.scroller.height}px`;
         }
+        if (order.total + this.headerRows !== this.rowCount)
+            this.host.setAttribute('aria-rowcount', String(this.rowCount = order.total + this.headerRows));
         // Rows let in above (in this hold): the page moves its scroll down by as many, the rows in view staying put.
         if (was && order.holds === was.holds && order.letIn > was.letIn)
             this.scrollerEl.scrollTop = this.scroller.by(order.letIn - was.letIn);
-        // Rows arrived at the live top, above the row that was first: they flash once drawn.
+        // Rows arrived at the live top, above the row that was first: they flash once drawn, from when they arrived.
         if (was && order.live && was.live && was.keys.length) {
             const before = new Set(was.keys), top = order.keys.indexOf(was.keys[0]);
-            for (let i = 0; i < top; i++) if (!before.has(order.keys[i])) this.arrived.add(order.keys[i]);
+            for (let i = 0; i < top; i++) {
+                const key = order.keys[i];
+                if (before.has(key)) continue;
+                this.arrived.set(key, now);
+                if (this.stamped) this.#checkStamp(key, now);
+            }
+        }
+        // The focused row, by key: where it stands now.
+        if (this.focusKey !== null) {
+            const at = order.keys.indexOf(this.focusKey);
+            if (at >= 0) this.focusAt = order.first + at;
         }
         this.order = order;
         this.#report();
+    }
+
+    /** A live arrival's stamp against the page's clock: from its future, the page's clock is behind — stamps unused. */
+    #checkStamp(key, now) {
+        const row = this.table?.rows.get(key)?.row;
+        const at = row ? stampOf(this.stamp, row, new DataView(row.buffer, row.byteOffset, row.byteLength)) : null;
+        if (at !== null && at - now > STAMP_SKEW_MS) this.stamped = false;
+    }
+
+    /** When a row arrived, to run its arrival flash from: its stamp (trusted), else when the page heard of it. */
+    #arrivedAt(key, row) {
+        if (!this.stamped) return this.arrived.get(key);
+        return stampOf(this.stamp, row, new DataView(row.buffer, row.byteOffset, row.byteLength)) ?? undefined;
+    }
+
+    /** Forgets when changes were heard of, once older than any flash. */
+    #forget(now) {
+        for (const heard of [this.arrived, this.changedAt])
+            for (const [key, at] of heard) {
+                if (now - at < HEARD_KEPT_MS) break;
+                heard.delete(key);
+            }
+    }
+
+    #newView(view) {
+        this.view = view;
+        for (const id of this.requests.reset()) this.#settle(id);
+        this.arrived.clear();
+        this.changedAt.clear();
+        this.velocity.reset();
+        this.focusAt = null;               // (the focused row, by key, placed again where the new view has it)
+        this.scrollerEl.scrollTop = this.scroller.to(0);
     }
 
     #ended(error) {
@@ -620,7 +802,7 @@ export class GridBody {
         }
         const window = windowFor(this.scroller.row, this.scroller.viewRows, this.down, this.prefetch, this.velocity.reach,
             this.options.maxRows ?? Infinity);
-        this.requests.want({...window, holds: this.order?.holds ?? 0, letIn: this.order?.letIn ?? 0});
+        this.requests.want({...window, holds: this.order?.holds ?? 0, letIn: this.order?.letIn ?? 0, view: this.view});
         this.requests.pump();
     }
 
@@ -648,6 +830,7 @@ export class GridBody {
 
     #resized() {
         const height = this.scrollerEl.clientHeight;
+        this.host.style.setProperty('--tg-scrollbar', `${this.scrollerEl.offsetWidth - this.scrollerEl.clientWidth}px`);
         if (height === this.scroller.viewHeight) return;
         this.scroller.resize(height);
         this.prefetch.see(this.scroller.viewRows);
@@ -657,7 +840,12 @@ export class GridBody {
     }
 
     #scrolled() {
-        this.root.style.setProperty('--tg-scroll-left', `${this.scrollerEl.scrollLeft}px`);   // (for the headings)
+        const left = this.scrollerEl.scrollLeft;
+        if (left !== this.scrollLeft) {    // (sideways: the headings follow)
+            this.scrollLeft = left;
+            if (this.head) this.head.scrollLeft = left;
+            else this.host.style.setProperty('--tg-scroll-left', `${left}px`);
+        }
         const was = this.scroller.row;
         const row = this.scroller.scrolled(this.scrollerEl.scrollTop);
         if (row === was) return;
@@ -674,13 +862,42 @@ export class GridBody {
         this.#move(px / this.rowHeight);
     }
 
+    /** Keys move the focused row (and the view with it), Space selects it, Enter activates it. */
     #key(e) {
-        if (e.altKey || e.metaKey || e.ctrlKey) return;
+        if (e.altKey || e.metaKey || (e.target !== this.keys && !this.scrollerEl.contains(e.target))) return;   // (a heading's)
         const page = Math.max(1, Math.floor(this.scroller.viewRows) - 1);
         const rows = {ArrowDown: 1, ArrowUp: -1, PageDown: page, PageUp: -page, Home: -Infinity, End: Infinity}[e.key];
-        if (rows === undefined) return;
-        e.preventDefault();
-        this.#move(rows);
+        if (rows !== undefined && (!e.ctrlKey || !Number.isFinite(rows))) {
+            e.preventDefault();
+            this.#focusBy(rows);
+        } else if ((e.key === ' ' || e.key === 'Enter') && !e.ctrlKey && this.focusKey !== null) {
+            e.preventDefault();
+            if (e.key === 'Enter') {
+                this.options.rowActivate?.({key: this.focusKey});
+                return;
+            }
+            this.#select(this.focusKey, this.selection === 'multiple');
+            this.options.rowSelect?.({key: this.focusKey});
+            this.#paint();
+        }
+    }
+
+    /** The focus moved by `rows` (±Infinity: to the first or last), from the first row in view if there's none. */
+    #focusBy(rows) {
+        const total = this.scroller.total;
+        if (!total) return;
+        const top = this.scroller.row, view = this.scroller.viewRows;
+        const at = !Number.isFinite(rows) ? (rows > 0 ? total - 1 : 0)
+            : this.focusAt === null ? Math.min(total - 1, Math.ceil(top))
+                : clamp(this.focusAt + rows, 0, total - 1);
+        this.focusAt = at;
+        this.focusKey = this.#keyAt(at) ?? null;
+        if (at < top) this.scrollerEl.scrollTop = this.scroller.to(at);
+        else if (at + 1 > top + view) this.scrollerEl.scrollTop = this.scroller.to(Math.max(0, at + 1 - view));
+        this.down = rows > 0;
+        this.velocity.sample(this.scroller.row, performance.now());
+        this.#want();
+        this.#schedule();
     }
 
     #move(rows) {
@@ -689,6 +906,49 @@ export class GridBody {
         this.velocity.sample(this.scroller.row, performance.now());
         this.#want();
         this.#schedule();
+    }
+
+    #click(e) {
+        const r = this.#answered(e.target);
+        if (!r) return;
+        const column = this.#columnOf(r, e.target);
+        this.focusKey = r.key;
+        this.focusAt = r.position;
+        if (column?.link) this.options.rowActivate?.({key: r.key, column: column.name});
+        else {
+            this.#select(r.key, this.selection === 'multiple' && (e.ctrlKey || e.metaKey));
+            this.options.rowClick?.({key: r.key, column: column?.name, ctrl: e.ctrlKey, shift: e.shiftKey, meta: e.metaKey, alt: e.altKey});
+        }
+        this.#paint();
+    }
+
+    #double(e) {
+        const r = this.#answered(e.target), column = r && this.#columnOf(r, e.target);
+        if (r && !column?.link) this.options.rowActivate?.({key: r.key, column: column?.name});
+    }
+
+    /** The row an event's target is in, if it's answered (a placeholder's is no one's). */
+    #answered(target) {
+        const r = this.rowOf.get(target.closest?.('.tg-row'));
+        return r && r.key != null ? r : undefined;
+    }
+
+    #columnOf(r, target) {
+        const i = r.cells.indexOf(target.closest?.('.tg-cell'));
+        return i >= 0 ? this.columns[i] : undefined;
+    }
+
+    /** A selection as the grid will make it, shown at once: one row, or one toggled among several. */
+    #select(key, toggle) {
+        if (this.selection === 'none') return;
+        if (toggle) {
+            if (!this.selected.delete(key)) this.selected.add(key);
+        } else this.selected = new Set([key]);
+    }
+
+    #keyAt(position) {
+        const o = this.order, i = o ? position - o.first : -1;
+        return o && i >= 0 && i < o.keys.length ? o.keys[i] : undefined;
     }
 
     #visibility() {
@@ -745,12 +1005,13 @@ export class GridBody {
         this.frame = 0;
         const top = this.scroller.row, first = Math.floor(top), rows = Math.ceil(this.scroller.viewRows) + 1;
         const offset = (first - top) * this.rowHeight, order = this.order, table = this.table;
-        const changed = this.changed, whole = this.whole;
+        const changed = this.changed, whole = this.whole, now = Date.now();
         this.changed = new Set();
         this.whole = false;
         while (this.pool.length < rows) this.pool.push(this.#rowElement());
-        if (!this.widths && order && table && order.keys.length) this.#measure(order, table);
-        let blank = false;
+        if (order && table && order.keys.length && this.columns.some(c => !c.width && !this.widths.has(c.name)))
+            this.#measure(order, table);
+        let blank = false, active = null;
         for (let i = 0; i < this.pool.length; i++) {
             const r = this.pool[i], position = first + i;
             if (i >= rows || position >= this.scroller.total) {
@@ -760,31 +1021,67 @@ export class GridBody {
             if (r.el.hidden) r.el.hidden = false;
             const y = offset + i * this.rowHeight;
             if (r.y !== y) r.el.style.transform = `translateY(${(r.y = y)}px)`;
-            if (r.position !== position) r.el.setAttribute('aria-rowindex', String((r.position = position) + 1));
+            if (r.position !== position)
+                r.el.setAttribute('aria-rowindex', String((r.position = position) + 1 + this.headerRows));
             const at = order ? position - order.first : -1;
             const key = order && at >= 0 && at < order.keys.length ? order.keys[at] : undefined;
             const entry = key !== undefined ? table?.rows.get(key) : undefined;
             if (!entry) {
                 if (r.key !== null) this.#placeholder(r);
                 if (position < top + this.scroller.viewRows) blank = true;
-                continue;
+            } else if (whole || r.key !== key || r.bytes !== entry.row || changed.has(key)) {
+                // Changed in place, its cells that differ flash; arrived, or (stamped) drawn here newly, the row does —
+                // each from when it happened (scrolled into view unstamped: no flash).
+                const drawn = r.key !== key, inPlace = !drawn && changed.has(key);
+                this.#fill(r, key, entry.row, inPlace, now - (this.changedAt.get(key) ?? now));
+                const arrived = drawn || this.arrived.has(key) ? this.#arrivedAt(key, entry.row) : undefined;
+                this.arrived.delete(key);
+                if (arrived !== undefined) this.#flash(r.el, 'tg-arrived', now - arrived);
             }
-            if (whole || r.key !== key || r.bytes !== entry.row || changed.has(key)) {
-                const inPlace = r.key === key && changed.has(key);           // (scrolled into view: no flash)
-                this.#fill(r, key, entry.row, inPlace);
-                if (this.arrived.delete(key)) this.#flash(r.el, 'tg-arrived');
-            }
+            if (this.focusKey === null && this.focusAt === position && entry) this.focusKey = key;   // (moved to, now answered)
+            if (this.#mark(r)) active = r.el.id;
         }
+        this.#activate(active);
         if (blank) this.blanks++;
+    }
+
+    /** Selection and focus on the rows drawn, without drawing them again. */
+    #paint() {
+        let active = null;
+        for (const r of this.pool) if (!r.el.hidden && this.#mark(r)) active = r.el.id;
+        this.#activate(active);
+    }
+
+    /** A row's selected and focused marks, as its key and position now say: true if it's the focused one. */
+    #mark(r) {
+        const selected = r.key != null && this.selected.has(r.key);
+        if (r.selected !== selected) {
+            r.selected = selected;
+            r.el.classList.toggle('tg-selected', selected);
+        }
+        if (this.selection !== 'none' && r.el.getAttribute('aria-selected') !== String(selected))
+            r.el.setAttribute('aria-selected', String(selected));
+        const focused = this.focusKey !== null ? r.key === this.focusKey : this.focusAt !== null && r.position === this.focusAt;
+        if (r.focused !== focused) r.el.classList.toggle('tg-focused', r.focused = focused);
+        return focused;
+    }
+
+    #activate(id) {
+        if (id === this.active) return;
+        this.active = id;
+        if (id) this.keys.setAttribute('aria-activedescendant', id);
+        else this.keys.removeAttribute('aria-activedescendant');
     }
 
     #rowElement() {
         const el = document.createElement('div');
         el.className = 'tg-row';
+        el.id = `${this.id}-r${this.pool.length}`;
         el.setAttribute('role', 'row');
         const cells = this.columns.map((c, i) => {
             const cell = document.createElement('span');
-            cell.className = 'tg-cell' + (c.frozen ? ' tg-frozen' : '') + (c.align === 'right' || (c.align !== 'left' && NUMERIC.has(c.kind)) ? ' tg-right' : '');
+            cell.className = 'tg-cell' + (c.frozen ? ' tg-frozen' : '') + (c.link ? ' tg-link' : '') +
+                (c.align === 'right' || (c.align !== 'left' && NUMERIC.has(c.kind)) ? ' tg-right' : '');
             cell.style.width = `var(--tg-w${i}, ${c.width ?? 120}px)`;
             if (c.frozen) cell.style.left = `var(--tg-left${i}, 0px)`;
             cell.setAttribute('role', 'gridcell');
@@ -792,7 +1089,9 @@ export class GridBody {
             return cell;
         });
         this.layerEl.append(el);
-        return {el, cells, key: undefined, bytes: null, last: null, position: -1, y: NaN};
+        const r = {el, cells, key: undefined, bytes: null, last: null, position: -1, y: NaN, selected: false, focused: false};
+        this.rowOf.set(el, r);
+        return r;
     }
 
     #placeholder(r) {
@@ -803,15 +1102,19 @@ export class GridBody {
     }
 
     /** Writes a row's cells; changed in place since last drawn, the cells that differ flash. */
-    #fill(r, key, row, inPlace) {
+    #fill(r, key, row, inPlace, changedFor) {
         const dv = new DataView(row.buffer, row.byteOffset, row.byteLength), now = new Date();
         r.el.classList.remove('tg-placeholder');
+        if (r.key !== key) {               // (an element taking another row: not the last one's flashes)
+            r.el.classList.remove('tg-arrived-a', 'tg-arrived-b');
+            for (const cell of r.cells) cell.classList.remove('tg-changed-a', 'tg-changed-b');
+        }
         const texts = r.last && inPlace ? r.last : null, last = new Array(this.columns.length);
         for (let i = 0; i < this.columns.length; i++) {
             const {text, title} = formatCell(this.columns[i], row, dv, this.columns, now), cell = r.cells[i];
             if (cell.textContent !== text) cell.textContent = text;   // (text, never HTML)
             if (title) cell.title = title; else if (cell.title) cell.removeAttribute('title');
-            if (texts && texts[i] !== text) this.#flash(cell, 'tg-changed');
+            if (texts && texts[i] !== text) this.#flash(cell, 'tg-changed', changedFor);
             last[i] = text;
         }
         r.key = key;
@@ -819,31 +1122,65 @@ export class GridBody {
         r.last = last;
     }
 
-    /** Flashes an element: two animations of the one name alternated, so a flash under way starts again without a reflow. */
-    #flash(el, name) {
+    /**
+     * Flashes an element, `elapsed` ms after what it shows happened: started where it has got to (a negative delay),
+     * none if it's over. Two animations of the one name alternate, so a flash under way starts again without a reflow.
+     */
+    #flash(el, name, elapsed = 0) {
+        const delay = flashDelay(elapsed, this.#duration(name));
+        if (delay === null) return;
         const a = el.classList.contains(`${name}-a`);
+        el.style.animationDelay = delay ? `${delay}ms` : '';
         el.classList.remove(`${name}-a`, `${name}-b`);
         el.classList.add(`${name}-${a ? 'b' : 'a'}`);
+    }
+
+    /** A flash's duration as the page's CSS has it (tg-changed, tg-arrived; --tg-flash-for), looked up once. */
+    #duration(name) {
+        let ms = this.durations.get(name);
+        if (ms === undefined) {
+            const probe = document.createElement('span');
+            probe.className = `${name}-a`;
+            this.layerEl.append(probe);
+            ms = cssMs(getComputedStyle(probe).animationDuration);
+            probe.remove();
+            this.durations.set(name, ms);
+        }
+        return ms;
     }
 
     // ── columns: widths and frozen offsets, the module's, as custom properties the headings read too ──
 
     #styleColumns() {
         this.columns.forEach((c, i) => {
-            if (c.width) this.root.style.setProperty(`--tg-w${i}`, `${c.width}px`);
+            const width = c.width ?? this.widths.get(c.name);
+            if (width) this.host.style.setProperty(`--tg-w${i}`, `${width}px`);
+            else this.host.style.removeProperty(`--tg-w${i}`);
         });
         this.#placeColumns();
     }
 
-    /** Widths from the first rows answered (where the schema gives none), with room in a heading for its sort arrow and rank. */
+    /**
+     * Widths from the first rows answered, for columns with none given or measured before: as wide as their widest
+     * cell, and their heading — its label, and whatever the chrome put in it (a filter) — with room for its sort arrow
+     * and rank.
+     */
     #measure(order, table) {
         const probe = document.createElement('span');
         probe.className = 'tg-cell tg-probe';
         this.layerEl.append(probe);
-        this.widths = this.columns.map((c, i) => {
-            if (c.width) return c.width;
+        const headings = this.head?.querySelectorAll('.tg-heading');
+        this.columns.forEach((c, i) => {
+            if (c.width || this.widths.has(c.name)) return;
             probe.textContent = c.label ?? c.name;
             let widest = probe.getBoundingClientRect().width + 28;   // (the arrow and a multi-column sort's rank)
+            const heading = headings?.[i]?.cloneNode(true);          // (a copy, laid out at its own width, unseen)
+            if (heading) {
+                heading.style.cssText = 'position: absolute; visibility: hidden; width: max-content';
+                this.layerEl.append(heading);
+                widest = Math.max(widest, heading.getBoundingClientRect().width + 20);
+                heading.remove();
+            }
             for (const key of order.keys.slice(0, 200)) {
                 const entry = table.rows.get(key);
                 if (!entry) continue;
@@ -852,8 +1189,8 @@ export class GridBody {
                 widest = Math.max(widest, probe.getBoundingClientRect().width + 16);
             }
             widest = Math.ceil(widest);
-            this.root.style.setProperty(`--tg-w${i}`, `${widest}px`);
-            return widest;
+            this.widths.set(c.name, widest);
+            this.host.style.setProperty(`--tg-w${i}`, `${widest}px`);
         });
         probe.remove();
         this.#placeColumns();
@@ -863,13 +1200,49 @@ export class GridBody {
     #placeColumns() {
         let left = 0, width = 0;
         this.columns.forEach((c, i) => {
-            const w = this.widths?.[i] ?? c.width ?? 120;
+            const w = c.width ?? this.widths.get(c.name) ?? 120;
             if (c.frozen) {
-                this.root.style.setProperty(`--tg-left${i}`, `${left}px`);
+                this.host.style.setProperty(`--tg-left${i}`, `${left}px`);
                 left += w;
             }
             width += w;
         });
-        this.root.style.setProperty('--tg-width', `${width}px`);
+        this.host.style.setProperty('--tg-width', `${width}px`);
     }
+}
+
+/**
+ * Joins a body to its LiveGrid (Blazor): `host` the grid's element, `body` the one Blazor leaves empty, `head` the
+ * headings'; `grid` the component's DotNetObjectReference, which the page's requests, visibility, freshness, clicks and
+ * keys go to; `options` GridBody's. Returns what the component calls: reset(view), setColumns(columns),
+ * setSelection(keys), reveal(position, above, key), dispose(). The body is the grid element's `gridBody`, for scripts
+ * (a measuring run reads its blank sightings, `blanks`; a page in the background draws by `draw()`).
+ */
+export function createGrid(host, body, head, grid, options) {
+    let fresh = 'unknown';
+    const call = (method, ...args) => grid.invokeMethodAsync(method, ...args).catch(() => {});   // (the circuit gone)
+    const g = new GridBody(body, {
+        ...options, host, head,
+        request: r => call('Request', r.id, r.first, r.count, r.before, r.after, r.holds, r.letIn, r.view),
+        visible: shown => call('Visible', shown),
+        status: s => {                     // (the rest of the status is the server's: only freshness comes from here)
+            const now = s.fresh === 'checking' ? fresh : s.fresh;
+            if (now !== undefined && now !== fresh) call('Fresh', fresh = now);
+        },
+        rowClick: e => call('RowClick', e.key, e.column ?? null, e.ctrl, e.shift, e.meta, e.alt),
+        rowActivate: e => call('RowActivate', e.key, e.column ?? null),
+        rowSelect: e => call('RowSelect', e.key)
+    });
+    g.start();
+    host.gridBody = g;
+    return {
+        reset: view => g.reset(view),
+        setColumns: columns => g.setColumns(columns),
+        setSelection: keys => g.setSelection(keys),
+        reveal: (position, above, key) => g.reveal(position, above, key),
+        dispose: () => {
+            g.dispose();
+            delete host.gridBody;
+        }
+    };
 }

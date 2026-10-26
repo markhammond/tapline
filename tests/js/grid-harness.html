@@ -10,11 +10,8 @@
         body { margin: 0; padding: 12px 16px; display: flex; flex-direction: column; height: 100vh; box-sizing: border-box; gap: 8px; }
         header { display: flex; gap: 16px; flex-wrap: wrap; align-items: baseline; }
         header b { font-weight: 600; }
-        #headings { overflow: hidden; border-bottom: 1px solid color-mix(in srgb, CanvasText 25%, transparent); }
-        #headings div { display: flex; transform: translateX(calc(-1 * var(--tg-scroll-left, 0px))); white-space: nowrap; font-weight: 600; }
-        #headings span { flex: none; padding: 0 8px; box-sizing: border-box; overflow: hidden; text-overflow: ellipsis; line-height: 28px; }
-        #grid { flex: 1; min-height: 0; }
-        .tapline-grid .tg-row:nth-child(even) { background: color-mix(in srgb, CanvasText 4%, transparent); }
+        #frame { flex: 1; height: auto; }
+        .tapline-grid .tg-row:nth-child(even):not(.tg-selected) { background: color-mix(in srgb, CanvasText 4%, transparent); }
     </style>
 </head>
 <body>
@@ -22,9 +19,11 @@
     <b>Grid harness</b>
     <span id="status">…</span>
 </header>
-<div id="frame" style="display: contents">
-    <div id="headings"><div></div></div>
-    <div id="grid"></div>
+<div id="frame" class="live-grid">
+    <div id="host" class="tg-grid" role="grid" tabindex="0" aria-label="Orders" aria-multiselectable="true">
+        <div id="headings" class="tg-head" role="rowgroup"><div class="tg-head-row" role="row" aria-rowindex="1"></div></div>
+        <div id="grid" class="tg-body"></div>
+    </div>
 </div>
 <script type="module" src="/tests/js/grid-harness.mjs"></script>
 </body>

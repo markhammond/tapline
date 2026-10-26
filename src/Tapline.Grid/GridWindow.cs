@@ -25,12 +25,14 @@ internal sealed class GridWindow<TKey, TRow> where TKey : unmanaged, IEquatable<
     private byte[] _built, _published; // the order as built, and as last published
     private TKey[] _keys = new TKey[64]; // the window as published: its rows from view position _first (grown as needed)
     private TRow[] _rows = new TRow[64];
+    private TKey[] _lingering = new TKey[64]; // rows a view read first left in the table, for the publish after it
+    private int _lingered;
     private bool _anchored; // the window's rows are the view's: a held read may start from them
     private int _count;
     private long _first, _from, _to; // and the window asked for: [_from, _to)
     private HeldTotal _held;
     private int _locateBefore, _locateCount;
-    private long _restFrom, _restTo; // a jump's whole window, its view read first
+    private long _restFrom, _restTo; // a whole window, its view read first
     private long _planFrom, _planTo, _planAt; // the read in flight: the window it's for; about a row, its position
     private GridReadKind _planKind;
     private int _publishedSize = -1;
@@ -71,6 +73,9 @@ internal sealed class GridWindow<TKey, TRow> where TKey : unmanaged, IEquatable<
 
     public TotalKind TotalKind { get; private set; }
 
+    /// <summary>How often the sort or filter has been set: the view the rows published are of.</summary>
+    public int View { get; private set; }
+
     /// <summary>The last read was refused: the rows shown are as they were.</summary>
     public bool Stale => Refusal is not null;
 
@@ -94,10 +99,14 @@ internal sealed class GridWindow<TKey, TRow> where TKey : unmanaged, IEquatable<
 
     public ReadOnlySpan<TRow> Rows => _rows.AsSpan(0, _count);
 
+    /// <summary>Rows of the window before a view read first, left in the table until the publish after it.</summary>
+    public int Lingering => _lingered;
+
     /// <summary>
-    ///     What to read for the page's <paramref name="request" />: the live top, or a held window. A jump (a window not
-    ///     touching the one published) reads its view first, then the rest (<see cref="NeedsRest" />, <see cref="PlanRest" />):
-    ///     the rows the reader looks at go out ahead of those fetched round them.
+    ///     What to read for the page's <paramref name="request" />: the live top, or a held window. A view the window
+    ///     published doesn't hold (a jump, or a reader outrunning the pre-fetch) is read first, then the rest
+    ///     (<see cref="NeedsRest" />, <see cref="PlanRest" />): the rows the reader looks at go out ahead of those
+    ///     fetched round them.
     /// </summary>
     public GridRead<TKey, TRow> Plan(in GridRequest request)
     {
@@ -105,10 +114,10 @@ internal sealed class GridWindow<TKey, TRow> where TKey : unmanaged, IEquatable<
         long from, to;
         if (first == 0)
         {
-            var jump = IsJump(0, request.Count + (long)request.After); // (in the positions shown until now)
+            var missing = !Covers(0, request.Count); // (in the positions shown until now)
             if (!Live) Release();
             (from, to) = (0, request.Count + (long)request.After);
-            return Staged(jump, first, request.Count, from, to);
+            return Staged(missing, first, request.Count, from, to);
         }
 
         if (Live) Hold();
@@ -131,31 +140,31 @@ internal sealed class GridWindow<TKey, TRow> where TKey : unmanaged, IEquatable<
             }
         }
 
-        return Staged(IsJump(from, to), first, request.Count, from, to);
+        return Staged(!Covers(first, first + request.Count), first, request.Count, from, to);
     }
 
-    /// <summary>A jump's view read, its rest to follow; else the whole window.</summary>
-    private GridRead<TKey, TRow> Staged(bool jump, long first, int count, long from, long to)
+    /// <summary>A view the window doesn't hold read first, the rest to follow; else the whole window.</summary>
+    private GridRead<TKey, TRow> Staged(bool missing, long first, int count, long from, long to)
     {
-        NeedsRest = jump && count > 0 && (from < first || to > first + count);
+        NeedsRest = missing && count > 0 && (from < first || to > first + count);
         if (!NeedsRest) return PlanFrom(from, to);
         (_restFrom, _restTo) = (from, to);
         return PlanFrom(first, first + count);
     }
 
-    /// <summary>Whether [from, to) touches none of the window's rows: a jump.</summary>
-    private bool IsJump(long from, long to)
+    /// <summary>Whether the window published holds every position of [from, to).</summary>
+    private bool Covers(long from, long to)
     {
-        return !_anchored || _count == 0 || to <= _first || from >= _first + _count;
+        return _anchored && from >= _first && to <= _first + _count;
     }
 
-    /// <summary>A jump's view was read and published; the rest of its window is to read.</summary>
+    /// <summary>A view was read and published alone; the rest of its window is to read.</summary>
     public bool NeedsRest { get; private set; }
 
-    /// <summary>A jump's whole window, in view positions: [From, To).</summary>
+    /// <summary>The whole window of a view read first, in view positions: [From, To).</summary>
     public (long From, long To) Rest => (_restFrom, _restTo);
 
-    /// <summary>The rest of a jump's window, its view published: read from the view's rows.</summary>
+    /// <summary>The rest of a window whose view was read first, the view published: read from the view's rows.</summary>
     public GridRead<TKey, TRow> PlanRest()
     {
         NeedsRest = false;
@@ -185,11 +194,12 @@ internal sealed class GridWindow<TKey, TRow> where TKey : unmanaged, IEquatable<
     }
 
     /// <summary>
-    ///     A new sort or filter: nothing held carries over — the window's rows no longer stand where they did (they go
-    ///     at the next publish) — and the next read is of the top, as many rows.
+    ///     A new sort or filter, the <paramref name="view" />th: nothing held carries over — the window's rows no longer
+    ///     stand where they did (they go as the new window is published) — and the next read is of the top, as many rows.
     /// </summary>
-    public void Reset()
+    public void Reset(int view)
     {
+        View = view;
         if (!Live) Release();
         _anchored = false;
         NeedsRest = false;
@@ -255,7 +265,7 @@ internal sealed class GridWindow<TKey, TRow> where TKey : unmanaged, IEquatable<
         TotalKind = ended ? TotalKind.Exact : answer.TotalKind;
         Refusal = null;
         (_from, _to) = (_planFrom, _planTo);
-        return Publish(keys, page.Rows[i0..i1], firstView + i0);
+        return Publish(keys, page.Rows[i0..i1], firstView + i0, NeedsRest);
     }
 
     private long Set(long total)
@@ -273,17 +283,27 @@ internal sealed class GridWindow<TKey, TRow> where TKey : unmanaged, IEquatable<
         return changed;
     }
 
-    private bool Publish(ReadOnlySpan<TKey> keys, ReadOnlySpan<TRow> rows, long first)
+    private bool Publish(ReadOnlySpan<TKey> keys, ReadOnlySpan<TRow> rows, long first, bool linger)
     {
-        // _keep holds the new window's keys: the rows leaving it are deleted, those in it set (unchanged: no change).
+        // _keep holds the new window's keys: the rows leaving it are deleted, those in it set (unchanged: no change). A
+        // view read first leaves the rest of the window before in the table — the view goes out without their deletes,
+        // and those its rest still holds aren't sent again — until the publish after it.
         bool staged;
         var version = _table.Version;
         using (var tx = Transaction.Begin(_table, _order))
         {
             var update = tx.Of(_table);
+            for (var i = 0; i < _lingered; i++)
+                if (!_keep.Contains(_lingering[i]))
+                    update.Delete(_lingering[i]);
+            _lingered = 0;
             for (var i = 0; i < _count; i++)
                 if (!_keep.Contains(_keys[i]))
-                    update.Delete(_keys[i]);
+                {
+                    if (linger) _lingering[_lingered++] = _keys[i];
+                    else update.Delete(_keys[i]);
+                }
+
             for (var i = 0; i < keys.Length; i++) update.Set(keys[i], rows[i]);
             staged = StageOrder(tx, keys, first);
             tx.Complete();
@@ -293,6 +313,7 @@ internal sealed class GridWindow<TKey, TRow> where TKey : unmanaged, IEquatable<
         {
             _keys = new TKey[Math.Max(keys.Length, 2 * _keys.Length)];
             _rows = new TRow[_keys.Length];
+            Array.Resize(ref _lingering, _keys.Length); // (those left kept)
         }
 
         keys.CopyTo(_keys);
@@ -314,7 +335,7 @@ internal sealed class GridWindow<TKey, TRow> where TKey : unmanaged, IEquatable<
         var size = GridOrder.Write(_built, new GridOrderHeader
         {
             Live = Live, Stale = Stale, TotalKind = TotalKind, KeySize = KeySize, First = first, Total = Total,
-            LetIn = LetIn, Holds = Holds
+            LetIn = LetIn, Holds = Holds, View = View
         }, keys);
         var built = _built.AsSpan(0, size);
         if (size == _publishedSize && built.SequenceEqual(_published.AsSpan(0, size))) return false;

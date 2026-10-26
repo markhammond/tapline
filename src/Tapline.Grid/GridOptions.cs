@@ -74,4 +74,7 @@ public readonly record struct GridStatus
 
     /// <summary>Why the last read was refused (the rows shown are as they were), or null.</summary>
     public string? Refusal { get; init; }
+
+    /// <summary>Whether the page holds all the server published: its LiveGrid's word (a session alone leaves it unknown).</summary>
+    public GridFreshness Freshness { get; init; }
 }

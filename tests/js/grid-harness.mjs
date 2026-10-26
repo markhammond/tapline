@@ -1,6 +1,7 @@
 // The grid body (tapline-grid.js) in a browser, against a server played here: a window's rows and order as the session
 // publishes them, answered after a latency, with rows arriving at the live top and rows in view changing. For checking
-// the DOM layer — placeholders, flashes, widths, scaled scrolling — by eye and by script (window.harness).
+// the DOM layer — placeholders, flashes, widths, scaled scrolling, keys, selection and focus — by eye and by script
+// (window.harness), laid out as LiveGrid lays it out (the grid around its headings and body).
 //   ?rows=5000000  rows in all (50000000: scaled scrolling)    ?latency=80  ms an answer takes
 //   ?arrive=700    ms between arrivals (0: none)               ?change=400  ms between changes in view (0: none)
 //   ?visible=1     the page taken as shown whatever the browser says (a pane in the background, scripted: body.draw())
@@ -75,6 +76,7 @@ function orderBytes(first, ids) {
     dv.setBigInt64(8, BigInt(first), true);
     dv.setBigInt64(16, BigInt(total), true);
     dv.setInt32(32, holds, true);
+    dv.setInt32(36, asked?.view ?? 0, true);
     ids.forEach((id, i) => b.set(keyOf(id), 40 + KEY * i));
     return b;
 }
@@ -147,24 +149,26 @@ const tapline = {
 
 // ── the page: headings (the chrome's, here plain) and the body ──
 
-const root = document.getElementById('grid'), headings = document.querySelector('#headings div');
+const root = document.getElementById('grid'), host = document.getElementById('host'), head = document.getElementById('headings');
 columns.forEach((c, i) => {
-    const h = document.createElement('span');
+    const h = document.createElement('div');
+    h.className = 'tg-heading' + (c.frozen ? ' tg-frozen' : '') + (['int', 'fixed', 'percent'].includes(c.kind) ? ' tg-right' : '');
+    h.setAttribute('role', 'columnheader');
     h.textContent = c.label;
     h.style.width = `var(--tg-w${i}, 120px)`;
-    if (['int', 'fixed', 'percent'].includes(c.kind)) h.style.textAlign = 'right';
-    headings.append(h);
+    if (c.frozen) h.style.left = `var(--tg-left${i}, 0px)`;
+    head.firstElementChild.append(h);
 });
-const status = document.getElementById('status');
+const status = document.getElementById('status'), events = [];
 const body = new GridBody(root, {
-    columns, rowHeight: 28, tapline, binding: { tapId: 1 }, request, maxRows: 1000,
+    columns, rowHeight: 28, tapline, binding: { tapId: 1 }, request, maxRows: 1000, host, head, headerRows: 1,
+    selection: 'multiple',
+    rowClick: e => events.push({ click: e }), rowActivate: e => events.push({ activate: e }), rowSelect: e => events.push({ select: e }),
     visible: shown => console.log(`grid: ${shown ? 'shown' : 'hidden'}`),
     status: s => {
         status.textContent = s.ended ? 'ended' : `${s.total.toLocaleString('en-GB')} rows · ${s.live ? 'live' : 'held'} · ` +
             `${s.fresh} · ${s.blanks} blank frames`;
     }
 });
-// The headings take the module's widths, and scroll sideways with the body.
-new MutationObserver(() => headings.parentElement.style.cssText = root.style.cssText).observe(root, { attributes: true, attributeFilter: ['style'] });
 body.start();
-window.harness = { body, stats, columns, get total() { return total; } };
+window.harness = { body, stats, columns, events, keyOf: id => latin1(keyOf(id)), get total() { return total; } };

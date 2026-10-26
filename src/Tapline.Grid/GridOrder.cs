@@ -8,7 +8,8 @@ namespace Tapline.Grid;
 ///     Little-endian: u8 format (1) | u8 flags (<see cref="Live" />, <see cref="Stale" />) | u8 the total's kind | u8 the
 ///     key's size | u32 keys | i64 first (the view position of the first key) | i64 total (rows, in view positions) | i64
 ///     let in (rows let in above so far in this hold: the page moves its scroll by what's new of it) | u32 holds (how
-///     often the grid has gone from the live top to held: positions are this hold's) | u32 (0) | the keys, in order.
+///     often the grid has gone from the live top to held: positions are this hold's) | u32 view (how often its sort or
+///     filter has been set: the view its rows are of) | the keys, in order.
 /// </summary>
 public static class GridOrder
 {
@@ -44,7 +45,7 @@ public static class GridOrder
         BinaryPrimitives.WriteInt64LittleEndian(into[16..], header.Total);
         BinaryPrimitives.WriteInt64LittleEndian(into[24..], header.LetIn);
         BinaryPrimitives.WriteInt32LittleEndian(into[32..], header.Holds);
-        BinaryPrimitives.WriteInt32LittleEndian(into[36..], 0);
+        BinaryPrimitives.WriteInt32LittleEndian(into[36..], header.View);
         keyBytes.CopyTo(into[HeaderSize..]);
         return size;
     }
@@ -68,7 +69,8 @@ public static class GridOrder
             First = BinaryPrimitives.ReadInt64LittleEndian(value[8..]),
             Total = BinaryPrimitives.ReadInt64LittleEndian(value[16..]),
             LetIn = BinaryPrimitives.ReadInt64LittleEndian(value[24..]),
-            Holds = BinaryPrimitives.ReadInt32LittleEndian(value[32..])
+            Holds = BinaryPrimitives.ReadInt32LittleEndian(value[32..]),
+            View = BinaryPrimitives.ReadInt32LittleEndian(value[36..])
         };
         keys = value[HeaderSize..];
         return true;
@@ -97,4 +99,7 @@ public readonly record struct GridOrderHeader
 
     /// <summary>How often the grid has gone from the live top to held: the hold its positions are of.</summary>
     public int Holds { get; init; }
+
+    /// <summary>How often the grid's sort or filter has been set (<see cref="GridSession{TKey,TRow}.SetView" />): the view its rows are of.</summary>
+    public int View { get; init; }
 }

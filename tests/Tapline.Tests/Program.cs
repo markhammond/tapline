@@ -349,8 +349,10 @@ var tests = new (string Name, Func<Task> Run)[]
         T.GridSessionCadence),
     ("Grid session cancelled: a jump cancels the read in flight (its token in the source), the older never answered; a newer request touching it lets it finish and is read next; disposed mid-read, the read cancelled, the session ended and its subscription closed; no unobserved exception",
         T.GridSessionCancel),
-    ("Grid session's jumps, the view first: a jump's view read and sent alone with its rendezvous, then the rows round it read from the view's; a scroll read whole, in one; a newer jump between a jump's stages gives up the first's rest (its read cancelled), the newer's view read",
+    ("Grid session's jumps, the view first: a jump's view read and sent alone with its rendezvous, then the rows round it read from the view's; a scroll the window holds read whole, in one; one past it (outrunning the pre-fetch), its view first, the window's other rows left on the page until the rest and none sent again; a newer jump between a jump's stages gives up the first's rest (its read cancelled), the newer's view read, the rows left gone with it",
         T.GridSessionJumps),
+    ("Grid session's views: a new sort or filter numbered, its rows' order saying which; the read in flight cancelled, a request waiting dropped, and one asked in the view before, crossing it, dropped unread — none answered; the page's request in the new view answered",
+        T.GridSessionViews),
     ("Grid session's bounds: options that can't work refused when made, saying why; a client's grids at most so many (another client's its own); a window wider than its most refused, saying why; the session over with its subscription",
         T.GridSessionBounds),
     ("Grid allocation: a held window sliding through 100,000 rows, a row in and out and the order each answer — 10,000 answers on the thread, nothing allocated; 2,000 through the session's loop",
@@ -359,6 +361,14 @@ var tests = new (string Name, Func<Task> Run)[]
         T.GridMemory),
     ("Grid on the wire, uncompressed, the blotter's rows (136 B) and UUID keys: bytes a row entering, scrolling a view at a time (S1: at most 400), and an arrival at the live top — deletes as Tapline sends them (decision (k))",
         T.GridWireCost),
+    ("LiveGrid's columns resolved against their rows: each field where it is in the bytes Tapline sends (laid out by the runtime, not as marshalled; read back as written), its kind from its type (integers signed or not, floats, bools, enums and their names, DateTime ticks, Guids, inline byte arrays as text, a record struct's properties), a scale making a fixed, a percentage of fields by place",
+        T.LiveColumnsResolved),
+    ("LiveGrid's columns refused, saying why: none, no name, a name twice, frozen after not, no such field (naming those there are), a decimal, a struct of its own, a kind that can't read its field, fixed without a scale, an enum without names, names or Of where they don't belong, a percentage of nothing or of a double or sorted by, widths, scales and figures out of range",
+        T.LiveColumnsRefused),
+    ("LiveGrid's keys as the page holds them (a character a byte, as tapline.js keys its replica) and back, anything else no key; text written as the page reads it, cut at a character's end and flagged",
+        T.LiveGridKeysAndText),
+    ("LiveGrid rendered statically: refused where it would be, with the reason and the render mode to give it; no grid",
+        T.LiveGridStaticRefused),
     ("Fixtures: frames for the JS client test", T.WriteJsFixtures)
 };
 

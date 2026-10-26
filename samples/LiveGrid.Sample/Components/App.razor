@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1"/>
+    <base href="/"/>
+    <title>LiveGrid · Tapline</title>
+    <link rel="stylesheet" href="@Assets["_content/Tapline/tapline-grid.css"]"/>
+    <style>
+        :root {
+            color-scheme: light dark;
+            font: 13px/1.4 system-ui, sans-serif
+        }
+
+        body {
+            margin: 0;
+            padding: 12px 16px;
+            height: 100vh;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            gap: 8px
+        }
+
+        .bar {
+            display: flex;
+            gap: 16px;
+            flex-wrap: wrap;
+            align-items: baseline
+        }
+
+        .orders {
+            flex: 1;
+            height: auto
+        }
+
+        .tg-heading select {
+            font: inherit;
+            font-weight: normal;
+            max-width: 6em
+        }
+    </style>
+</head>
+<body>
+<Routes/>
+<script src="@Assets["_framework/blazor.web.js"]" autostart="false"></script>
+<script type="module">
+    import {tapline} from './@Assets["_content/Tapline/tapline.js"]';
+    import {startBlazor} from './@Assets["_content/Tapline/blazor-realtime.js"]';
+
+    startBlazor(Blazor, tapline); // (tapline-grid.js finds the page's client as globalThis.tapline)
+</script>
+</body>
+</html>

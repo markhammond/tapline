@@ -7,8 +7,8 @@ import { createHash } from 'node:crypto';
 import { TaplineClient, rowHash, FaultCode, BlobRef, StaleData } from '../../src/Tapline.AspNetCore/wwwroot/tapline.js';
 import { loadOpaque } from '../../src/Tapline.Authentication.Opaque/wwwroot/opaque.mjs';
 import { signInWithPassword, registerPassword } from '../../src/Tapline.Authentication.Opaque/wwwroot/tapline-opaque.mjs';
-import { Scroller, Prefetch, Velocity, windowFor, Requests, readOrder, finance, significant, formatCell, NOUGHT, SAFE_HEIGHT }
-  from '../../src/Tapline.Grid/wwwroot/tapline-grid.js';
+import { Scroller, Prefetch, Velocity, windowFor, Requests, readOrder, finance, significant, formatCell, NOUGHT, SAFE_HEIGHT,
+  stampOf, flashDelay, cssMs } from '../../src/Tapline.Grid/wwwroot/tapline-grid.js';
 
 const fx = JSON.parse(readFileSync(new URL('./fixtures/frames.json', import.meta.url)));
 const hex = s => Uint8Array.from(Buffer.from(s, 'hex'));
@@ -1266,7 +1266,7 @@ test('grid requests: coalesced, at most one an interval and while fewer than the
   assert.equal(r.pump().id, 'r5', 'and asks afresh, the same window too');
 });
 
-test('grid order value: read as Tapline.Grid writes it (40 bytes, then keys); another format, cut short, a count that doesn\'t fit: not one', () => {
+test('grid order value: read as Tapline.Grid writes it (40 bytes, the view its rows are of among them, then keys); another format, cut short, a count that doesn\'t fit: not one', () => {
   const keys = [7n, 5n, 3n];
   const bytes = new Uint8Array(40 + 24), dv = new DataView(bytes.buffer);
   bytes[0] = 1; bytes[1] = 2; bytes[2] = 1; bytes[3] = 8;
@@ -1275,11 +1275,12 @@ test('grid order value: read as Tapline.Grid writes it (40 bytes, then keys); an
   dv.setBigInt64(16, 9_876_543_210n, true);
   dv.setBigInt64(24, 30n, true);
   dv.setInt32(32, 4, true);
+  dv.setInt32(36, 2, true);
   keys.forEach((k, i) => dv.setBigInt64(40 + 8 * i, k, true));
   const order = readOrder(bytes);
   const latin1 = k => { const b = new Uint8Array(8); new DataView(b.buffer).setBigInt64(0, k, true); return String.fromCharCode(...b); };
   assert.deepEqual(order, { live: false, stale: true, totalKind: 1, keySize: 8, count: 3, first: 1_234_567_890_123, total: 9_876_543_210,
-    letIn: 30, holds: 4, keys: keys.map(latin1) });
+    letIn: 30, holds: 4, view: 2, keys: keys.map(latin1) });
   assert.equal(readOrder(Uint8Array.of(2, ...bytes.subarray(1))), null, 'another format');
   assert.equal(readOrder(bytes.subarray(0, 63)), null, 'cut short');
   dv.setInt32(4, 4, true);
@@ -1337,6 +1338,70 @@ test('grid cells: quantities as finance writes them (exact, half away from nough
   dv.setFloat64(48, -1234.5678, true);
   assert.deepEqual(cell('rate'), { text: '-1,234.568', title: '-1234.5678' }, 'a float to its places, grouped; whole on hover');
   assert.deepEqual(cell('px'), { text: '123.457', title: '123.45678901' }, 'six figures shown, exact on hover');
+});
+
+test('grid cells as LiveGrid describes its columns: unsigned integers (none taken as no value), a float, its shortest text on hover, a DateTime\'s ticks shown as UTC (zero: none), an enum of any size and sign by its dictionary, a Guid in its text (empty: none), a percentage of fields by place', () => {
+  const row = new Uint8Array(72), dv = new DataView(row.buffer);
+  const columns = [
+    { name: 'u8', kind: 'int', offset: 0, size: 1, unsigned: true },
+    { name: 'u64', kind: 'int', offset: 8, size: 8, unsigned: true },
+    { name: 'f32', kind: 'float', offset: 16, size: 4, decimals: 3 },
+    { name: 'at', kind: 'time', offset: 24, size: 8, unit: 'ticks' },
+    { name: 'side', kind: 'enum', offset: 32, size: 4, unsigned: false, dictionary: { '-1': 'None', '0': 'Buy', '1': 'Sell' } },
+    { name: 'id', kind: 'uuid', offset: 40, size: 16 },
+    { name: 'fill', kind: 'percent', of: { offset: 56, size: 4, unsigned: true }, over: { offset: 60, size: 4, unsigned: true }, decimals: 1 }
+  ];
+  row[0] = 255;
+  dv.setBigUint64(8, 2n ** 64n - 1n, true);
+  dv.setFloat32(16, 0.1, true);
+  const today = new Date(Date.UTC(2026, 9, 26, 15, 0, 0));
+  const ticks = BigInt(Date.UTC(2026, 9, 26, 14, 32, 5)) * 10_000n + 1_234_560n + 621_355_968_000_000_000n;
+  dv.setBigUint64(24, ticks | (1n << 62n), true);          // (DateTimeKind.Utc in the top bits)
+  dv.setInt32(32, -1, true);
+  row.set([0x33, 0x22, 0x11, 0x00, 0x55, 0x44, 0x77, 0x66, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff], 40);
+  dv.setUint32(56, 3, true);
+  dv.setUint32(60, 4, true);
+  const cell = name => formatCell(columns.find(c => c.name === name), row, dv, columns, today);
+  assert.equal(cell('u8').text, '255', 'unsigned: its greatest a value, not none');
+  assert.equal(cell('u64').text, '18,446,744,073,709,551,615');
+  assert.deepEqual(cell('f32'), { text: '.1', title: '0.1' }, 'a float32 as written, not 0.10000000149011612');
+  assert.deepEqual(cell('at'), { text: '…14:32:05', title: '2026-10-26 14:32:05.123456 UTC' }, 'a DateTime\'s ticks, its kind bits aside');
+  assert.equal(cell('side').text, 'None', 'a signed enum\'s -1');
+  dv.setInt32(32, 1, true);
+  assert.equal(cell('side').text, 'Sell');
+  dv.setInt32(32, 7, true);
+  assert.equal(cell('side').text, '#7', 'a value not in the dictionary: its number');
+  assert.deepEqual(cell('id'), { text: '00112233-4455-6677-8899-aabbccddeeff', title: '00112233-4455-6677-8899-aabbccddeeff' }, 'a Guid\'s bytes as .NET lays them out');
+  assert.equal(cell('fill').text, '75%');
+  row.fill(0);
+  assert.equal(cell('at').text, '', 'DateTime.MinValue: none');
+  assert.equal(cell('id').text, '', 'Guid.Empty: none');
+  assert.equal(cell('u8').text, '0');
+});
+
+test('grid flashes as they happened: the delay showing a flash where it has got to (none once over, from its start if not yet begun), on its boundaries; a row\'s arrival stamp — µs since 1970, or a DateTime\'s ticks, its kind aside — in ms, none for none; a CSS time in ms', () => {
+  assert.equal(flashDelay(0, 5000), 0, 'just now: from its start');
+  assert.equal(flashDelay(-40, 5000), 0, 'stamped a little ahead of the page: from its start');
+  assert.equal(flashDelay(1200, 5000), -1200, 'a second and a bit ago: that far in');
+  assert.equal(flashDelay(4999, 5000), -4999, 'a millisecond before its end: shown');
+  assert.equal(flashDelay(5000, 5000), null, 'on its end: over');
+  assert.equal(flashDelay(5001, 5000), null, 'past it: over');
+  assert.equal(flashDelay(10, 0), null, 'no flash in the page\'s CSS: none');
+  const row = new Uint8Array(16), dv = new DataView(row.buffer);
+  const at = Date.UTC(2026, 9, 26, 14, 32, 5, 123);
+  dv.setBigInt64(0, BigInt(at) * 1000n + 456n, true);
+  assert.ok(Math.abs(stampOf({ offset: 0, size: 8 }, row, dv) - (at + 0.456)) < 1e-3, 'µs since 1970, to the µs');
+  dv.setBigUint64(8, (BigInt(at) * 10_000n + 4_560n + 621_355_968_000_000_000n) | (1n << 62n), true);
+  assert.ok(Math.abs(stampOf({ offset: 8, size: 8, unit: 'ticks' }, row, dv) - (at + 0.456)) < 1e-3, 'a DateTime\'s ticks, its kind (Utc) aside');
+  dv.setBigInt64(0, -(2n ** 63n), true);
+  dv.setBigUint64(8, 1n << 62n, true);
+  assert.equal(stampOf({ offset: 0 }, row, dv), null, 'the least long: none');
+  assert.equal(stampOf({ offset: 8, unit: 'ticks' }, row, dv), null, 'DateTime.MinValue (whatever its kind): none');
+  assert.equal(stampOf({ offset: 12 }, row, dv), null, 'past the row\'s end: none');
+  assert.equal(cssMs('5s'), 5000);
+  assert.equal(cssMs('2400ms'), 2400);
+  assert.equal(cssMs('0.25s, 1s'), 250, 'the first of a list');
+  assert.equal(cssMs(''), 0);
 });
 
 test('grid on the wire: a session\'s frames as Tapline.Grid writes them, through the client with { changed: true } — after each step the order read as written (live or held, first, total, rows let in, holds, keys) and the changed keys those whose rows differ; held, arrivals above: nothing at all', () => {

@@ -140,8 +140,9 @@ internal static partial class T
             return;
         }
 
-        Assert(table.Count == keys.Length && keys.All(table.ContainsKey),
-            $"{step}: the table holds the window's rows and no others ({table.Count} rows, {keys.Length} keys)");
+        Assert(table.Count == keys.Length + rig.Window.Lingering && keys.All(table.ContainsKey),
+            $"{step}: the table holds the window's rows and no others but those left by a view read first " +
+            $"({table.Count} rows, {keys.Length} keys, {rig.Window.Lingering} left)");
         foreach (var key in keys)
             Assert(SameRow(table[key], rig.Model.RowOf(key)), $"{step}: row {key} as the source has it now");
         var order = GridOracle(rig.Model, rig.View);
@@ -327,7 +328,7 @@ internal static partial class T
             "the row below took the deleted one's place; five above (seven arrived, two gone)");
 
         // Far from the window: placed by rank, past the rows not shown — its view first, alone, then the rest.
-        (GridOrderHeader Header, long[] Keys) viewFirst = default;
+        (GridOrderHeader Header, long[] Keys) viewFirst = (default, []);
         rig.BetweenStages = () =>
         {
             CheckWindow(rig, "held, far: its view");
@@ -372,12 +373,12 @@ internal static partial class T
 
         // A new sort and filter: the top of it, the old window's rows gone from the table.
         rig.View = new GridView([new SortKey("price", true), new SortKey("qty")], new GridFilter(("status", '=', 1)));
-        rig.Window.Reset();
+        rig.Window.Reset(1);
         Assert(rig.Refresh(), "the new view's top: published");
         CheckWindow(rig, "a new sort and filter");
         (h, keys) = rig.Published();
         order = GridOracle(source, rig.View);
-        Assert(h.Live && keys.SequenceEqual(order[..44]), "live, at the top of the new order");
+        Assert(h.Live && h.View == 1 && keys.SequenceEqual(order[..44]), "live, at the top of the new order, of view 1");
 
         // A key brought into view, wherever it is: a place of its own, rows about it.
         var holds = h.Holds;
@@ -466,7 +467,7 @@ internal static partial class T
             var stage = "";
             rig.BetweenStages = () => CheckWindow(rig, $"seed {seed}, {stage}: a jump's view, alone");
             long first = 0;
-            int holds = 0;
+            int holds = 0, views = 0;
             long letIn = 0;
             for (var step = 0; step < 400; step++)
             {
@@ -503,8 +504,9 @@ internal static partial class T
                         _ => ("price", '>', (long)rnd.Next(10_000, 14_000))
                     }).ToArray();
                     rig.View = new GridView(sort, conditions.Length == 0 ? null : new GridFilter(conditions));
-                    rig.Window.Reset();
+                    rig.Window.Reset(++views);
                     rig.Refresh();
+                    Assert(rig.Published().Header.View == views, $"seed {seed}, step {step}: the order of view {views}");
                     first = 0;
                 }
                 else
@@ -890,35 +892,132 @@ internal static partial class T
         }, "the rest in front of the page");
         Assert(ReplicaOf(group)!.Value.Keys.SequenceEqual(order[978..1_044]), "the whole window: 978 to 1,044");
 
-        // Scrolling (a window touching the last): read whole, in one.
+        // Scrolling, the view in the window published: read whole, in one.
         session.Request(new GridRequest(Guid.Empty, 1_010, 22, 22, 22, 1, 0));
         await Until(() => source.Started == 3, "a scroll's read");
         Assert(source.Asked.TryDequeue(out var scroll) && scroll.Count + scroll.Before == 66, "a scroll: the whole window at once");
         source.Gate.Release();
-        await Until(() => session.Settled, "the scroll answered");
+        await Until(() =>
+        {
+            Pump(outlet, owner, client);
+            return session.Settled && ReplicaOf(group)!.Value.Header.First == 988;
+        }, "the scroll answered: 988 to 1,054");
+
+        // Scrolling past the window published (outrunning the pre-fetch): the view first; the rows round it left on the
+        // page, not deleted ahead of it, and those the rest still holds not sent again.
+        var o = new GridRequest(Guid.CreateVersion7(), 1_040, 22, 22, 22, 1, 0);
+        var oAnswered = client.RendezvousAsync(CorrelationOf(o.Id), subscription.TapId);
+        session.Request(o);
+        await Until(() => source.Started == 4, "the outrun view's read");
+        Assert(source.Asked.TryDequeue(out var oView) && oView.Kind == GridReadKind.AroundRow && oView.Key == order[1_040] &&
+               oView.Before == 0 && oView.Count == 22, "first, the view alone: 22 rows from the window's row at 1,040");
+        source.Gate.Release();
+        await Until(() =>
+        {
+            Pump(outlet, owner, client);
+            return oAnswered.IsCompleted;
+        }, "its rendezvous, with the view");
+        replica = ReplicaOf(group)!.Value;
+        Assert(replica.Keys.SequenceEqual(order[1_040..1_062]) && replica.Rows.Count == 74 &&
+               order[988..1_062].All(replica.Rows.ContainsKey),
+            $"the view's 22 rows in front of the page, the window's 52 above it still there: {replica.Rows.Count} rows");
+        await Until(() => source.Started == 5, "the outrun view's rest read");
+        Assert(source.Asked.TryDequeue(out var oRest) && oRest.Kind == GridReadKind.AroundRow && oRest.Key == order[1_040] &&
+               oRest.Before == 22 && oRest.Count == 44, "then the rest: 22 above the view's first row and 44 from it");
+        long restBytes = 0;
+        source.Gate.Release();
+        await Until(() =>
+        {
+            Pump(outlet, owner, client, frame =>
+            {
+                restBytes += frame.Length - HeartbeatBytes(frame);
+                return frame;
+            });
+            return session.Settled && ReplicaOf(group)!.Value.Header.First == 1_018;
+        }, "the rest in front of the page");
+        replica = ReplicaOf(group)!.Value;
+        Assert(replica.Keys.SequenceEqual(order[1_018..1_084]) && replica.Rows.Count == 66 &&
+               replica.Keys.All(replica.Rows.ContainsKey), $"the whole window, 1,018 to 1,084, and no other rows: {replica.Rows.Count}");
+        var entry = 1 + sizeof(long) + Marshal.SizeOf<GridOrderRow>(); // a row in, or one leaving: its key and its row's width
+        var rows = restBytes - GridOrder.SizeOf(66, sizeof(long));
+        Console.WriteLine($"  outrun scroll's rest: {restBytes:N0} B, {rows:N0} B past its order — {(double)rows / entry:F1} rows' worth " +
+                          $"({entry} B each): 30 gone above, 22 come below, none sent again");
+        Assert(rows < (30 + 22 + 11) * entry,
+            $"the rest: 30 rows gone above, 22 come below, the 22 above the view not sent again: {(double)rows / entry:F1} rows' worth");
 
         // A newer jump between a jump's stages: the rest of the first given up (its read cancelled), the newer's view read.
         var k = new GridRequest(Guid.CreateVersion7(), 5_000, 22, 22, 22, 1, 0);
         var kAnswered = client.RendezvousAsync(CorrelationOf(k.Id), subscription.TapId);
         session.Request(k);
-        await Until(() => source.Started == 4, "k's view read");
+        await Until(() => source.Started == 6, "k's view read");
         source.Gate.Release();
         await Until(() =>
         {
             Pump(outlet, owner, client);
             return kAnswered.IsCompleted;
         }, "k's view in front of the page");
-        await Until(() => source.Started == 5, "k's rest read");
+        await Until(() => source.Started == 7, "k's rest read");
         session.Request(new GridRequest(Guid.Empty, 9_000, 22, 0, 0, 1, 0));
-        await Until(() => source.Cancelled == 1 && source.Started == 6, "k's rest cancelled by the jump to 9,000; its view read");
+        await Until(() => source.Cancelled == 1 && source.Started == 8, "k's rest cancelled by the jump to 9,000; its view read");
         source.Gate.Release();
         await Until(() =>
         {
             Pump(outlet, owner, client);
             return session.Settled && ReplicaOf(group)!.Value.Header.First == 9_000;
         }, "the jump to 9,000 in front of the page");
-        Assert(ReplicaOf(group)!.Value.Keys.SequenceEqual(order[9_000..9_022]) && source.Started == 6,
+        replica = ReplicaOf(group)!.Value;
+        Assert(replica.Keys.SequenceEqual(order[9_000..9_022]) && source.Started == 8,
             "its view alone (no pads asked for), and k's rest never read again");
+        Assert(replica.Rows.Count == 22, $"the rows left by k's view gone with the jump's: {replica.Rows.Count} rows");
+    }
+
+    public static async Task GridSessionViews()
+    {
+        var outlet = NewOutlet(new OutletRegistry());
+        var (client, owner) = Connected(outlet);
+        var model = new ComputedGrid(7, 5_000);
+        var source = new GatedGrid(model);
+        await using var session = new GridSession<long, GridOrderRow>(outlet, source);
+        GroupReplica? group = null;
+        var subscription = client.Subscribe(session.Binding, new SubscriptionHandler { Group = (_, g) => group = g });
+        Pump(outlet, owner, client);
+
+        // The page asks (view 0), and again while that's read (touching it: it waits); then the sort changes.
+        var a = new GridRequest(Guid.CreateVersion7(), 0, 20, 0, 0);
+        var aAnswered = client.RendezvousAsync(CorrelationOf(a.Id), subscription.TapId);
+        session.Request(a);
+        await Until(() => source.Started == 1, "a's read");
+        var waiting = new GridRequest(Guid.CreateVersion7(), 10, 20, 0, 0);
+        var waitingAnswered = client.RendezvousAsync(CorrelationOf(waiting.Id), subscription.TapId);
+        session.Request(waiting);
+        var view = new GridView([new SortKey("price", true)]);
+        var number = session.SetView(view);
+        Assert(number == 1, $"the view's number: {number}");
+        await Until(() => source.Cancelled == 1 && session.Settled, "a's read cancelled by the new view, the request waiting dropped");
+
+        // Asked in the view before (crossing the new one on the way): dropped, unread.
+        var stale = new GridRequest(Guid.CreateVersion7(), 300, 20, 0, 0);
+        var staleAnswered = client.RendezvousAsync(CorrelationOf(stale.Id), subscription.TapId);
+        session.Request(stale);
+        Assert(session.Settled, "the late request dropped: nothing asked of the loop");
+
+        // The page, told of view 1, asks in it: read, answered, its order of view 1.
+        var b = new GridRequest(Guid.CreateVersion7(), 0, 20, 0, 0, View: 1);
+        var bAnswered = client.RendezvousAsync(CorrelationOf(b.Id), subscription.TapId);
+        session.Request(b);
+        await Until(() => source.Started == 2, "b's read");
+        source.Gate.Release();
+        await Until(() =>
+        {
+            Pump(outlet, owner, client);
+            return bAnswered.IsCompleted && session.Settled;
+        }, "b answered");
+        var replica = ReplicaOf(group)!.Value;
+        var order = GridOracle(model, view);
+        Assert(replica.Header.View == 1 && replica.Keys.SequenceEqual(order[..20]), "the new view's top, its order of view 1");
+        Assert(source.Started == 2 && !aAnswered.IsCompleted && !waitingAnswered.IsCompleted && !staleAnswered.IsCompleted,
+            "the old view's requests: the one read cancelled, the one waiting and the late one dropped, none answered");
+        Assert(session.SetView(GridView.Natural) == 2, "numbered on: 2");
     }
 
     private static TException Throws<TException>(Action action, string what) where TException : Exception
@@ -1170,9 +1269,9 @@ internal static partial class T
             await Until(() =>
             {
                 bytes += Bytes();
-                return answered.IsCompleted;
-            }, "the answer");
-            return bytes;
+                return answered.IsCompleted && session.Settled;
+            }, "the answer, and the rest of its window"); // (counted with it, not the next)
+            return bytes + Bytes();
         }
 
         // Scrolling a view at a time (22 rows), held: 22 rows in, 22 out, the order.

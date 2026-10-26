@@ -1,13 +1,158 @@
-/* tapline-grid.css — a LiveGrid body's layout, placeholders and flashes (tapline-grid.js draws the rows; this places
-   them). Its colours are custom properties, for the page's theme: --tg-background, --tg-placeholder, --tg-changed,
-   --tg-arrived. Widths and frozen offsets are the module's, as custom properties on the grid's root (--tg-w<i>,
-   --tg-left<i>, --tg-width), which the chrome's headings read too, with --tg-scroll-left. */
+/* tapline-grid.css — a LiveGrid: its body's layout, placeholders and flashes (tapline-grid.js draws the rows; this
+   places them), and the component's headings, footer, selection and focus. Colours are custom properties a page may
+   set anywhere above the grid: --tg-background, --tg-line, --tg-placeholder, --tg-changed, --tg-arrived, --tg-selected,
+   --tg-focus; and the flashes' length, --tg-flash-for. Widths and frozen offsets are the module's, as custom properties on the grid (--tg-w<i>, --tg-left<i>,
+   --tg-width, --tg-scrollbar), which the headings read too. */
+
+/* ── the component: sized by its class or style; it fills its height ── */
+
+.live-grid {
+    display: flex;
+    flex-direction: column;
+    height: 24rem;
+    min-height: 0;
+}
+
+.live-grid > .tg-grid {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    outline: none;
+}
+
+.live-grid > .tg-grid:focus-visible {
+    box-shadow: 0 0 0 2px var(--tg-focus, Highlight);
+}
+
+.live-grid .tg-body {
+    flex: 1;
+    min-height: 0;
+}
+
+.tg-head {
+    flex: none;
+    overflow: hidden; /* (scrolled sideways with the rows, by the module: its frozen headings sticky in it) */
+    border-bottom: 1px solid var(--tg-line, color-mix(in srgb, CanvasText 18%, transparent));
+}
+
+.tg-head-row {
+    display: flex;
+    width: var(--tg-width, 100%);
+}
+
+.tg-head-row::after { /* (room for the rows' scrollbar: the headings scroll as far as the rows do) */
+    content: '';
+    flex: none;
+    width: var(--tg-scrollbar, 0px);
+}
+
+.tg-heading {
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    box-sizing: border-box;
+    padding: 0 8px;
+    height: var(--tg-row-height, 30px);
+    overflow: hidden;
+    white-space: nowrap;
+    font-weight: 600;
+}
+
+.tg-heading.tg-right {
+    justify-content: flex-end;
+}
+
+.tg-heading.tg-frozen {
+    position: sticky;
+    z-index: 2;
+    background: var(--tg-background, Canvas);
+}
+
+.tg-sort {
+    all: unset;
+    display: inline-flex;
+    align-items: baseline;
+    gap: 2px;
+    min-width: 0;
+    cursor: pointer;
+}
+
+.tg-sort:focus-visible {
+    outline: 2px solid var(--tg-focus, Highlight);
+    outline-offset: 1px;
+}
+
+.tg-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.tg-arrow {
+    font-size: .7em;
+    opacity: .75;
+}
+
+.tg-rank {
+    font-size: .65em;
+    opacity: .65;
+}
+
+.tg-foot {
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-height: 1.6em;
+    padding: 2px 8px;
+    border-top: 1px solid var(--tg-line, color-mix(in srgb, CanvasText 18%, transparent));
+    font-size: .9em;
+}
+
+.tg-status {
+    flex: 1;
+    min-width: 0;
+}
+
+.tg-chooser {
+    position: relative;
+}
+
+.tg-chooser > summary {
+    cursor: pointer;
+}
+
+.tg-chooser-list { /* (opens upward: the footer is the grid's last line) */
+    position: absolute;
+    right: 0;
+    bottom: calc(100% + 4px);
+    z-index: 3;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    max-height: 18rem;
+    overflow: auto;
+    padding: 6px 10px;
+    white-space: nowrap;
+    background: var(--tg-background, Canvas);
+    border: 1px solid var(--tg-line, color-mix(in srgb, CanvasText 18%, transparent));
+    border-radius: 6px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, .15);
+}
+
+.live-grid.live-grid-refused {
+    display: block;
+    height: auto;
+    padding: 10px 12px;
+    border: 1px solid #c33;
+    border-radius: 6px;
+    color: #c33;
+}
+
+/* ── the body ── */
 
 .tapline-grid {
-    --tg-background: Canvas;
-    --tg-placeholder: rgba(128, 128, 128, .18);
-    --tg-changed: rgba(255, 196, 0, .45);
-    --tg-arrived: rgba(80, 160, 255, .30);
     position: relative;
     display: flex;
     flex-direction: column;
@@ -24,7 +169,7 @@
 }
 
 .tapline-grid .tg-scroller:focus-visible {
-    box-shadow: inset 0 0 0 2px Highlight;
+    box-shadow: inset 0 0 0 2px var(--tg-focus, Highlight);
 }
 
 .tapline-grid .tg-surface {
@@ -66,7 +211,13 @@
 .tapline-grid .tg-frozen {
     position: sticky;
     z-index: 1;
-    background: var(--tg-background);
+    background: var(--tg-background, Canvas);
+}
+
+.tapline-grid .tg-link {
+    color: LinkText;
+    text-decoration: underline;
+    cursor: pointer;
 }
 
 .tapline-grid .tg-probe {
@@ -76,6 +227,26 @@
     width: auto !important;
 }
 
+/* Selected, by key (a frozen cell's own background under the selection's). */
+.tapline-grid .tg-row.tg-selected {
+    background: var(--tg-selected, color-mix(in srgb, Highlight 22%, transparent));
+}
+
+.tapline-grid .tg-row.tg-selected .tg-frozen {
+    background: linear-gradient(var(--tg-selected, color-mix(in srgb, Highlight 22%, transparent)) 0 0), var(--tg-background, Canvas);
+}
+
+/* The row the keys move from, while the grid has the focus: above the frozen cells. */
+.tg-grid:focus .tapline-grid .tg-row.tg-focused::after,
+.tapline-grid .tg-scroller:focus .tg-row.tg-focused::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    pointer-events: none;
+    box-shadow: inset 0 0 0 2px var(--tg-focus, Highlight);
+}
+
 /* A row not answered yet: its place, shimmering — never a blank. */
 .tapline-grid .tg-placeholder .tg-cell::after {
     content: '';
@@ -83,23 +254,25 @@
     height: .6em;
     margin-top: calc((var(--tg-row-height, 30px) - .6em) / 2);
     border-radius: 3px;
-    background: linear-gradient(90deg, transparent, var(--tg-placeholder), transparent);
+    background: linear-gradient(90deg, transparent, var(--tg-placeholder, rgba(128, 128, 128, .18)), transparent);
     background-size: 200% 100%;
     animation: tg-shimmer 1.2s linear infinite;
 }
 
-/* Flashes: a cell changed in place (2.4 s), a row arrived at the live top (3 s). Two animations alike, alternated, so
-   a flash under way starts again without a reflow. */
-.tapline-grid .tg-changed-a { animation: tg-changed-a 2.4s ease-out; }
-.tapline-grid .tg-changed-b { animation: tg-changed-b 2.4s ease-out; }
-.tapline-grid .tg-arrived-a { animation: tg-arrived-a 3s ease-out; }
-.tapline-grid .tg-arrived-b { animation: tg-arrived-b 3s ease-out; }
+/* Flashes: a cell changed in place, a row arrived at the live top — easing out over 5 s (--tg-flash-for; each alone,
+   --tg-changed-for, --tg-arrived-for). The module starts each where it has got to since the change (a negative
+   delay), so pages side by side show them alike. Two animations alike, alternated, so a flash under way starts again
+   without a reflow. */
+.tapline-grid .tg-changed-a { animation: tg-changed-a var(--tg-changed-for, var(--tg-flash-for, 5s)) ease-out; }
+.tapline-grid .tg-changed-b { animation: tg-changed-b var(--tg-changed-for, var(--tg-flash-for, 5s)) ease-out; }
+.tapline-grid .tg-arrived-a { animation: tg-arrived-a var(--tg-arrived-for, var(--tg-flash-for, 5s)) ease-out; }
+.tapline-grid .tg-arrived-b { animation: tg-arrived-b var(--tg-arrived-for, var(--tg-flash-for, 5s)) ease-out; }
 
 @keyframes tg-shimmer { from { background-position: 100% 0; } to { background-position: -100% 0; } }
-@keyframes tg-changed-a { from { background-color: var(--tg-changed); } to { background-color: transparent; } }
-@keyframes tg-changed-b { from { background-color: var(--tg-changed); } to { background-color: transparent; } }
-@keyframes tg-arrived-a { from { background-color: var(--tg-arrived); } to { background-color: transparent; } }
-@keyframes tg-arrived-b { from { background-color: var(--tg-arrived); } to { background-color: transparent; } }
+@keyframes tg-changed-a { from { background-color: var(--tg-changed, rgba(255, 196, 0, .45)); } to { background-color: transparent; } }
+@keyframes tg-changed-b { from { background-color: var(--tg-changed, rgba(255, 196, 0, .45)); } to { background-color: transparent; } }
+@keyframes tg-arrived-a { from { background-color: var(--tg-arrived, rgba(80, 160, 255, .30)); } to { background-color: transparent; } }
+@keyframes tg-arrived-b { from { background-color: var(--tg-arrived, rgba(80, 160, 255, .30)); } to { background-color: transparent; } }
 
 @media (prefers-reduced-motion: reduce) {
     .tapline-grid .tg-placeholder .tg-cell::after { animation: none; }
