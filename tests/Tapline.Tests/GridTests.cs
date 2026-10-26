@@ -77,7 +77,13 @@ internal static partial class T
 
         public ComputedGrid Model => (ComputedGrid)Source;
 
-        /// <summary>The page's request, in the positions of the order it last applied (by default, the last published).</summary>
+        /// <summary>Called between a jump's two stages: its view published, the rest not yet read.</summary>
+        public Action? BetweenStages;
+
+        /// <summary>
+        ///     The page's request, in the positions of the order it last applied (by default, the last published): a jump
+        ///     answered in its two stages, as the session does, its view first.
+        /// </summary>
         public bool Ask(long first, int count, int before, int after, int? holds = null, long? letIn = null)
         {
             if (holds is null || letIn is null)
@@ -86,7 +92,10 @@ internal static partial class T
                 (holds, letIn) = (holds ?? h.Holds, letIn ?? h.LetIn);
             }
 
-            return Answer(Window.Plan(new GridRequest(Guid.Empty, first, count, before, after, holds.Value, letIn.Value)));
+            var published = Answer(Window.Plan(new GridRequest(Guid.Empty, first, count, before, after, holds.Value, letIn.Value)));
+            if (!Window.NeedsRest) return published;
+            BetweenStages?.Invoke();
+            return Answer(Window.PlanRest()) | published;
         }
 
         public bool Refresh()
@@ -149,6 +158,66 @@ internal static partial class T
         var shown = order.Length - hidden;
         Assert(h.Live ? h.Total == order.Length : Math.Abs(h.Total - shown) * 100 <= h.Total,
             $"{step}: a total of {h.Total} for {shown} rows in view positions");
+    }
+
+    /// <summary>
+    ///     For the JS tests (tapline-grid.js against frames as the server writes them): a grid's watch, step by step —
+    ///     the live top, arrivals, a hold, arrivals above (nothing sent), a row changed, rows let in, back to the top —
+    ///     each step's frames, and the order and changed keys the page should then have (none: nothing sent).
+    /// </summary>
+    private static object GridFixture(OutletRegistry registry, byte[] scratch)
+    {
+        var outlet = NewOutlet(registry);
+        var source = new ComputedGrid(8, 500);
+        var rig = new GridRig(source, 60);
+        var tap = outlet.Watch("grid", WatchMember.Of(rig.Rows), WatchMember.Of(rig.Order));
+        outlet.Activate(tap.Id);
+        var steps = new List<object>();
+        var shown = rig.TableRows();
+
+        void Step(string what, Action act)
+        {
+            var (version, order) = (rig.Rows.Version, rig.Window.PublishedOrder.ToArray());
+            act();
+            var frames = new List<string>();
+            for (int n; (n = outlet.Build(scratch)) > 0;) frames.Add(Convert.ToBase64String(scratch, 0, n));
+            var (h, keys) = rig.Published();
+            var now = rig.TableRows();
+            var changed = now.Keys.Where(k => !shown.TryGetValue(k, out var was) || !SameRow(was, now[k]))
+                .Concat(shown.Keys.Where(k => !now.ContainsKey(k))).OrderBy(k => k).Select(k => k.ToString()).ToArray();
+            var sent = rig.Rows.Version != version || !rig.Window.PublishedOrder.SequenceEqual(order);
+            steps.Add(new
+            {
+                what, frames, sent,
+                expect = new
+                {
+                    h.Live, h.First, h.Total, h.LetIn, h.Holds, keys = keys.Select(k => k.ToString()).ToArray(), changed,
+                    qty = keys.Select(k => now[k].Qty).ToArray()
+                }
+            });
+            shown = now;
+        }
+
+        Step("the live top", () => rig.Ask(0, 10, 0, 10, 0, 0));
+        Step("arrivals at the top", () =>
+        {
+            source.Arrive(2);
+            rig.Refresh();
+        });
+        Step("held", () => rig.Ask(40, 10, 5, 10, 0, 0));
+        Step("arrivals above, held: nothing sent", () =>
+        {
+            source.Arrive(3);
+            rig.Refresh();
+        });
+        Step("a row in view changed", () =>
+        {
+            source.Update(rig.Window.Keys[4], 4_321);
+            rig.Refresh();
+        });
+        Step("near the top: the three let in", () => rig.Ask(20, 10, 10, 10, 1, 0));
+        Step("back at the top", () => rig.Ask(0, 10, 0, 10, 1, 3));
+        return new { watchId = tap.Id, steps };
     }
 
     // ───────────── rules ─────────────
@@ -257,12 +326,22 @@ internal static partial class T
         Assert(keys[0] == view[1] && h.First == 95 && rig.Window.Above == 5,
             "the row below took the deleted one's place; five above (seven arrived, two gone)");
 
-        // Far from the window: placed by rank, past the rows not shown.
+        // Far from the window: placed by rank, past the rows not shown — its view first, alone, then the rest.
+        (GridOrderHeader Header, long[] Keys) viewFirst = default;
+        rig.BetweenStages = () =>
+        {
+            CheckWindow(rig, "held, far: its view");
+            viewFirst = rig.Published();
+        };
         rig.Ask(1_500, 22, 0, 22);
+        rig.BetweenStages = null;
         CheckWindow(rig, "held, far");
         (h, keys) = rig.Published();
         order = GridOracle(source, rig.View);
-        Assert(!h.Live && h.First == 1_500 && Array.IndexOf(order, keys[0]) == 1_505, "rank 1,505: position 1,500 past five above");
+        Assert(viewFirst.Header.First == 1_500 && viewFirst.Keys.Length == 22 && viewFirst.Keys.SequenceEqual(order[1_505..1_527]),
+            "a jump: its view published first, alone (22 rows)");
+        Assert(!h.Live && h.First == 1_500 && keys.Length == 44 && Array.IndexOf(order, keys[0]) == 1_505,
+            "then the rest: rank 1,505 at position 1,500, past five above, the 22 below too");
 
         // Back to the top: live, what arrived shown.
         rig.Ask(0, 22, 0, 22);
@@ -384,11 +463,14 @@ internal static partial class T
             var rnd = new Random(seed);
             var source = new ComputedGrid(seed, 2_000);
             var rig = new GridRig(source, 120);
+            var stage = "";
+            rig.BetweenStages = () => CheckWindow(rig, $"seed {seed}, {stage}: a jump's view, alone");
             long first = 0;
             int holds = 0;
             long letIn = 0;
             for (var step = 0; step < 400; step++)
             {
+                stage = $"step {step}";
                 var roll = rnd.Next(100);
                 if (roll < 60)
                 {
@@ -532,6 +614,12 @@ internal static partial class T
                 return answered.IsCompleted;
             }, "the request's rendezvous");
             await answered;
+            await Until(() =>
+            {
+                Pump(outlet, owner, client);
+                return session.Settled;
+            }, "a jump's rest");
+            Pump(outlet, owner, client);
         }
 
         // Each answer in front of the page by its rendezvous: the replica's rows and order the window the oracle's.
@@ -593,7 +681,7 @@ internal static partial class T
         outlet.Activate(session.Tap.Id);
         var microsecond = TimeSpan.FromTicks(10);
 
-        session.Request(new GridRequest(Guid.Empty, 0, 10, 0, 10));
+        session.Request(new GridRequest(Guid.Empty, 0, 10, 0, 0));
         await Until(() => session.Answers == 1, "the first answer");
         var readAt = clock.GetTimestamp();
 
@@ -614,7 +702,7 @@ internal static partial class T
 
         // Held: 500 ms.
         await Until(() => session.Answers == 3, "its answer");
-        session.Request(new GridRequest(Guid.Empty, 300, 10, 0, 10));
+        session.Request(new GridRequest(Guid.Empty, 300, 10, 0, 0));
         await Until(() => session.Answers == 4, "held");
         readAt = clock.GetTimestamp();
         source.Arrive(1);
@@ -641,7 +729,7 @@ internal static partial class T
         // A request is read at once, whatever the cadence.
         await Until(() => session.Answers == 6, "its answer");
         source.Arrive(1);
-        session.Request(new GridRequest(Guid.Empty, 310, 10, 0, 10));
+        session.Request(new GridRequest(Guid.Empty, 310, 10, 0, 0));
         await Until(() => source.Reads == 7, "a request: read at once");
     }
 
@@ -649,6 +737,7 @@ internal static partial class T
     private sealed class GatedGrid(ComputedGrid inner) : IGridSource<long, GridOrderRow>
     {
         public readonly SemaphoreSlim Gate = new(0);
+        public readonly System.Collections.Concurrent.ConcurrentQueue<GridRead<long, GridOrderRow>> Asked = new();
         public int Started, Cancelled;
 
         public long Version => inner.Version;
@@ -656,6 +745,7 @@ internal static partial class T
         public async ValueTask<GridAnswer> ReadAsync(GridView view, GridRead<long, GridOrderRow> read,
             GridPage<long, GridOrderRow> page, CancellationToken cancellationToken)
         {
+            Asked.Enqueue(read);
             Interlocked.Increment(ref Started);
             try
             {
@@ -690,9 +780,10 @@ internal static partial class T
             var subscription = client.Subscribe(session.Binding, new SubscriptionHandler());
             Pump(outlet, owner, client);
 
-            // A newer request cancels the read in flight, its token reaching the source; only the newer is answered.
-            var a = new GridRequest(Guid.CreateVersion7(), 0, 10, 0, 10);
-            var b = new GridRequest(Guid.CreateVersion7(), 50, 10, 0, 10);
+            // A jump (a window not touching the one being read) cancels the read in flight, its token reaching the
+            // source; only the jump is answered.
+            var a = new GridRequest(Guid.CreateVersion7(), 0, 10, 0, 0);
+            var b = new GridRequest(Guid.CreateVersion7(), 50, 10, 0, 0);
             using var abandon = new CancellationTokenSource();
             var aAnswered = client.RendezvousAsync(CorrelationOf(a.Id), subscription.TapId, abandon.Token);
             var bAnswered = client.RendezvousAsync(CorrelationOf(b.Id), subscription.TapId);
@@ -717,9 +808,33 @@ internal static partial class T
             {
             }
 
+            // A newer request touching the window being read: that read goes on and is answered; the newer, read next.
+            var c = new GridRequest(Guid.CreateVersion7(), 100, 10, 0, 0);
+            var d = new GridRequest(Guid.CreateVersion7(), 105, 10, 0, 0);
+            var cAnswered = client.RendezvousAsync(CorrelationOf(c.Id), subscription.TapId);
+            var dAnswered = client.RendezvousAsync(CorrelationOf(d.Id), subscription.TapId);
+            session.Request(c);
+            await Until(() => source.Started == 3, "c's read begun");
+            session.Request(d);
+            await Task.Delay(30);
+            Assert(source.Cancelled == 1 && source.Started == 3, "c's read not cancelled by d, which touches it");
+            source.Gate.Release();
+            await Until(() =>
+            {
+                Pump(outlet, owner, client);
+                return cAnswered.IsCompleted;
+            }, "c answered");
+            await Until(() => source.Started == 4, "d's read begun, after c's");
+            source.Gate.Release();
+            await Until(() =>
+            {
+                Pump(outlet, owner, client);
+                return dAnswered.IsCompleted;
+            }, "d answered");
+
             // Disposed mid-read: the read's token cancelled; the session over, its subscription closed.
-            session.Request(new GridRequest(Guid.Empty, 100, 10, 0, 10));
-            await Until(() => source.Started == 3, "a third read begun");
+            session.Request(new GridRequest(Guid.Empty, 300, 10, 0, 0));
+            await Until(() => source.Started == 5, "a fifth read begun");
             await session.DisposeAsync();
             await Until(() => source.Cancelled == 2, "the read in flight cancelled by the dispose");
             Assert(session.Completion.IsCompletedSuccessfully && session.Fault is null && session.Tap.IsClosed,
@@ -734,6 +849,76 @@ internal static partial class T
         }
 
         Assert(unobserved == 0, $"no unobserved exception ({unobserved})");
+    }
+
+    public static async Task GridSessionJumps()
+    {
+        var outlet = NewOutlet(new OutletRegistry());
+        var (client, owner) = Connected(outlet);
+        var model = new ComputedGrid(6, 20_000);
+        var source = new GatedGrid(model);
+        await using var session = new GridSession<long, GridOrderRow>(outlet, source);
+        GroupReplica? group = null;
+        var subscription = client.Subscribe(session.Binding, new SubscriptionHandler { Group = (_, g) => group = g });
+        Pump(outlet, owner, client);
+        var order = GridOracle(model, GridView.Natural);
+
+        // A jump: its view read and sent first, alone, with its rendezvous; then the rows round it, read from the view's.
+        var j = new GridRequest(Guid.CreateVersion7(), 1_000, 22, 22, 22);
+        var jAnswered = client.RendezvousAsync(CorrelationOf(j.Id), subscription.TapId);
+        session.Request(j);
+        await Until(() => source.Started == 1, "the view's read");
+        Assert(source.Asked.TryDequeue(out var view) && view.Kind == GridReadKind.AtRank && view.Rank == 1_000 && view.Count == 22,
+            "first, the view alone: 22 rows from rank 1,000");
+        source.Gate.Release();
+        await Until(() =>
+        {
+            Pump(outlet, owner, client);
+            return jAnswered.IsCompleted;
+        }, "its rendezvous, with the view");
+        var replica = ReplicaOf(group)!.Value;
+        Assert(replica.Header.First == 1_000 && replica.Keys.SequenceEqual(order[1_000..1_022]),
+            "in front of the page with its rendezvous: the view's 22 rows, alone");
+        await Until(() => source.Started == 2, "the rest's read");
+        Assert(source.Asked.TryDequeue(out var rest) && rest.Kind == GridReadKind.AroundRow && rest.Key == order[1_000] &&
+               rest.Before == 22 && rest.Count == 44, "then the rest: 22 above the view's first row and 44 from it");
+        source.Gate.Release();
+        await Until(() =>
+        {
+            Pump(outlet, owner, client);
+            return session.Settled && ReplicaOf(group)!.Value.Keys.Length == 66;
+        }, "the rest in front of the page");
+        Assert(ReplicaOf(group)!.Value.Keys.SequenceEqual(order[978..1_044]), "the whole window: 978 to 1,044");
+
+        // Scrolling (a window touching the last): read whole, in one.
+        session.Request(new GridRequest(Guid.Empty, 1_010, 22, 22, 22, 1, 0));
+        await Until(() => source.Started == 3, "a scroll's read");
+        Assert(source.Asked.TryDequeue(out var scroll) && scroll.Count + scroll.Before == 66, "a scroll: the whole window at once");
+        source.Gate.Release();
+        await Until(() => session.Settled, "the scroll answered");
+
+        // A newer jump between a jump's stages: the rest of the first given up (its read cancelled), the newer's view read.
+        var k = new GridRequest(Guid.CreateVersion7(), 5_000, 22, 22, 22, 1, 0);
+        var kAnswered = client.RendezvousAsync(CorrelationOf(k.Id), subscription.TapId);
+        session.Request(k);
+        await Until(() => source.Started == 4, "k's view read");
+        source.Gate.Release();
+        await Until(() =>
+        {
+            Pump(outlet, owner, client);
+            return kAnswered.IsCompleted;
+        }, "k's view in front of the page");
+        await Until(() => source.Started == 5, "k's rest read");
+        session.Request(new GridRequest(Guid.Empty, 9_000, 22, 0, 0, 1, 0));
+        await Until(() => source.Cancelled == 1 && source.Started == 6, "k's rest cancelled by the jump to 9,000; its view read");
+        source.Gate.Release();
+        await Until(() =>
+        {
+            Pump(outlet, owner, client);
+            return session.Settled && ReplicaOf(group)!.Value.Header.First == 9_000;
+        }, "the jump to 9,000 in front of the page");
+        Assert(ReplicaOf(group)!.Value.Keys.SequenceEqual(order[9_000..9_022]) && source.Started == 6,
+            "its view alone (no pads asked for), and k's rest never read again");
     }
 
     private static TException Throws<TException>(Action action, string what) where TException : Exception

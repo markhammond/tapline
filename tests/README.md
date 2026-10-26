@@ -2,8 +2,8 @@
 
 ## Verification
 
-`dotnet run --project tests/Tapline.Tests` (168 tests; `TAPLINE_TEST=<part of a name>` runs only those,
-`TAPLINE_TEST_REPEAT=n` each n times), then `node tests/js/test.mjs` (43 tests, using the fixtures the C# run writes).
+`dotnet run --project tests/Tapline.Tests` (169 tests; `TAPLINE_TEST=<part of a name>` runs only those,
+`TAPLINE_TEST_REPEAT=n` each n times), then `node tests/js/test.mjs` (51 tests, using the fixtures the C# run writes).
 Nothing to install for either: the JS tests use Node's own modules, and the SignalR JS client's side of the wire —
 how it encodes every control invocation tapline.js sends over a circuit, at each integer width, and how it reads a frame
 envelope — is captured in `tests/js/fixtures/signalr.json` (client 10.0.11), which the C# tests hold the library to.
@@ -95,12 +95,21 @@ Debug reports what the writes that found the ring full allocated. Highlights:
   the rows table its rows alone, each as the source has it; held still, every window the oracle's exactly. Held, rows
   arriving above are counted and nothing is sent; a row in view changing sends that row alone. Letting rows in at each
   boundary (200: none; 199: thirty; no more until the page has applied them; no more than it fetches above). Its
-  session on the wire: each request answered by a rendezvous, the .NET client's replica the oracle's window; its
-  cadences on a clock moved by hand (live 100 ms, held 500 ms: a microsecond before, not read; on it, read); hidden,
-  nothing read; a newer request cancels the read in flight, its token in the source; disposed mid-read, clean, nothing
-  unobserved; bounds refused with the reason. 10,000 answers on the way to the wire: 0 B; 20,000 through the session's
-  loop: tens of bytes in all (the process's). A window's structures as large over 50,000,000 rows as over 5,000. On the
-  wire, uncompressed, with the blotter's rows (136 B) and UUID keys: 360 B a row entering, scrolling a view at a time.
+  session on the wire: each request answered by a rendezvous, the .NET client's replica the oracle's window; a jump
+  answered view first (its view read and sent alone with the rendezvous, then the rows round it), a newer jump between
+  the stages giving up the rest; its cadences on a clock moved by hand (live 100 ms, held 500 ms: a microsecond before,
+  not read; on it, read); hidden, nothing read; a jump cancels the read in flight, its token in the source, a request
+  touching it letting it finish; disposed mid-read, clean, nothing unobserved; bounds refused with the reason. 10,000
+  answers on the way to the wire: 0 B; 20,000 through the session's loop: some KB at most (the process's). A window's
+  structures as large over 50,000,000 rows as over 5,000. On the wire, uncompressed, with the blotter's rows (136 B) and
+  UUID keys: 360 B a row entering, scrolling a view at a time.
+- JS, the grid's page body (tapline-grid.js), in Node: scrolling scaled past the safe height (the thumb at 90 % shows
+  90 %, the bottom the last row; the wheel by rows, the row standing through the browser's rounding); the pre-fetch's
+  steps at each boundary on a fake clock (150 ms and 500 ms medians, hold-backs of 30 s doubling to 5 min); a fling's
+  lead (as mip-chart projects a pan); requests held to an interval and by the answers outstanding; the order value and
+  cells as the server writes them; a session's real frames through the client, each step's order and changed keys. Its
+  DOM in a browser: `node tests/js/serve.mjs 5966`, then `/tests/js/grid-harness.html` (a server played in the page;
+  `?rows=50000000` for scaled scrolling, `?visible=1` for a pane in the background, driven by `harness.body.draw()`).
 
 - Data providers: step 1 through the service's provider — an unknown service, a refusal, a route bound and counted
   before step 2; a stream topic starts at the next change after step 1 (and after a reconnect, on from what the client

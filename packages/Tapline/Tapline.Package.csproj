@@ -18,5 +18,7 @@
         <!-- The browser's scripts, served at _content/Tapline/ (as the projects serve them: their StaticWebAssetBasePath). -->
         <Content Include="../../src/Tapline.AspNetCore/wwwroot/tapline.js" Link="wwwroot/tapline.js"/>
         <Content Include="../../src/Tapline.BlazorRealtime/wwwroot/blazor-realtime.js" Link="wwwroot/blazor-realtime.js"/>
+        <Content Include="../../src/Tapline.Grid/wwwroot/tapline-grid.js" Link="wwwroot/tapline-grid.js"/>
+        <Content Include="../../src/Tapline.Grid/wwwroot/tapline-grid.css" Link="wwwroot/tapline-grid.css"/>
     </ItemGroup>
 </Project>

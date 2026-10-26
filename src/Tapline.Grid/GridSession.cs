@@ -39,6 +39,7 @@ public sealed class GridSession<TKey, TRow> : IAsyncDisposable
     private int _changed;
     private bool _disposed, _reading, _requested, _viewChanged, _visible = true;
     private Locating? _locating;
+    private long _readFrom, _readTo; // the window being read, in view positions: a request not touching it is a jump
     private GridRequest _request;
     private GridStatus _status = new() { Live = true };
     private GridView _view;
@@ -134,6 +135,15 @@ public sealed class GridSession<TKey, TRow> : IAsyncDisposable
     /// <summary>Answers applied (for tests: one has once this moves).</summary>
     internal int Answers;
 
+    /// <summary>Nothing asked of the loop and nothing read (for tests): a jump's rest read too.</summary>
+    internal bool Settled
+    {
+        get
+        {
+            lock (_gate) return !_reading && !_requested && _locating is null && !_viewChanged && !_window.NeedsRest;
+        }
+    }
+
     /// <summary>The status changed (on the session's loop: hand it to the component's own thread).</summary>
     public event Action? StatusChanged;
 
@@ -161,8 +171,9 @@ public sealed class GridSession<TKey, TRow> : IAsyncDisposable
     }
 
     /// <summary>
-    ///     The page asks for a window: read now, the read in flight (if any) cancelled. Refused (thrown) if it spans more
-    ///     than <see cref="GridOptions.MaxWindowRows" /> or a count is negative.
+    ///     The page asks for a window: read next, the latest asked for — once the read in flight is done, or at once if
+    ///     this is a jump (its window doesn't touch the one being read: that read is cancelled). Refused (thrown) if it
+    ///     spans more than <see cref="GridOptions.MaxWindowRows" /> or a count is negative.
     /// </summary>
     public void Request(in GridRequest request)
     {
@@ -177,7 +188,8 @@ public sealed class GridSession<TKey, TRow> : IAsyncDisposable
             if (_disposed) return;
             _request = request;
             _requested = true;
-            superseded = TakeRead();
+            var (from, to) = Span(request);
+            superseded = to < _readFrom || from > _readTo ? TakeRead() : null; // (a jump: what's read is of no use)
         }
 
         Cancel(superseded);
@@ -242,6 +254,12 @@ public sealed class GridSession<TKey, TRow> : IAsyncDisposable
         replaced?.Done.TrySetResult(null);
         _wake.Set();
         return locating.Done.Task;
+    }
+
+    /// <summary>A request's window, in view positions: [from, to).</summary>
+    private static (long From, long To) Span(in GridRequest request)
+    {
+        return (Math.Max(0, request.First - request.Before), request.First + request.Count + request.After);
     }
 
     /// <summary>
@@ -309,6 +327,7 @@ public sealed class GridSession<TKey, TRow> : IAsyncDisposable
                             locating = _locating;
                             _locating = null;
                             read = _window.PlanLocate(locating.Key, locating.Before, locating.Count);
+                            (_readFrom, _readTo) = (long.MinValue, long.MaxValue); // (a request doesn't cancel a locate)
                         }
                         else if (_requested)
                         {
@@ -316,12 +335,22 @@ public sealed class GridSession<TKey, TRow> : IAsyncDisposable
                             _requested = false;
                             answering = true;
                             read = _window.Plan(request);
+                            (_readFrom, _readTo) = Span(request);
+                        }
+                        else if (_window.NeedsRest && !reset)
+                        {
+                            read = _window.PlanRest(); // (a jump's view went out with its rendezvous: now the rest)
+                            (_readFrom, _readTo) = _window.Rest;
                         }
                         else if (!((reset || (_pending && _visible && IsDue(_time.GetTimestamp(), _readAt,
                                        _window.Live ? _liveEvery : _heldEvery))) && _window.PlanRefresh(out read)))
                         {
                             Arm();
                             break;
+                        }
+                        else
+                        {
+                            (_readFrom, _readTo) = _window.Asked;
                         }
 
                         _pending = false; // (whatever it reads, it reads as the source is now)

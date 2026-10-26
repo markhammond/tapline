@@ -7,6 +7,8 @@ import { createHash } from 'node:crypto';
 import { TaplineClient, rowHash, FaultCode, BlobRef, StaleData } from '../../src/Tapline.AspNetCore/wwwroot/tapline.js';
 import { loadOpaque } from '../../src/Tapline.Authentication.Opaque/wwwroot/opaque.mjs';
 import { signInWithPassword, registerPassword } from '../../src/Tapline.Authentication.Opaque/wwwroot/tapline-opaque.mjs';
+import { Scroller, Prefetch, Velocity, windowFor, Requests, readOrder, finance, significant, formatCell, NOUGHT, SAFE_HEIGHT }
+  from '../../src/Tapline.Grid/wwwroot/tapline-grid.js';
 
 const fx = JSON.parse(readFileSync(new URL('./fixtures/frames.json', import.meta.url)));
 const hex = s => Uint8Array.from(Buffer.from(s, 'hex'));
@@ -1102,6 +1104,264 @@ test('password sign-in by OPAQUE (tapline-opaque.mjs on the real opaque.wasm; th
   const bad = await login('wrong horse', 5);
   assert.equal(bad.reply[0], 3, 'a wrong password: the client gives up (Cancel)');
   assert.deepEqual(await bad.signing, { accepted: false, identity: null, ticket: null, reason: 'Wrong user id or password.' });
+});
+
+// ───────────── tapline-grid.js: the page body's arithmetic ─────────────
+
+test('grid scrolling: native and exact under the safe height; above it, scaled — the thumb by its fraction (90 % shows 90 %, the bottom the last row), wheel and keys by rows, the row standing through the browser\'s rounding of its own scroll position', () => {
+  const native = new Scroller(30);
+  native.resize(600);
+  native.setTotal(1_000);
+  assert.equal(native.scaled, false);
+  assert.equal(native.height, 30_000);
+  assert.equal(native.scrolled(3_000), 100, 'native: a row each 30 px');
+  assert.equal(native.by(5), 3_150, 'by rows: the scroll position follows');
+  assert.equal(native.scrolled(3_150), 105, 'its own scroll event: the row stands');
+  assert.equal(native.to(5_000), (1_000 - 20) * 30, 'no further than the last row at the bottom');
+
+  const edge = new Scroller(30, 300_000);
+  edge.resize(600);
+  edge.setTotal(10_000);
+  assert.equal(edge.scaled, false, 'exactly the safe height: native');
+  edge.setTotal(10_001);
+  assert.equal(edge.scaled, true, 'a row more: scaled');
+
+  const big = new Scroller(30);
+  big.resize(600);
+  big.setTotal(50_000_000);
+  assert.equal(big.scaled, true);
+  assert.equal(big.height, SAFE_HEIGHT);
+  const range = SAFE_HEIGHT - 600, last = 50_000_000 - 20;
+  assert.ok(Math.abs(big.scrolled(range * 0.9) - last * 0.9) < 1, 'the thumb at 90 %: 90 % of the way');
+  assert.equal(big.scrolled(range), last, 'the thumb at the bottom: the last row in view');
+  const at = big.scrolled(range / 2);
+  const top = big.by(3);
+  assert.equal(big.row, at + 3, 'a wheel of three rows: three rows, though a pixel is ~187 of them here');
+  assert.equal(big.scrolled(Math.round(top)), at + 3, 'the browser rounding its own position: the row stands');
+  assert.ok(Math.abs(big.scrolled(range / 4) - last / 4) < 1, 'the reader\'s own (a thumb): by its fraction again');
+  big.setTotal(10);
+  assert.equal(big.row, 0, 'fewer rows than the view: the top');
+});
+
+test('grid pre-fetch: a view ahead and two thirds behind at full size, starting at a quarter; up below 150 ms (the median of the last three), down above 500 ms, each on its boundary staying; the first answer after a step unjudged; a size left for being slow held back 30 s, doubling to 5 min', () => {
+  let now = 0;
+  const p = new Prefetch(() => now);
+  p.see(24);
+  assert.deepEqual([p.ahead, p.behind], [6, 4], 'a quarter: 6 ahead, 4 behind');
+  for (const t of [150, 150]) assert.equal(p.observe(t), false);
+  assert.equal(p.observe(150), false, '150 ms: not fast, stays');
+  assert.equal(p.observe(149), false, '[150, 150, 149]: the median 150, stays');
+  assert.equal(p.observe(149), true, '[150, 149, 149]: 149, up');
+  assert.deepEqual([p.ahead, p.behind], [12, 8], 'a half');
+  assert.equal(p.observe(10_000), false, 'the first after a step: not judged');
+  for (const t of [500, 500]) assert.equal(p.observe(t), false);
+  assert.equal(p.observe(500), false, '500 ms: not slow, stays');
+  assert.equal(p.observe(501), false, '[500, 500, 501]: 500, stays');
+  now = 1_000;
+  assert.equal(p.observe(501), true, '[500, 501, 501]: 501, down');
+  assert.deepEqual([p.ahead, p.behind], [6, 4], 'a quarter again');
+
+  // The half held back 30 s from leaving it: fast answers a millisecond before, no; on it, up.
+  p.observe(1);                                    // (unjudged: the step's)
+  now = 1_000 + 30_000 - 1;
+  p.observe(1); p.observe(1);
+  assert.equal(p.observe(1), false, 'a millisecond before its hold-back ends: not tried again');
+  now = 1_000 + 30_000;
+  assert.equal(p.observe(1), true, 'on it: tried again');
+  for (const [left, held] of [[1, 60_000], [2, 120_000], [3, 240_000], [4, 300_000], [5, 300_000]]) {
+    p.observe(1);                                  // (unjudged)
+    p.observe(900); p.observe(900);
+    now += 1;
+    assert.equal(p.observe(900), true, `left for being slow (${left})`);
+    const from = now;
+    p.observe(1);
+    p.observe(1); p.observe(1);
+    now = from + held - 1;
+    assert.equal(p.observe(1), false, `held back ${held / 1000} s: a millisecond before, not`);
+    now = from + held;
+    assert.equal(p.observe(1), true, `held back ${held / 1000} s, doubling to five minutes: on it, up`);
+  }
+
+  // Full size: a view ahead, two thirds behind.
+  p.observe(1);
+  p.observe(1); p.observe(1); p.observe(1);
+  assert.equal(p.step, 0);
+  assert.deepEqual([p.ahead, p.behind], [24, 16]);
+});
+
+test('grid velocity (as mip-chart projects a pan): the lead ahead is the fling\'s peak speed × 325 ms, smoothed (EWMA 0.45); a pause of 120 ms ends the fling (a millisecond less doesn\'t); turning back forgets the peak', () => {
+  const v = new Velocity();
+  v.sample(0, 0);
+  v.sample(10, 10);                                  // 1 row/ms
+  assert.ok(Math.abs(v.speed - 0.45) < 1e-9 && Math.abs(v.reach - 0.45 * 325) < 1e-9, 'one sample: 0.45 of its speed');
+  v.sample(20, 20);
+  assert.ok(Math.abs(v.speed - (0.45 + 0.55 * 0.45)) < 1e-9, 'smoothed');
+  const peak = v.peak;
+  v.sample(21, 30);                                  // slowing: the peak stands
+  assert.equal(v.peak, peak, 'slowing: the peak kept (the whole swipe, not its tail)');
+  assert.ok(v.reach > 0, 'down: ahead below');
+  v.sample(22, 30 + 119);
+  assert.ok(v.peak > 0, 'a pause of 119 ms: still the fling');
+  v.sample(23, 149 + 120 + 1);
+  assert.deepEqual([v.speed, v.peak, v.reach], [0, 0, 0], 'a pause past 120 ms: over');
+  v.sample(13, 280);                                 // up, fast
+  assert.ok(v.reach < 0, 'up: ahead above');
+  const up = v.peak;
+  v.sample(14, 290);                                 // turned back down
+  assert.ok(v.peak < up, 'turned back: the old peak forgotten');
+});
+
+test('grid window asked for: the larger part ahead of the reader, which way they go; none above the top, no more above than there is; a fling\'s lead ahead (at most three views); never more than the session\'s most, the trailing side giving way first', () => {
+  const lead = new Prefetch(() => 0);
+  lead.see(20);
+  assert.deepEqual(windowFor(100, 20, true, lead, 45), { first: 100, count: 20, before: 4, after: 45 }, 'a fling: its lead below, the quarter view above');
+  assert.deepEqual(windowFor(100, 20, true, lead, 500), { first: 100, count: 20, before: 4, after: 60 }, 'at most three views');
+  assert.deepEqual(windowFor(100, 20, true, lead, 2), { first: 100, count: 20, before: 4, after: 5 }, 'a slow drag: the pre-fetch\'s own');
+  assert.deepEqual(windowFor(100, 20, true, lead, 45, 60), { first: 100, count: 20, before: 0, after: 40 }, 'the most rows: the trailing side gives way first, then the lead');
+  const p = new Prefetch(() => 0);
+  p.see(20);
+  p.step = 0;
+  assert.deepEqual(windowFor(100, 20, true, p), { first: 100, count: 20, before: 14, after: 20 }, 'down: two thirds above, a view below');
+  assert.deepEqual(windowFor(100, 20, false, p), { first: 100, count: 20, before: 20, after: 14 }, 'up: a view above');
+  assert.deepEqual(windowFor(0, 20, false, p), { first: 0, count: 20, before: 0, after: 14 }, 'at the top: none above');
+  assert.deepEqual(windowFor(5.7, 19.4, false, p), { first: 5, count: 20, before: 5, after: 14 }, 'whole rows; no more above than there is');
+});
+
+test('grid requests: coalesced, at most one an interval and while fewer than the most are unanswered (the server and the link pace them); an answer settles those sent before it; the same window not asked twice; a reset asks afresh', () => {
+  let now = 0, n = 0;
+  const sent = [], timers = [];
+  const r = new Requests(q => sent.push(q), {
+    now: () => now, id: () => `r${++n}`, minInterval: 50, maxOutstanding: 3,
+    setTimer: (fn, ms) => (timers.push({ fn, at: now + ms }), timers.length)
+  });
+  const w = first => ({ first, count: 20, before: 5, after: 20, holds: 0, letIn: 0 });
+  r.want(w(0));
+  assert.equal(r.pump().id, 'r1', 'the first: at once');
+  now = 10;
+  r.want(w(3));
+  assert.equal(r.pump(), null, '10 ms on: held by the interval');
+  r.want(w(6));
+  assert.equal(r.pump(), null, 'what\'s wanted meanwhile coalesced');
+  assert.equal(timers.length, 1, 'once: a timer for the interval\'s end');
+  assert.equal(timers[0].at, 50, 'at its end');
+  now = 50;
+  timers[0].fn();
+  assert.deepEqual(sent.map(q => [q.id, q.first]), [['r1', 0], ['r2', 6]], 'then the latest wanted');
+  now = 100;
+  r.want(w(6));
+  assert.equal(r.pump(), null, 'the same window: not asked again');
+  r.want(w(9));
+  assert.equal(r.pump().id, 'r3');
+  now = 150;
+  r.want(w(12));
+  assert.equal(r.pump(), null, 'three unanswered, the most: held');
+  now = 180;
+  const answered = r.answered('r2');
+  assert.deepEqual(answered, { took: 130, superseded: ['r1'] }, 'r2 answered after 130 ms; r1, sent before it, settled with it');
+  assert.equal(r.answered('r1'), null, 'settled already');
+  assert.equal(r.pump().id, 'r4', 'room again: what\'s wanted asked for');
+  assert.deepEqual(r.reset(), ['r3', 'r4'], 'a reset gives up those unanswered');
+  now = 300;
+  r.want(w(12));
+  assert.equal(r.pump().id, 'r5', 'and asks afresh, the same window too');
+});
+
+test('grid order value: read as Tapline.Grid writes it (40 bytes, then keys); another format, cut short, a count that doesn\'t fit: not one', () => {
+  const keys = [7n, 5n, 3n];
+  const bytes = new Uint8Array(40 + 24), dv = new DataView(bytes.buffer);
+  bytes[0] = 1; bytes[1] = 2; bytes[2] = 1; bytes[3] = 8;
+  dv.setInt32(4, 3, true);
+  dv.setBigInt64(8, 1_234_567_890_123n, true);
+  dv.setBigInt64(16, 9_876_543_210n, true);
+  dv.setBigInt64(24, 30n, true);
+  dv.setInt32(32, 4, true);
+  keys.forEach((k, i) => dv.setBigInt64(40 + 8 * i, k, true));
+  const order = readOrder(bytes);
+  const latin1 = k => { const b = new Uint8Array(8); new DataView(b.buffer).setBigInt64(0, k, true); return String.fromCharCode(...b); };
+  assert.deepEqual(order, { live: false, stale: true, totalKind: 1, keySize: 8, count: 3, first: 1_234_567_890_123, total: 9_876_543_210,
+    letIn: 30, holds: 4, keys: keys.map(latin1) });
+  assert.equal(readOrder(Uint8Array.of(2, ...bytes.subarray(1))), null, 'another format');
+  assert.equal(readOrder(bytes.subarray(0, 63)), null, 'cut short');
+  dv.setInt32(4, 4, true);
+  assert.equal(readOrder(bytes), null, 'more keys than it holds');
+});
+
+test('grid cells: quantities as finance writes them (exact, half away from nought, .25 not 0.2500, a dash for nought), prices to six significant figures (scientific past eight digits), times with today an ellipsis and the microseconds on hover, booleans, enumerations, text cut and flagged, a percentage of one column over another; the least integer no value', () => {
+  assert.equal(finance(2_500n, 4, 4), '.25');
+  assert.equal(finance(-2_500n, 4, 4), '-.25');
+  assert.equal(finance(12_345_678n, 2, 2), '123,456.78');
+  assert.equal(finance(0n, 4, 4), NOUGHT);
+  assert.equal(finance(-4n, 4, 2), NOUGHT, 'rounded to nought: a dash, no sign');
+  assert.equal(finance(12_345n, 4, 2), '1.23');
+  assert.equal(finance(12_355n, 4, 2), '1.24', 'half away from nought');
+  assert.equal(finance(-12_355n, 4, 2), '-1.24');
+  assert.equal(finance(5n, 0, 0), '5');
+  assert.equal(finance(1_000_000_000_000_000_000n, 0, 0), '1,000,000,000,000,000,000', 'exact past 2^53');
+  assert.equal(significant(123_456_789n, 2), '1,234,568');
+  assert.equal(significant(12_345n, 9), '1.2345e-5', 'eight digits at most, else scientific');
+  assert.equal(significant(0n, 4), NOUGHT);
+
+  const row = new Uint8Array(64), dv = new DataView(row.buffer);
+  const columns = [
+    { name: 'qty', kind: 'fixed', offset: 0, scale: 4, decimals: 4 },
+    { name: 'filled', kind: 'fixed', offset: 8, scale: 4, decimals: 4 },
+    { name: 'placed', kind: 'time', offset: 16 },
+    { name: 'side', kind: 'enum', offset: 24, size: 1, dictionary: ['Buy', 'Sell'] },
+    { name: 'urgent', kind: 'bool', offset: 25 },
+    { name: 'client', kind: 'text', offset: 26, size: 13 },
+    { name: 'fill', kind: 'percent', of: 'filled', over: 'qty', decimals: 1 },
+    { name: 'count', kind: 'int', offset: 40, size: 4 },
+    { name: 'rate', kind: 'float', offset: 48, decimals: 3 },
+    { name: 'px', kind: 'fixed', offset: 56, scale: 8, figures: 6 }
+  ];
+  dv.setBigInt64(0, 1_000_000n, true);                    // 100
+  dv.setBigInt64(8, 250_000n, true);                      // 25
+  const today = new Date(Date.UTC(2026, 9, 26, 15, 0, 0));
+  dv.setBigInt64(16, BigInt(Date.UTC(2026, 9, 26, 14, 32, 5)) * 1000n + 123_456n, true);
+  row[24] = 1; row[25] = 1;
+  const text = new TextEncoder().encode('Client 0042 ltd');
+  row[26] = 0x80 | 12; row.set(text.subarray(0, 12), 27);
+  dv.setInt32(40, -2_147_483_648, true);                   // no value
+  dv.setFloat64(48, 0.0004, true);
+  dv.setBigInt64(56, 12_345_678_901n, true);               // 123.45678901
+  const cell = name => formatCell(columns.find(c => c.name === name), row, dv, columns, today);
+  assert.deepEqual(cell('qty'), { text: '100', title: '100' });
+  assert.deepEqual(cell('placed'), { text: '…14:32:05', title: '2026-10-26 14:32:05.123456 UTC' }, 'today: an ellipsis');
+  assert.equal(formatCell(columns[2], row, dv, columns, new Date(Date.UTC(2026, 9, 27))).text, '2026-10-26 14:32:05', 'another day: the date');
+  assert.equal(cell('side').text, 'Sell');
+  assert.deepEqual(cell('urgent'), { text: '✓', title: 'yes' });
+  assert.deepEqual(cell('client'), { text: 'Client 0042 …', title: 'Client 0042 …', cut: true }, 'cut: flagged');
+  assert.equal(cell('fill').text, '25%');
+  assert.equal(cell('count').text, '', 'the least integer: no value');
+  assert.equal(cell('rate').text, NOUGHT, 'rounded to nought: a dash');
+  dv.setFloat64(48, -1234.5678, true);
+  assert.deepEqual(cell('rate'), { text: '-1,234.568', title: '-1234.5678' }, 'a float to its places, grouped; whole on hover');
+  assert.deepEqual(cell('px'), { text: '123.457', title: '123.45678901' }, 'six figures shown, exact on hover');
+});
+
+test('grid on the wire: a session\'s frames as Tapline.Grid writes them, through the client with { changed: true } — after each step the order read as written (live or held, first, total, rows let in, holds, keys) and the changed keys those whose rows differ; held, arrivals above: nothing at all', () => {
+  const g = fx.grid;
+  const client = newClient([]);
+  const latin1 = id => { const b = new Uint8Array(8); new DataView(b.buffer).setBigInt64(0, BigInt(id), true); return String.fromCharCode(...b); };
+  let last = null, states = 0, seq = 0;
+  client.subscribe(g.watchId, (group, _id, info) => { last = { group, info }; states++; }, undefined, undefined, { changed: true });
+  for (const step of g.steps) {
+    const before = states;
+    for (const f of step.frames) client.receive(++seq, new Uint8Array(Buffer.from(f, 'base64')));
+    if (!step.sent) {
+      assert.equal(states, before, `${step.what}: nothing handed over`);
+      continue;
+    }
+    assert.ok(states > before, `${step.what}: handed over`);
+    const order = readOrder(last.group.members[1]), e = step.expect;
+    assert.deepEqual([order.live, order.first, order.total, order.letIn, order.holds], [e.Live, e.First, e.Total, e.LetIn, e.Holds], `${step.what}: the order's header`);
+    assert.deepEqual(order.keys, e.keys.map(latin1), `${step.what}: its keys, in order`);
+    const table = last.group.members[0];
+    assert.equal(table.size, e.keys.length, `${step.what}: the rows table the window's rows alone`);
+    assert.deepEqual(order.keys.map(k => new DataView(table.rows.get(k).row.buffer, table.rows.get(k).row.byteOffset).getInt32(16, true)), e.qty,
+      `${step.what}: each row as the server has it`);
+    assert.deepEqual([...last.info.changed[0]].sort(), e.changed.map(latin1).sort(), `${step.what}: the keys changed, and only those`);
+  }
 });
 
 for (const [name, fn] of tests) { await fn(); passed++; console.log(`PASS  ${name}`); }

@@ -30,6 +30,7 @@ internal sealed class GridWindow<TKey, TRow> where TKey : unmanaged, IEquatable<
     private long _first, _from, _to; // and the window asked for: [_from, _to)
     private HeldTotal _held;
     private int _locateBefore, _locateCount;
+    private long _restFrom, _restTo; // a jump's whole window, its view read first
     private long _planFrom, _planTo, _planAt; // the read in flight: the window it's for; about a row, its position
     private GridReadKind _planKind;
     private int _publishedSize = -1;
@@ -79,6 +80,9 @@ internal sealed class GridWindow<TKey, TRow> where TKey : unmanaged, IEquatable<
     /// <summary>The window's first row's view position, and how many rows it has.</summary>
     public (long First, int Count) Window => (_first, _count);
 
+    /// <summary>The window last asked for, in view positions: [From, To).</summary>
+    public (long From, long To) Asked => (_from, _to);
+
     /// <summary>The rank a located key was found at (<see cref="PlanLocate" />), or null: not found.</summary>
     public long? Located { get; private set; }
 
@@ -90,22 +94,29 @@ internal sealed class GridWindow<TKey, TRow> where TKey : unmanaged, IEquatable<
 
     public ReadOnlySpan<TRow> Rows => _rows.AsSpan(0, _count);
 
-    /// <summary>What to read for the page's <paramref name="request" />: the live top, or a held window.</summary>
+    /// <summary>
+    ///     What to read for the page's <paramref name="request" />: the live top, or a held window. A jump (a window not
+    ///     touching the one published) reads its view first, then the rest (<see cref="NeedsRest" />, <see cref="PlanRest" />):
+    ///     the rows the reader looks at go out ahead of those fetched round them.
+    /// </summary>
     public GridRead<TKey, TRow> Plan(in GridRequest request)
     {
         var first = request.First;
+        long from, to;
         if (first == 0)
         {
+            var jump = IsJump(0, request.Count + (long)request.After); // (in the positions shown until now)
             if (!Live) Release();
-            return PlanFrom(0, request.Count + (long)request.After);
+            (from, to) = (0, request.Count + (long)request.After);
+            return Staged(jump, first, request.Count, from, to);
         }
 
         if (Live) Hold();
         else if (request.Holds == Holds && request.LetIn < LetIn)
             first += LetIn - request.LetIn; // (in its positions: before the rows let in that it hasn't applied)
 
-        var from = Math.Max(0, first - request.Before);
-        var to = first + request.Count + request.After;
+        from = Math.Max(0, first - request.Before);
+        to = first + request.Count + request.After;
 
         // Near the top, the page having applied what was let in before: a few more, no more than it fetches above.
         if (first < _revealNear && Hidden > 0 && request.Holds == Holds && request.LetIn == LetIn)
@@ -116,10 +127,39 @@ internal sealed class GridWindow<TKey, TRow> where TKey : unmanaged, IEquatable<
                 LetInAbove(n);
                 if (from > 0) from += n; // (a window reaching the top takes the rows let in)
                 to += n;
+                first += n;
             }
         }
 
-        return PlanFrom(from, to);
+        return Staged(IsJump(from, to), first, request.Count, from, to);
+    }
+
+    /// <summary>A jump's view read, its rest to follow; else the whole window.</summary>
+    private GridRead<TKey, TRow> Staged(bool jump, long first, int count, long from, long to)
+    {
+        NeedsRest = jump && count > 0 && (from < first || to > first + count);
+        if (!NeedsRest) return PlanFrom(from, to);
+        (_restFrom, _restTo) = (from, to);
+        return PlanFrom(first, first + count);
+    }
+
+    /// <summary>Whether [from, to) touches none of the window's rows: a jump.</summary>
+    private bool IsJump(long from, long to)
+    {
+        return !_anchored || _count == 0 || to <= _first || from >= _first + _count;
+    }
+
+    /// <summary>A jump's view was read and published; the rest of its window is to read.</summary>
+    public bool NeedsRest { get; private set; }
+
+    /// <summary>A jump's whole window, in view positions: [From, To).</summary>
+    public (long From, long To) Rest => (_restFrom, _restTo);
+
+    /// <summary>The rest of a jump's window, its view published: read from the view's rows.</summary>
+    public GridRead<TKey, TRow> PlanRest()
+    {
+        NeedsRest = false;
+        return PlanFrom(_restFrom, _restTo);
     }
 
     /// <summary>The window again, as it was asked for: false if there's none yet.</summary>
@@ -138,6 +178,7 @@ internal sealed class GridWindow<TKey, TRow> where TKey : unmanaged, IEquatable<
     /// <summary>A key's row, wherever it is, with <paramref name="before" /> rows above it and <paramref name="count" /> on.</summary>
     public GridRead<TKey, TRow> PlanLocate(in TKey key, int before, int count)
     {
+        NeedsRest = false;
         _planKind = GridReadKind.AroundKey;
         (_locateBefore, _locateCount) = (before, count);
         return GridRead<TKey, TRow>.AroundKey(key, before, count);
@@ -151,6 +192,7 @@ internal sealed class GridWindow<TKey, TRow> where TKey : unmanaged, IEquatable<
     {
         if (!Live) Release();
         _anchored = false;
+        NeedsRest = false;
         _to -= _from;
         _from = 0;
     }

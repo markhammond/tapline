@@ -347,8 +347,10 @@ var tests = new (string Name, Func<Task> Run)[]
         T.GridSessionWire),
     ("Grid session's cadence on a clock moved by hand: live, a change read 100 ms after the last read began (a microsecond before: not), at once past it; held, 500 ms likewise; hidden, nothing read and the subscription's interval long; shown, read at once; a request, at once",
         T.GridSessionCadence),
-    ("Grid session cancelled: a newer request cancels the read in flight (its token in the source), the older never answered; disposed mid-read, the read cancelled, the session ended and its subscription closed; no unobserved exception",
+    ("Grid session cancelled: a jump cancels the read in flight (its token in the source), the older never answered; a newer request touching it lets it finish and is read next; disposed mid-read, the read cancelled, the session ended and its subscription closed; no unobserved exception",
         T.GridSessionCancel),
+    ("Grid session's jumps, the view first: a jump's view read and sent alone with its rendezvous, then the rows round it read from the view's; a scroll read whole, in one; a newer jump between a jump's stages gives up the first's rest (its read cancelled), the newer's view read",
+        T.GridSessionJumps),
     ("Grid session's bounds: options that can't work refused when made, saying why; a client's grids at most so many (another client's its own); a window wider than its most refused, saying why; the session over with its subscription",
         T.GridSessionBounds),
     ("Grid allocation: a held window sliding through 100,000 rows, a row in and out and the order each answer — 10,000 answers on the thread, nothing allocated; 2,000 through the session's loop",
@@ -12468,7 +12470,8 @@ internal static partial class T
                 cashSeq = cash.Version,
                 account2Rows = Enumerable.Range(0, 4).Count(sym => positions.TryGet(new Holding(2, sym), out _))
             },
-            auth = AuthFixture()
+            auth = AuthFixture(),
+            grid = GridFixture(registry, scratch)
         };
         Directory.CreateDirectory(Path.Combine(RepoRoot(), "tests", "js", "fixtures"));
         File.WriteAllText(Path.Combine(RepoRoot(), "tests", "js", "fixtures", "frames.json"),
