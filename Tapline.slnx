@@ -30,6 +30,7 @@
         <Project Path="src/Tapline.MagicOnion.Server/Tapline.MagicOnion.Server.csproj" />
         <Project Path="src/Tapline.Wasm/Tapline.Wasm.csproj" />
         <Project Path="src/Tapline.BlazorRealtime/Tapline.BlazorRealtime.csproj" />
+        <Project Path="src/Tapline.Grid/Tapline.Grid.csproj" />
     </Folder>
     <Folder Name="/tests/">
         <Project Path="tests/Opaque.Tests/Opaque.Tests.csproj" />

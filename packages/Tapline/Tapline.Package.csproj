@@ -8,6 +8,7 @@
     <ItemGroup>
         <ProjectReference Include="../../src/Tapline.AspNetCore/Tapline.AspNetCore.csproj" PrivateAssets="all"/>
         <ProjectReference Include="../../src/Tapline.BlazorRealtime/Tapline.BlazorRealtime.csproj" PrivateAssets="all"/>
+        <ProjectReference Include="../../src/Tapline.Grid/Tapline.Grid.csproj" PrivateAssets="all"/>
         <ProjectReference Include="../../src/Tapline.Authentication/Tapline.Authentication.csproj" PrivateAssets="all"/>
         <ProjectReference Include="../../src/Tapline.MagicOnion.Server/Tapline.MagicOnion.Server.csproj" PrivateAssets="all"/>
         <ProjectReference Include="../../src/Tapline.MagicOnion.Providers/Tapline.MagicOnion.Providers.csproj" PrivateAssets="all"/>

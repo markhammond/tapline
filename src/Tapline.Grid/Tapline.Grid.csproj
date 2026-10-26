@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <LangVersion>latest</LangVersion>
+        <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+        <!-- (its wwwroot is served where its package, Tapline, serves it: packages/Tapline) -->
+        <StaticWebAssetBasePath>_content/Tapline</StaticWebAssetBasePath>
+        <RootNamespace>Tapline.Grid</RootNamespace>
+    </PropertyGroup>
+    <ItemGroup>
+        <FrameworkReference Include="Microsoft.AspNetCore.App"/>
+        <ProjectReference Include="../Tapline/Tapline.csproj"/>
+        <InternalsVisibleTo Include="Tapline.Tests"/>
+    </ItemGroup>
+</Project>

@@ -13,6 +13,7 @@
         <ProjectReference Include="../../src/Tapline.Authentication/Tapline.Authentication.csproj"/>
         <ProjectReference Include="../../src/Tapline.Authentication.Opaque/Tapline.Authentication.Opaque.csproj"/>
         <ProjectReference Include="../../src/Tapline.BlazorRealtime\Tapline.BlazorRealtime.csproj" />
+        <ProjectReference Include="../../src/Tapline.Grid/Tapline.Grid.csproj"/>
         <ProjectReference Include="../../src/Tapline.Wasm/Tapline.Wasm.csproj"/>
         <ProjectReference Include="../../src/Tapline.MagicOnion.Providers/Tapline.MagicOnion.Providers.csproj"/>
     </ItemGroup>
