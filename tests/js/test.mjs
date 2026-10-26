@@ -328,6 +328,157 @@ test('drop() unsubscribes on the server (Tap.Close with code None)', () => {
   assert.deepEqual(sent, [['Tap.Close', 3, 77, 5, FaultCode.None]]);
 });
 
+// ───────────── changed keys ({ changed: true }) ─────────────
+
+/** The keys whose rows differ between two copies of a replica's rows (key → row hex): added, changed or removed. */
+const differing = (was, now) => {
+  const keys = new Set();
+  for (const [k, r] of now) if (was.get(k) !== r) keys.add(k);
+  for (const k of was.keys()) if (!now.has(k)) keys.add(k);
+  return keys;
+};
+const rowsOf = t => new Map([...t.rows].map(([k, e]) => [k, toHex(e.row)]));
+const sorted = set => [...set].sort();
+
+/**
+ * A Table record for tap (or member) `id`: 2-byte keys named by two letters, 1-byte rows; `entries` [key, row] (row
+ * null: a delete) applied to `model` (the server's rows, key → row), whose checksum it carries — `corrupt`: a wrong one.
+ */
+function tableRecord(id, { reset = false, from, to, entries, model, corrupt = false }) {
+  const K = 2, R = 1, rec = new Uint8Array(34 + entries.length * (1 + K + R)), dv = new DataView(rec.buffer);
+  rec[0] = 0x04;
+  dv.setUint32(1, id, true);
+  rec[5] = reset ? 1 : 0;
+  dv.setBigInt64(6, BigInt(from), true);
+  dv.setBigInt64(14, BigInt(to), true);
+  if (reset) model.clear();
+  entries.forEach(([key, row], i) => {
+    const p = 34 + i * (1 + K + R);
+    rec[p] = row === null ? 1 : 0;
+    rec.set(Buffer.from(key, 'latin1'), p + 1);
+    if (row === null) model.delete(key);
+    else model.set(key, rec[p + 1 + K] = row);
+  });
+  let sum = 0;
+  for (const [key, row] of model) sum = (sum + rowHash(Buffer.from(key, 'latin1'), 0, K, Uint8Array.of(row), 0, R)) >>> 0;
+  dv.setUint32(22, corrupt ? sum ^ 1 : sum, true);
+  dv.setUint32(26, entries.length, true);
+  dv.setUint16(30, K, true);
+  dv.setUint16(32, R, true);
+  return rec;
+}
+const valueRecord = (id, bytes) => {
+  const rec = new Uint8Array(7 + bytes.length), dv = new DataView(rec.buffer);
+  rec[0] = 0x03;
+  dv.setUint32(1, id, true);
+  dv.setUint16(5, bytes.length, true);
+  rec.set(bytes, 7);
+  return rec;
+};
+/** A Group record: its members' records, each naming its member's index where a tap id would be. */
+const groupRecord = (id, members, reset = false) => {
+  const length = members.reduce((n, m) => n + m.length, 0), rec = new Uint8Array(12 + length), dv = new DataView(rec.buffer);
+  rec[0] = 0x06;
+  dv.setUint32(1, id, true);
+  rec[5] = reset ? 1 : 0;
+  dv.setUint16(6, members.length, true);
+  dv.setUint32(8, length, true);
+  let o = 12;
+  for (const m of members) { rec.set(m, o); o += m.length; }
+  return rec;
+};
+
+test('changed keys, asked for at subscribe: every state of a table tells exactly the keys whose rows differ from the state handed over before it — added, changed, removed (a Set, as rows has them) — checked against copies of the replica through every frame of a live book; not asked, nothing noted and no changed', () => {
+  const client = newClient([]), plain = newClient([]);
+  let shown = new Map(), states = 0, plainStates = 0;
+  const kinds = { added: 0, changed: 0, removed: 0 };
+  client.subscribe(fx.tableId, (t, _id, info) => {
+    const now = rowsOf(t), expected = differing(shown, now);
+    assert.ok(info.changed instanceof Set, 'a Set');
+    assert.deepEqual(sorted(info.changed), sorted(expected), `state ${states}`);
+    for (const k of expected) kinds[!now.has(k) ? 'removed' : shown.has(k) ? 'changed' : 'added']++;
+    shown = now;
+    states++;
+  }, undefined, undefined, { changed: true });
+  plain.subscribe(fx.tableId, (_t, _id, info) => {
+    assert.ok(!('changed' in info) && 'provider' in info);
+    plainStates++;
+  });
+  frameBytes(fx.frames).forEach((frame, i) => {
+    client.receive(i + 1, frame);
+    plain.receive(i + 1, frame);
+  });
+  assert.ok(states > 10 && kinds.added > 0 && kinds.changed > 0 && kinds.removed > 0, JSON.stringify(kinds));
+  assert.equal(plainStates, states);
+  assert.equal(plain.tables.get(fx.tableId).changes, null, 'not asked: nothing noted');
+  assert.equal(client.tables.get(fx.tableId).changes.size, 0, 'asked: nothing held between states');
+});
+
+test('changed keys across a resync: a record that fails its checksum tells nothing; the snapshot after it tells each key whose row differs from the state last handed over — not from the rows the failed record left — once; an update to the same bytes, and a delete of a key it never had, tell nothing', () => {
+  const sent = [], client = newClient(sent), model = new Map(), told = [];
+  client.subscribe(9, (t, _id, info) => told.push([sorted(info.changed), Object.fromEntries([...rowsOf(t)].map(([k, r]) => [k, parseInt(r, 16)]))]),
+    undefined, undefined, { changed: true });
+  let seq = 0;
+  const send = rec => client.receive(++seq, rec);
+  send(tableRecord(9, { reset: true, from: 0, to: 1, entries: [['aa', 1], ['bb', 2], ['cc', 3]], model }));
+  send(tableRecord(9, { from: 2, to: 2, entries: [['bb', 2], ['cc', 4], ['zz', null], ['dd', 5]], model }));
+  const truth = new Map(model);                                          // the server's rows: the next record is corrupted on the way
+  send(tableRecord(9, { from: 3, to: 3, entries: [['aa', 9], ['bb', null]], model: new Map(model), corrupt: true }));
+  assert.equal(told.length, 2, 'the corrupted record handed nothing over');
+  assert.deepEqual(sent.filter(a => a[0] === 'Tap.Resync').map(a => a[3]), [9]);
+  truth.set('aa', 9);                                                    // it was right about aa; bb was never deleted
+  send(tableRecord(9, { reset: true, from: 0, to: 5, entries: [...truth], model }));
+  send(tableRecord(9, { from: 6, to: 6, entries: [['dd', null]], model }));
+  assert.deepEqual(told, [
+    [['aa', 'bb', 'cc'], { aa: 1, bb: 2, cc: 3 }],
+    [['cc', 'dd'], { aa: 1, bb: 2, cc: 4, dd: 5 }],                        // bb to the same byte, zz never there: not told
+    [['aa'], { aa: 9, bb: 2, cc: 4, dd: 5 }],                              // aa as the failed record had it: told; bb as before: not
+    [['dd'], { aa: 9, bb: 2, cc: 4 }],                                     // removed: no longer in rows
+  ]);
+});
+
+test('changed keys of a watch, per member by its index: a table\'s keys (a Set), and for a value whether it\'s another (the same bytes again: not) — through a group reset too, told against the members as last handed over; not asked: no changed', () => {
+  const client = newClient([]), plain = newClient([]), positions = new Map(), told = [];
+  client.subscribe(12, (g, _id, info) => told.push(info.changed.map(c => c instanceof Set ? sorted(c) : c)), undefined, undefined, { changed: true });
+  plain.subscribe(12, (_g, _id, info) => assert.ok(!('changed' in info)));
+  let seq = 0;
+  const send = rec => { client.receive(++seq, rec); plain.receive(seq, rec); };
+  send(groupRecord(12, [tableRecord(0, { reset: true, from: 0, to: 1, entries: [['aa', 1], ['bb', 2]], model: positions }), valueRecord(1, [7])], true));
+  send(groupRecord(12, [tableRecord(0, { from: 2, to: 2, entries: [['cc', 3]], model: positions })]));
+  send(groupRecord(12, [valueRecord(1, [7])]));
+  send(groupRecord(12, [valueRecord(1, [8])]));
+  const held = client.groups.get(12).members[0];
+  send(groupRecord(12, [tableRecord(0, { reset: true, from: 0, to: 4, entries: [['aa', 1], ['bb', 5], ['cc', 3]], model: positions }), valueRecord(1, [8])], true));
+  assert.deepEqual(Object.fromEntries([...rowsOf(held)].map(([k, r]) => [k, parseInt(r, 16)])), { aa: 1, bb: 2, cc: 3 }, 'a member held from before the reset is left as it was');
+  assert.deepEqual(told, [
+    [['aa', 'bb'], true],
+    [['cc'], false],
+    [[], false],                                                           // the same bytes again
+    [[], true],
+    [['bb'], false],                                                       // the reset's snapshot, against the members before it
+  ]);
+  const g = client.groups.get(12);
+  assert.deepEqual(Object.fromEntries([...rowsOf(g.members[0])].map(([k, r]) => [k, parseInt(r, 16)])), { aa: 1, bb: 5, cc: 3 });
+  assert.equal(plain.groups.get(12).members[0].changes, null, 'not asked: nothing noted');
+});
+
+test('changed keys through replace and a later view: replace hands { provider, changed } on; a view added by watch() is handed the state there is, whole (no changed), then each record\'s changes', () => {
+  const client = newClient([]), model = new Map(), replaced = [], later = [];
+  client.replace(null, { tapId: 21 }, (_t, _id, info) => replaced.push(sorted(info.changed)), undefined, { changed: true });
+  client.receive(1, tableRecord(21, { reset: true, from: 0, to: 1, entries: [['aa', 1]], model }));
+  client.watch(21, (t, _id, info) => later.push('changed' in info ? sorted(info.changed) : `whole: ${t.size}`), undefined, undefined, { changed: true });
+  client.receive(2, tableRecord(21, { from: 2, to: 2, entries: [['bb', 2]], model }));
+  assert.deepEqual(replaced, [['aa'], ['bb']]);
+  assert.deepEqual(later, ['whole: 1', ['bb']]);
+
+  const plain = newClient([]), seen = [];                                 // a view asking later than the subscription: noted from the next record
+  plain.subscribe(22, () => {});
+  plain.receive(1, tableRecord(22, { reset: true, from: 0, to: 1, entries: [['aa', 1]], model: new Map() }));
+  plain.watch(22, (_t, _id, info) => seen.push('changed' in info ? sorted(info.changed) : 'whole'), undefined, undefined, { changed: true });
+  plain.receive(2, tableRecord(22, { from: 2, to: 2, entries: [['aa', 3]], model: new Map([['aa', 1]]) }));
+  assert.deepEqual(seen, ['whole', ['aa']]);
+});
+
 // ───────────── out of band + watches (fixture: fx.oob) ─────────────
 
 const ob = fx.oob;

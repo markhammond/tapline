@@ -87,6 +87,8 @@ backlog without the throughput cap. It is ignored elsewhere (on macOS the option
   // a BlobRef (Delivery.Reference) or, for a watch, { members, degraded }; error = { code, version, payload, local };
   // a message topic's messages (and a mailbox's) go to the fourth handler, in order, once.
   // every state and message also carries { provider } ('serving' | 'degraded' | 'draining' | 'down'; messages: also stale);
+  // subscribe(…, { changed: true }) (a fifth argument): each table state also carries { changed }, the keys (as rows has
+  // them) added, changed or removed since the state before; a watch's by member (a table's Set; a value: whether another)
   // the router out of reach, a subscription with a stale policy is handed its stale view: { stale: true, provider: 'unreachable' }
   // tapline.onServiceDown/Up/Drained/Draining, tapline.onProviderState(instance, state), tapline.onReachability(reachable),
   // tapline.onEnded(code, fromTapId, toTapId) (the router ended them),

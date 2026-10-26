@@ -123,6 +123,14 @@
 // Watches: a Group record is a coherent cut of several members; they are all applied, then the subscriber is notified
 // once with { members: [Table | Uint8Array | BlobRef], degraded }.
 //
+// Changed keys, asked for at subscribe (tapline.subscribe(binding, onState, onError, onMessage, { changed: true })):
+// each state of a table comes with the keys whose rows aren't as the state handed over before it had them — added,
+// changed or removed (a removed one is no longer in table.rows) — as { provider, changed }, a Set of keys as table.rows
+// has them. A record that changes a row to the bytes it had tells nothing of it; one that fails verification tells
+// nothing until the state after it, which tells its keys too. A watch's is by member: a table's Set, or for a value,
+// whether it's another. A first state, and one handed over again (a stale view while the router is out of reach, then
+// the real one), come without it: draw those whole. Not asked for, nothing is noted.
+//
 // Signing in: tapline.signIn(realm, module, message, { next, renewal, signal }) sends the first message of a sign-in
 // to the realm's authentication provider, through the router, which relays it as bytes it doesn't read; a module of
 // several messages answers each of the provider's with next(message, signal) → its next (a Uint8Array). It resolves
@@ -260,10 +268,25 @@ export class Table {
         this.awaitingReset = true;   // until the first snapshot, and after any failure
         this.resyncSent = false;
         this.lastWasReset = false;
+        this.changes = null;         // asked for ({ changed: true }): each key touched since the state last handed over → its row then (null: absent)
     }
 
     get size() {
         return this.rows.size;
+    }
+
+    /**
+     * The keys (as rows has them) whose rows aren't as the state last handed over had them — added, changed or removed
+     * (removed: no longer in rows) — and from now, changes since this state. Only when changes are noted.
+     */
+    takeChanges() {
+        const changed = new Set();
+        for (const [id, was] of this.changes) {
+            const now = this.rows.get(id);
+            if (now === undefined ? was !== null : was === null || was.length !== now.row.length || !sameBytes(now.row, 0, was)) changed.add(id);
+        }
+        this.changes.clear();
+        return changed;
     }
 
     /** A stale view (not a replica: nothing applies to it): `rows` ([key, row] byte arrays) of this one's shape, flagged degraded. */
@@ -291,8 +314,10 @@ export class Table {
         const fromSeq = i64(dv, o + 6), toSeq = i64(dv, o + 14);
         const expected = dv.getUint32(o + 22, true), count = dv.getUint32(o + 26, true);
         const K = dv.getUint16(o + 30, true), R = dv.getUint16(o + 32, true);
+        const changes = this.changes;
 
         if (reset) {
+            if (changes) for (const [id, e] of this.rows) if (!changes.has(id)) changes.set(id, e.row);   // (replaced whole: as they were)
             this.rows.clear();
             this.checksum = 0;
             this.keySize = K;
@@ -311,6 +336,7 @@ export class Table {
             const k = p + 1, r = k + K;
             const id = latin1(bytes, k, K);
             const entry = this.rows.get(id);
+            if (changes && !changes.has(id)) changes.set(id, entry ? entry.row.slice() : null);   // (its row is changed in place)
             if (entry) sum = (sum - rowHash(entry.key, 0, K, entry.row, 0, R)) >>> 0;
             if (bytes[p] === OP_DELETE) {
                 if (entry) this.rows.delete(id);
@@ -342,6 +368,8 @@ const sameBytes = (a, o, b) => {
     for (let i = 0; i < b.length; i++) if (a[o + i] !== b[i]) return false;
     return true;
 };
+/** A watch's value member as it was: the same object, or the same bytes. */
+const sameValue = (a, b) => a === b || (a instanceof Uint8Array && b instanceof Uint8Array && a.length === b.length && sameBytes(a, 0, b));
 
 /** True if `bytes` hash to the content address `idHex` (first 16 bytes of SHA-256). Skipped without WebCrypto (insecure context). */
 async function matchesId(bytes, idHex) {
@@ -374,6 +402,8 @@ export class TaplineClient {
         this.values = new Map();      // tapId → Uint8Array | BlobRef (latest)
         this.groups = new Map();      // tapId → { members: [Table | Uint8Array], degraded, resyncSent }
         this.watchers = new Map();    // tapId → Set<{ onState, onError, onMessage }>
+        this.changesAsked = new Set();// tapIds whose states tell the keys they changed ({ changed: true })
+        this.handedMembers = new Map(); // tapId → a watch's members as last handed over (changes asked for): its values told against them
         this.confirmed = new Map();   // tapId → the ticket of the last out-of-band record it confirmed (said again on a rebind)
         this.serviceOf = new Map();   // tapId → its binding's nodeId (subscriptions through a data provider)
         this.pathOf = new Map();      // tapId → where it is, as the router shows it: its service, then its partition's ids
@@ -676,12 +706,13 @@ export class TaplineClient {
      * ({ tapId, topic, endpoint, service, nodeId, partition, stale }) or just the tap id. `endpoint` is for clients that activate over a
      * separate request; on a Blazor circuit the activation already rides the connection to the right node, so it is ignored
      * here. `nodeId`: see "Service down" above. onError(error, lastState, id) is called once if the stream fails;
-     * the subscription is over after it. Returns a function that removes these handlers.
+     * the subscription is over after it. `changed`: each state of a table (a watch's members) tells the keys it changed
+     * — see "Changed keys" above. Returns a function that removes these handlers.
      */
-    subscribe(binding, onState, onError, onMessage) {
+    subscribe(binding, onState, onError, onMessage, {changed = false} = {}) {
         const id = typeof binding === 'number' ? binding : binding.tapId;
         const service = typeof binding === 'number' ? null : binding.nodeId ?? null;
-        const off = this.watch(id, onState, onError, onMessage);
+        const off = this.watch(id, onState, onError, onMessage, {changed});
         if (service) this.serviceOf.set(id, service);
         if (service && binding.service) this.pathOf.set(id, binding.partition ? `${binding.service}/${binding.partition}` : binding.service);
         if (typeof binding !== 'number' && binding.stale) this.#stalePolicy(id, binding.stale);
@@ -695,28 +726,44 @@ export class TaplineClient {
      * Make before break: subscribes `binding` (as subscribe does) in place of `oldId` — the old one keeps streaming until
      * the new one's first state, which drops it (unsubscribes it on the server); from then, only the new one. Its states
      * and the old one's never mix: each comes under its own tap id. For moving off a draining instance
-     * (onServiceDraining), or to another representation of the same topic. Returns a function that removes the handlers.
+     * (onServiceDraining), or to another representation of the same topic. `options` as subscribe's. Returns a function
+     * that removes the handlers.
      */
-    replace(oldId, binding, onState, onError) {
+    replace(oldId, binding, onState, onError, options) {
         let switched = oldId === undefined || oldId === null;
-        return this.subscribe(binding, (state, id) => {
+        return this.subscribe(binding, (state, id, info) => {
             if (!switched) {
                 switched = true;
                 this.drop(oldId);
             }
-            onState(state, id);
-        }, onError);
+            onState(state, id, info);
+        }, onError, undefined, options);
     }
 
-    /** Adds handlers without activating (e.g. a second view of an already-subscribed tap). */
-    watch(id, onState, onError, onMessage) {
+    /**
+     * Adds handlers without activating (e.g. a second view of an already-subscribed tap), handing them its state now if
+     * it has one. `changed` as subscribe's: its changes noted from the next record.
+     */
+    watch(id, onState, onError, onMessage, {changed = false} = {}) {
         let set = this.watchers.get(id);
         if (!set) this.watchers.set(id, set = new Set());
         const handler = {onState, onError, onMessage};
         set.add(handler);
+        if (changed) this.#askChanges(id);
         const state = this.#state(id);
-        if (state !== undefined) onState(state, id);
+        if (state !== undefined) onState(state, id, {provider: this.providerOf(id)});
         return () => set.delete(handler);
+    }
+
+    /** From now its tables note what each record changes — a watch's, each member — for its states to tell. */
+    #askChanges(id) {
+        this.changesAsked.add(id);
+        const table = this.tables.get(id), g = this.groups.get(id);
+        if (table) table.changes ??= new Map();
+        if (g && !this.handedMembers.has(id)) {
+            for (const m of g.members) if (m instanceof Table) m.changes ??= new Map();
+            this.handedMembers.set(id, g.members.slice());
+        }
     }
 
     /**
@@ -1014,8 +1061,11 @@ export class TaplineClient {
 
     #applyTable(id, bytes, dv, o) {
         let table = this.tables.get(id);
-        if (!table) this.tables.set(id, table = new Table());
-        if (table.apply(bytes, dv, o)) this.#notify(id, table);
+        if (!table) {
+            this.tables.set(id, table = new Table());
+            if (this.changesAsked.has(id)) table.changes = new Map();
+        }
+        if (table.apply(bytes, dv, o)) this.#notify(id, table, table.changes ? table.takeChanges() : undefined);
         else if (table.lastWasReset && !table.degraded) this.#reject(id, FaultCode.ChecksumMismatch, table.seq);   // resync can't fix a bad snapshot
         else if (!table.resyncSent && !table.degraded) {
             table.resyncSent = true;
@@ -1025,10 +1075,11 @@ export class TaplineClient {
 
     /** A coherent cut: every member record is applied, then the subscriber is notified once. */
     #applyGroup(id, bytes, dv, o) {
-        const flags = bytes[o + 5], count = dv.getUint16(o + 6, true);
-        let g = this.groups.get(id);
+        const flags = bytes[o + 5], count = dv.getUint16(o + 6, true), asked = this.changesAsked.has(id);
+        let g = this.groups.get(id), replaced = null;
         if (!g) this.groups.set(id, g = {members: [], degraded: false, resyncSent: false});
         if (flags & FLAG_RESET) {
+            if (asked) replaced = g.members;                 // (what each member changed is told against them)
             g.members = [];
             g.resyncSent = false;
         }
@@ -1040,7 +1091,14 @@ export class TaplineClient {
                 const n = dv.getUint32(p + 26, true),
                     stride = 1 + dv.getUint16(p + 30, true) + dv.getUint16(p + 32, true);
                 let t = g.members[member];
-                if (!(t instanceof Table)) g.members[member] = t = new Table();
+                if (!(t instanceof Table)) {
+                    g.members[member] = t = new Table();
+                    if (asked) {
+                        const was = replaced?.[member];         // (its snapshot is told against the rows it replaces, as last handed over)
+                        t.changes = new Map(was instanceof Table ? was.changes : null);
+                        if (was instanceof Table) for (const [key, e] of was.rows) if (!t.changes.has(key)) t.changes.set(key, e.row);
+                    }
+                }
                 if (!t.apply(bytes, dv, p)) {
                     ok = false;
                     badSnapshot ||= t.lastWasReset && !t.degraded;
@@ -1057,7 +1115,7 @@ export class TaplineClient {
             }
         }
         if (ok) {
-            this.#notify(id, g);
+            this.#notify(id, g, asked ? this.#memberChanges(id, g) : undefined);
             return;
         }
         if (badSnapshot) this.#reject(id, FaultCode.ChecksumMismatch, -1);
@@ -1314,9 +1372,17 @@ export class TaplineClient {
         this.onReachability?.(reachable);
     }
 
-    #notify(id, state) {
+    #notify(id, state, changed) {
         const set = this.watchers.get(id);
-        if (set) for (const h of set) h.onState(state, id, {provider: this.providerOf(id)});
+        if (set) for (const h of set) h.onState(state, id, changed === undefined ? {provider: this.providerOf(id)} : {provider: this.providerOf(id), changed});
+    }
+
+    /** What each member of a watch changed since its state last handed over: a table's keys (a Set); a value, whether it's another. */
+    #memberChanges(id, g) {
+        const handed = this.handedMembers.get(id) ?? [];
+        const changed = g.members.map((m, i) => m instanceof Table ? m.takeChanges() : !sameValue(m, handed[i]));
+        this.handedMembers.set(id, g.members.slice());
+        return changed;
     }
 
     /** Ends a subscription with an error: handlers get the last state once, then everything about the tap is forgotten. */
@@ -1344,6 +1410,8 @@ export class TaplineClient {
         this.values.delete(id);
         this.groups.delete(id);
         this.watchers.delete(id);
+        this.changesAsked.delete(id);
+        this.handedMembers.delete(id);
         this.fetchFailures.delete(id);
         this.generations.delete(id);
         this.serviceOf.delete(id);

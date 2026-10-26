@@ -3,7 +3,7 @@
 ## Verification
 
 `dotnet run --project tests/Tapline.Tests` (157 tests; `TAPLINE_TEST=<part of a name>` runs only those,
-`TAPLINE_TEST_REPEAT=n` each n times), then `node tests/js/test.mjs` (38 tests, using the fixtures the C# run writes).
+`TAPLINE_TEST_REPEAT=n` each n times), then `node tests/js/test.mjs` (43 tests, using the fixtures the C# run writes).
 Nothing to install for either: the JS tests use Node's own modules, and the SignalR JS client's side of the wire —
 how it encodes every control invocation tapline.js sends over a circuit, at each integer width, and how it reads a frame
 envelope — is captured in `tests/js/fixtures/signalr.json` (client 10.0.11), which the C# tests hold the library to.
@@ -80,6 +80,11 @@ not in that capture yet: the tests write it as MessagePack's bin8/bin16/bin32, w
 - JS: degraded replica + `onError` (payload, last good version) and the tap is forgotten (not re-activated on
   reconnect); a corrupted *snapshot* sends one `Tap.Close(ChecksumMismatch)` and no resync; `Tap.Close` encoded by the
   real SignalR client is consumed in place.
+- JS, changed keys (`{ changed: true }`): through every table record of the fixture's live book (its upserts and
+  deletes), each state's keys equal those whose rows differ from the state before, worked out from copies of the
+  replica; not asked, nothing is noted. Across a resync, the snapshot is told against the state last handed over, not
+  the rows a failed record left (one key it changed, one it deleted and the snapshot put back); a watch's by member,
+  through a group reset; through `replace` and a later view.
 
 - Data providers: step 1 through the service's provider — an unknown service, a refusal, a route bound and counted
   before step 2; a stream topic starts at the next change after step 1 (and after a reconnect, on from what the client
