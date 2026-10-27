@@ -7,14 +7,20 @@ import { createHash } from 'node:crypto';
 import { TaplineClient, rowHash, FaultCode, BlobRef, StaleData } from '../../src/Tapline.AspNetCore/wwwroot/tapline.js';
 import { loadOpaque } from '../../src/Tapline.Authentication.Opaque/wwwroot/opaque.mjs';
 import { signInWithPassword, registerPassword } from '../../src/Tapline.Authentication.Opaque/wwwroot/tapline-opaque.mjs';
-import { Scroller, Prefetch, Velocity, windowFor, Requests, readOrder, finance, significant, formatCell, NOUGHT, SAFE_HEIGHT,
-  stampOf, flashDelay, cssMs } from '../../src/Tapline.Grid/wwwroot/tapline-grid.js';
+import { startBlazor } from '../../src/Tapline.BlazorRealtime/wwwroot/blazor-realtime.js';
+import { Scroller, Prefetch, Velocity, leadFor, racingUp, windowFor, Requests, readOrder, readStatus, statusParts, statusText, keysByKey, compareKeys, formatCell, formatInteger, formatDecimal, formatDouble, formatTime, formatGuid, figuredText, cultureOf, INVARIANT, SAFE_HEIGHT,
+  stampOf, flashDelay, cssMs, twoFigures, moved, staleAfter, keyTime, stampsTrusted, arrivedAbove,
+  lagShift, flashFrom } from '../../src/Tapline.Grid/wwwroot/tapline-grid.js';
 
 const fx = JSON.parse(readFileSync(new URL('./fixtures/frames.json', import.meta.url)));
 const hex = s => Uint8Array.from(Buffer.from(s, 'hex'));
 const toHex = b => Buffer.from(b).toString('hex').toUpperCase();
 /** A RouterChange record's length (it rides behind a heartbeat): by its state — draining's grace, degraded's reason. */
 const routerChangeLength = (fr, o) => 22 + (fr[o + 1] === 2 ? 4 : fr[o + 1] === 1 ? 1 + fr[o + 22] : 0);
+const tableLength = (dv, o) => {          // (38 bytes of header; each entry its op and key, an upsert its row too)
+  const n = dv.getUint32(o + 26, true);
+  return 38 + n * (1 + dv.getUint16(o + 30, true)) + (n - dv.getUint32(o + 34, true)) * dv.getUint16(o + 32, true);
+};
 let passed = 0;
 const tests = [];
 const test = (name, fn) => tests.push([name, fn]);
@@ -116,9 +122,9 @@ test('corrupted delta: checksum mismatch → one resync, deltas ignored until re
       else if (t === 2) o += 4 + dv.getUint16(o + 2, true);
       else if (t === 3) o += 7 + dv.getUint16(o + 5, true);
       else {
-        const n = dv.getUint32(o + 26, true), stride = 1 + dv.getUint16(o + 30, true) + dv.getUint16(o + 32, true);
-        if (!(fr[o + 5] & 1) && n > 0 && fr[o + 34] === 0) { fr[o + 34 + 1 + 9] ^= 1; target = f; break outer; }   // flip a row bit of an upsert
-        o += 34 + stride * n;
+        const n = dv.getUint32(o + 26, true);
+        if (!(fr[o + 5] & 1) && n > 0 && fr[o + 38] === 0) { fr[o + 38 + 1 + 9] ^= 1; target = f; break outer; }   // flip a row bit of an upsert
+        o += tableLength(dv, o);
       }
     }
   }
@@ -311,7 +317,7 @@ test('a snapshot that fails verification → Tap.Close(ChecksumMismatch) + local
   let o = 0;
   while (fr[o] !== 4) o += fr[o] === 1 ? 13 : fr[o] === 0x0d ? routerChangeLength(fr, o) : fr[o] === 2 ? 4 + dv.getUint16(o + 2, true) : 7 + dv.getUint16(o + 5, true);
   assert.ok(fr[o + 5] & 1 && dv.getUint32(o + 26, true) > 0, 'first table record is a non-empty snapshot');
-  fr[o + 34 + 1 + 9] ^= 1;                                       // flip a row bit
+  fr[o + 38 + 1 + 9] ^= 1;                                       // flip a row bit
   frames.forEach((f, i) => client.receive(i + 1, f));
   assert.deepEqual(sent.filter(a => a[0] === 'Tap.Close').map(a => a.slice(3)), [[fx.tableId, FaultCode.ChecksumMismatch]]);
   assert.equal(sent.filter(a => a[0] === 'Tap.Resync').length, 0);
@@ -344,29 +350,37 @@ const sorted = set => [...set].sort();
 
 /**
  * A Table record for tap (or member) `id`: 2-byte keys named by two letters, 1-byte rows; `entries` [key, row] (row
- * null: a delete) applied to `model` (the server's rows, key → row), whose checksum it carries — `corrupt`: a wrong one.
+ * null: a delete, its key alone) applied to `model` (the server's rows, key → row), whose checksum it carries —
+ * `corrupt`: a wrong one.
  */
 function tableRecord(id, { reset = false, from, to, entries, model, corrupt = false }) {
-  const K = 2, R = 1, rec = new Uint8Array(34 + entries.length * (1 + K + R)), dv = new DataView(rec.buffer);
+  const K = 2, R = 1, deletes = entries.filter(([, row]) => row === null).length;
+  const rec = new Uint8Array(38 + entries.length * (1 + K) + (entries.length - deletes) * R), dv = new DataView(rec.buffer);
   rec[0] = 0x04;
   dv.setUint32(1, id, true);
   rec[5] = reset ? 1 : 0;
   dv.setBigInt64(6, BigInt(from), true);
   dv.setBigInt64(14, BigInt(to), true);
   if (reset) model.clear();
-  entries.forEach(([key, row], i) => {
-    const p = 34 + i * (1 + K + R);
+  let p = 38;
+  for (const [key, row] of entries) {
     rec[p] = row === null ? 1 : 0;
     rec.set(Buffer.from(key, 'latin1'), p + 1);
-    if (row === null) model.delete(key);
-    else model.set(key, rec[p + 1 + K] = row);
-  });
+    if (row === null) {
+      model.delete(key);
+      p += 1 + K;
+    } else {
+      model.set(key, rec[p + 1 + K] = row);
+      p += 1 + K + R;
+    }
+  }
   let sum = 0;
   for (const [key, row] of model) sum = (sum + rowHash(Buffer.from(key, 'latin1'), 0, K, Uint8Array.of(row), 0, R)) >>> 0;
   dv.setUint32(22, corrupt ? sum ^ 1 : sum, true);
   dv.setUint32(26, entries.length, true);
   dv.setUint16(30, K, true);
   dv.setUint16(32, R, true);
+  dv.setUint32(34, deletes, true);
   return rec;
 }
 const valueRecord = (id, bytes) => {
@@ -586,9 +600,9 @@ test('watch: a member that fails verification resyncs the whole group, without n
     const fr = frames[f], dv = new DataView(fr.buffer, fr.byteOffset, fr.byteLength);
     for (let o = 0; o < fr.length;) {
       const t = fr[o];
-      if (t === 6) { fr[o + 12 + 34 + 1 + 8] ^= 1; target = f; break outer; }   // first member's first row byte
+      if (t === 6) { fr[o + 12 + 38 + 1 + 8] ^= 1; target = f; break outer; }   // first member's first row byte
       o += t === 1 ? 13 : t === 0x0d ? routerChangeLength(fr, o) : t === 3 ? 7 + dv.getUint16(o + 5, true)
-         : t === 4 ? 34 + dv.getUint32(o + 26, true) * (1 + dv.getUint16(o + 30, true) + dv.getUint16(o + 32, true))
+         : t === 4 ? tableLength(dv, o)
          : t === 5 ? 17 + dv.getUint16(o + 15, true) : t === 9 ? 18 + dv.getUint32(o + 14, true) : 47;
     }
   }
@@ -679,7 +693,7 @@ test('the router\'s state, behind its heartbeats: serving, degraded (why), drain
   assert.equal(client.routerHealth, seen[2]);
 });
 
-test('the connection\'s server timeout follows the path: the floor on a fast one, four times the longest recent gap on a slow one, back as it eases; staleMs', () => {
+test('the connection\'s server timeout follows the path: the floor on a fast one; on a slow one (gaps past 1.5 s) SignalR\'s default, or four times the longest recent gap if more, up to that default; back as it eases; staleMs', () => {
   const client = new TaplineClient();
   let t = 0;
   client.now = () => t;
@@ -693,8 +707,12 @@ test('the connection\'s server timeout follows the path: the floor on a fast one
   assert.equal(connection.serverTimeoutInMilliseconds, 30000, 'SignalR\'s until 5 s of the path are seen');
   every(1000, 8000);
   assert.equal(connection.serverTimeoutInMilliseconds, 10000, 'a heartbeat a second: the floor');
+  t += 1000; client.receive(0, heartbeat);                 // a 2 s gap: a slow path — a message there may take longer than the floor
+  assert.equal(connection.serverTimeoutInMilliseconds, 30000, 'a slow path: SignalR\'s default, not four times the gap (8 s)');
+  every(1000, t + 120000);
+  assert.equal(connection.serverTimeoutInMilliseconds, 10000, 'eased: back to the floor');
   t += 6000; client.receive(0, heartbeat);                 // a 7 s gap: a slow path (or a large message on one)
-  assert.equal(connection.serverTimeoutInMilliseconds, 28000, 'four times the gap');
+  assert.equal(connection.serverTimeoutInMilliseconds, 30000, 'four times the gap (28 s), within SignalR\'s default');
   every(1000, t + 120000);
   assert.equal(connection.serverTimeoutInMilliseconds, 10000, 'eased: back to the floor');
   assert.ok(client.staleMs >= 0 && client.staleMs < 1000, 'heard just now');
@@ -773,11 +791,11 @@ test('stale data while the router is out of reach: the binding\'s policy applied
   // The book: three bids and three asks; a value; two messages.
   const book = [[0, 97, 5], [0, 99, 6], [0, 98, 7], [1, 103, 8], [1, 101, 9], [1, 102, 10]];
   const table = (id, rows) => {
-    const K = 9, R = 8, r = new Uint8Array(34 + rows.length * (1 + K + R)), dv = new DataView(r.buffer);
+    const K = 9, R = 8, r = new Uint8Array(38 + rows.length * (1 + K + R)), dv = new DataView(r.buffer);
     r[0] = 0x04; dv.setUint32(1, id, true); r[5] = 0x01; dv.setUint32(26, rows.length, true); dv.setUint16(30, K, true); dv.setUint16(32, R, true);
     let sum = 0;
     rows.forEach(([side, price, size], i) => {
-      const o = 34 + i * (1 + K + R);
+      const o = 38 + i * (1 + K + R);
       r[o + 1] = side; dv.setBigInt64(o + 2, BigInt(price), true); dv.setBigInt64(o + 1 + K, BigInt(size), true);
       sum = (sum + rowHash(r, o + 1, K, r, o + 1 + K, R)) >>> 0;
     });
@@ -1189,7 +1207,7 @@ test('grid pre-fetch: a view ahead and two thirds behind at full size, starting 
   assert.deepEqual([p.ahead, p.behind], [24, 16]);
 });
 
-test('grid velocity (as mip-chart projects a pan): the lead ahead is the fling\'s peak speed × 325 ms, smoothed (EWMA 0.45); a pause of 120 ms ends the fling (a millisecond less doesn\'t); turning back forgets the peak', () => {
+test('grid velocity (as mip-chart projects a pan): the lead ahead is the fling\'s peak speed × 325 ms, smoothed (EWMA 0.45); a pause of 120 ms ends the fling (a millisecond less doesn\'t); turning back forgets the peak; rows let in above move its samples, not the reader', () => {
   const v = new Velocity();
   v.sample(0, 0);
   v.sample(10, 10);                                  // 1 row/ms
@@ -1209,15 +1227,86 @@ test('grid velocity (as mip-chart projects a pan): the lead ahead is the fling\'
   const up = v.peak;
   v.sample(14, 290);                                 // turned back down
   assert.ok(v.peak < up, 'turned back: the old peak forgotten');
+
+  const racing = new Velocity();
+  for (let i = 0; i <= 10; i++) racing.sample(300 - i, 8 * i);   // (up a row every 8 ms)
+  const [rate, reach] = [racing.rate(80), racing.reach];
+  racing.shift(57);                                              // (57 let in above: the scroll moved down by as many)
+  racing.sample(357 - 11, 88);
+  assert.ok(racing.reach < 0 && Math.abs(racing.reach - reach) < 1, 'rows let in above: the fling up goes on as it was');
+  assert.ok(Math.abs(racing.rate(88) - rate) < 1e-3, 'and the pace');
 });
 
-test('grid window asked for: the larger part ahead of the reader, which way they go; none above the top, no more above than there is; a fling\'s lead ahead (at most three views); never more than the session\'s most, the trailing side giving way first', () => {
+test('grid lead on a slow link: a steady pace step by step (5 rows every 300 ms, each pause ending a fling) is the rows covered over the last second (setting off after a second still, or turning back, the pace since); ahead, as far as it goes while an answer comes (its median time and the requests\' interval) and half again — or a fling\'s reach, whichever is further', () => {
+  const v = new Velocity();
+  for (let i = 0; i <= 4; i++) v.sample(100 + 5 * i, 300 * i);           // (steps: no fling survives them)
+  assert.equal(v.reach, 0, 'no fling');
+  assert.ok(Math.abs(v.rate(1200) - 20 / 1000) < 1e-9, 'the last second: 20 rows, from 200 ms to 1,200 ms');
+  assert.ok(Math.abs(v.rate(1500) - 15 / 1000) < 1e-9, 'a pause: the last second\'s steps over the whole second');
+  assert.equal(v.rate(2300), 0, 'stopped a second: none');
+  const up = new Velocity();
+  for (let i = 0; i <= 4; i++) up.sample(100 - 5 * i, 300 * i);
+  assert.ok(up.rate(1200) < 0, 'up: negative');
+  const off = new Velocity();
+  off.sample(100, 0);                                                     // (still)
+  for (let i = 0; i <= 2; i++) off.sample(101 + 10 * i, 5000 + 100 * i);   // (off again five seconds on, 10 rows a 100 ms)
+  assert.ok(Math.abs(off.rate(5200) - 21 / 200) < 1e-9, 'set off after a second still: the pace since (21 rows in 200 ms), not the second\'s');
+  const just = new Velocity();
+  just.sample(100, 0);
+  just.sample(101, 5000);
+  assert.ok(Math.abs(just.rate(5010) - 1 / 120) < 1e-9, 'just set off: over 120 ms at least');
+  const back = new Velocity();
+  for (let i = 0; i <= 10; i++) back.sample(100 + 10 * i, 100 * i);          // (down 10 rows a 100 ms for a second)
+  for (let i = 1; i <= 3; i++) back.sample(200 - 10 * i, 1000 + 100 * i);    // (then back up as fast)
+  assert.ok(Math.abs(back.rate(1300) + 0.1) < 1e-9, 'turned back: the pace from the turn (up 30 rows in 300 ms), not the second\'s (down 40)');
+
+  assert.equal(leadFor(0, 20 / 1000, [380, 420, 400], 50), 20 / 1000 * (400 + 50) * 1.5, 'a 400 ms answer at 20 rows a second: 13.5 rows');
+  assert.equal(leadFor(0, 20 / 1000, [], 50), 20 / 1000 * (250 + 50) * 1.5, 'no answer yet: 250 ms taken');
+  assert.equal(leadFor(-90, 20 / 1000, [400], 50), -90, 'a fling reaching further: its reach');
+  assert.equal(leadFor(0, 0, [400], 50), 0, 'still: none');
+});
+
+test('grid overscan: rows held either side as the reader moves, whichever way they go next — behind as much as ahead; the lead ahead if it reaches further; none above the top; the trailing side giving way first to the session\'s most', () => {
+  const p = new Prefetch(() => 0);
+  p.see(20);                                                                        // (a quarter: 5 ahead, 4 behind)
+  assert.deepEqual(windowFor(100, 20, true, p, 0, Infinity, 150), { first: 100, count: 20, before: 100, after: 150 }, 'still: both ways, no more above than there is');
+  assert.deepEqual(windowFor(1000, 20, true, p, 45, Infinity, 150), { first: 1000, count: 20, before: 150, after: 150 }, 'moving: kept behind as ahead');
+  assert.deepEqual(windowFor(1000, 20, false, p, -45, Infinity, 150), { first: 1000, count: 20, before: 150, after: 150 }, 'turned back: the same');
+  assert.deepEqual(windowFor(1000, 20, true, p, 500, Infinity, 30), { first: 1000, count: 20, before: 30, after: 60 }, 'a small overscan: a lead reaching further, ahead (three views at most)');
+  assert.deepEqual(windowFor(0, 20, true, p, 0, Infinity, 150), { first: 0, count: 20, before: 0, after: 150 }, 'at the top: none above');
+  assert.deepEqual(windowFor(1000, 20, true, p, 0, 250, 150), { first: 1000, count: 20, before: 80, after: 150 }, 'the most rows: behind gives way');
+});
+
+test('grid first window: as the page asks before any overscan is told — its view, a quarter ahead — the rows LiveGrid reads from the body\'s height before it asks (LiveGrid.FirstWindow, held to the same rows in the C# test)', () => {
+  const first = (height, most = 1000) => {
+    const p = new Prefetch(() => 0), rows = height / 30;
+    p.see(rows);
+    return windowFor(0, rows, true, p, 0, most, 0, Math.min(rows, 0));
+  };
+  assert.deepEqual(first(780), { first: 0, count: 26, before: 0, after: 7 }, '780 px of 30 px rows: 26, and 7 ahead');
+  assert.deepEqual(first(790), { first: 0, count: 27, before: 0, after: 7 }, 'a part row: one more in view');
+  assert.deepEqual(first(100), { first: 0, count: 4, before: 0, after: 1 }, 'a few: one ahead');
+  assert.deepEqual(first(29_000), { first: 0, count: 967, before: 0, after: 33 }, 'near the window\'s bound: the rows ahead give way');
+});
+
+test('grid racing up: two views a second or more, upward, at the steady pace or a fling\'s speed; down, or slower, not', () => {
+  assert.equal(racingUp(-40 / 1000, 0, 20), true, '40 rows a second up, a view of 20: on two views a second');
+  assert.equal(racingUp(-39 / 1000, 0, 20), false, 'a row a second less: not');
+  assert.equal(racingUp(0, -0.1, 20), true, 'a fling up at 100 rows a second');
+  assert.equal(racingUp(60 / 1000, 0.1, 20), false, 'down: not');
+});
+
+test('grid window asked for: the larger part ahead of the reader, which way they go — a view at least, unless the link carries fewer in time (then those, the pre-fetch\'s own, or the lead, whichever is most); none above the top, no more above than there is; the reader\'s lead ahead (at most three views); never more than the session\'s most, the trailing side giving way first', () => {
   const lead = new Prefetch(() => 0);
   lead.see(20);
   assert.deepEqual(windowFor(100, 20, true, lead, 45), { first: 100, count: 20, before: 4, after: 45 }, 'a fling: its lead below, the quarter view above');
   assert.deepEqual(windowFor(100, 20, true, lead, 500), { first: 100, count: 20, before: 4, after: 60 }, 'at most three views');
-  assert.deepEqual(windowFor(100, 20, true, lead, 2), { first: 100, count: 20, before: 4, after: 5 }, 'a slow drag: the pre-fetch\'s own');
+  assert.deepEqual(windowFor(100, 20, true, lead, 2), { first: 100, count: 20, before: 4, after: 20 }, 'a slow drag on a slow link: a view ahead, the quarter view behind');
   assert.deepEqual(windowFor(100, 20, true, lead, 45, 60), { first: 100, count: 20, before: 0, after: 40 }, 'the most rows: the trailing side gives way first, then the lead');
+  assert.deepEqual(windowFor(0, 20, true, lead, 0, Infinity, 4, 4), { first: 0, count: 20, before: 0, after: 5 },
+    'the live top on a link that carries four rows a side in time: the quarter view below, not a view');
+  assert.deepEqual(windowFor(0, 20, true, lead, 0, Infinity, 0, 0), { first: 0, count: 20, before: 0, after: 5 }, 'before the link says: the same');
+  assert.deepEqual(windowFor(100, 20, true, lead, 45, Infinity, 4, 4), { first: 100, count: 20, before: 4, after: 45 }, 'a fling on it: its lead still');
   const p = new Prefetch(() => 0);
   p.see(20);
   p.step = 0;
@@ -1264,6 +1353,11 @@ test('grid requests: coalesced, at most one an interval and while fewer than the
   now = 300;
   r.want(w(12));
   assert.equal(r.pump().id, 'r5', 'and asks afresh, the same window too');
+  now = 400;
+  r.answered('r5');
+  assert.equal(r.pump(), null, 'the same window: not asked twice');
+  r.again();
+  assert.equal(r.pump().id, 'r6', 'asked again (a grid back in sight): its answer says what the window holds now');
 });
 
 test('grid order value: read as Tapline.Grid writes it (40 bytes, the view its rows are of among them, then keys); another format, cut short, a count that doesn\'t fit: not one', () => {
@@ -1279,45 +1373,106 @@ test('grid order value: read as Tapline.Grid writes it (40 bytes, the view its r
   keys.forEach((k, i) => dv.setBigInt64(40 + 8 * i, k, true));
   const order = readOrder(bytes);
   const latin1 = k => { const b = new Uint8Array(8); new DataView(b.buffer).setBigInt64(0, k, true); return String.fromCharCode(...b); };
-  assert.deepEqual(order, { live: false, stale: true, totalKind: 1, keySize: 8, count: 3, first: 1_234_567_890_123, total: 9_876_543_210,
+  assert.deepEqual(order, { live: false, stale: true, byKey: false, totalKind: 1, keySize: 8, count: 3, first: 1_234_567_890_123, total: 9_876_543_210,
     letIn: 30, holds: 4, view: 2, keys: keys.map(latin1) });
   assert.equal(readOrder(Uint8Array.of(2, ...bytes.subarray(1))), null, 'another format');
   assert.equal(readOrder(bytes.subarray(0, 63)), null, 'cut short');
   dv.setInt32(4, 4, true);
   assert.equal(readOrder(bytes), null, 'more keys than it holds');
+
+  // By key: the header alone, the count the rows held; with key bytes after it, not one.
+  const byKey = bytes.slice(0, 40);
+  byKey[1] = 4 | 1;
+  new DataView(byKey.buffer).setInt32(4, 3, true);
+  const placed = readOrder(byKey);
+  assert.deepEqual([placed.live, placed.byKey, placed.count, placed.keys], [true, true, 3, null], 'by key: three rows, no keys');
+  assert.equal(readOrder(Uint8Array.of(...byKey, 0, 0, 0, 0, 0, 0, 0, 0)), null, 'by key, with key bytes: not one');
 });
 
-test('grid cells: quantities as finance writes them (exact, half away from nought, .25 not 0.2500, a dash for nought), prices to six significant figures (scientific past eight digits), times with today an ellipsis and the microseconds on hover, booleans, enumerations, text cut and flagged, a percentage of one column over another; the least integer no value', () => {
-  assert.equal(finance(2_500n, 4, 4), '.25');
-  assert.equal(finance(-2_500n, 4, 4), '-.25');
-  assert.equal(finance(12_345_678n, 2, 2), '123,456.78');
-  assert.equal(finance(0n, 4, 4), NOUGHT);
-  assert.equal(finance(-4n, 4, 2), NOUGHT, 'rounded to nought: a dash, no sign');
-  assert.equal(finance(12_345n, 4, 2), '1.23');
-  assert.equal(finance(12_355n, 4, 2), '1.24', 'half away from nought');
-  assert.equal(finance(-12_355n, 4, 2), '-1.24');
-  assert.equal(finance(5n, 0, 0), '5');
-  assert.equal(finance(1_000_000_000_000_000_000n, 0, 0), '1,000,000,000,000,000,000', 'exact past 2^53');
-  assert.equal(significant(123_456_789n, 2), '1,234,568');
-  assert.equal(significant(12_345n, 9), '1.2345e-5', 'eight digits at most, else scientific');
-  assert.equal(significant(0n, 4), NOUGHT);
+test('grid status: the value read as Tapline.Grid writes it (12 bytes: the overscan the link carries, none told null; rows arrived above; the source moved past the rows while passive; then why the last read was refused); another format, cut short: not one — and the status line from it, the order and the page: the total (estimated ≈, at least ≥) named as the grid names its rows, live or held and the rows above, freshness (asking: the last word stands), the refusal marked, the selection', () => {
+  const bytes = new Uint8Array(12 + 3), dv = new DataView(bytes.buffer);
+  bytes[0] = 1;
+  dv.setUint16(2, 64, true);
+  dv.setBigInt64(4, 1_234n, true);
+  assert.deepEqual(readStatus(bytes.subarray(0, 12)), { above: 1_234, overscan: 64, moved: false, refusal: null }, 'none refused: twelve bytes');
+  bytes[1] = 2;
+  assert.equal(readStatus(bytes.subarray(0, 12)).moved, true, 'the source moved past the rows, the page passive');
+  bytes[1] = 1;
+  dv.setUint16(2, 0xffff, true);
+  bytes.set([0x6e, 0x6f, 0x21], 12);
+  assert.deepEqual(readStatus(bytes), { above: 1_234, overscan: null, moved: false, refusal: 'no!' }, 'refused: its words after; no overscan told');
+  assert.equal(readStatus(Uint8Array.of(2, ...bytes.subarray(1))), null, 'another format');
+  assert.equal(readStatus(bytes.subarray(0, 11)), null, 'cut short');
+
+  const names = ['order', 'orders'];
+  assert.equal(statusText({ total: 1_000_000, totalKind: 0, live: true, above: 0, refusal: null }, 'fresh', 0, names),
+    '1,000,000 orders · live · up to date');
+  assert.equal(statusText({ total: 1, totalKind: 1, live: false, above: 0, refusal: null }, 'behind', 0, names), '≈1 order · held · catching up');
+  assert.equal(statusText({ total: 5_000, totalKind: 2, live: false, above: 12_345, refusal: null }, 'unknown', 2, names),
+    '≥5,000 orders · held, 12,345 new above · … · 2 selected');
+  assert.deepEqual(statusParts({ total: 7, totalKind: 0, live: false, above: 0, refusal: 'timed out' }, 'fresh'),
+    [['7 rows'], ['held'], ['up to date'], ['timed out', 'tg-refusal']], 'a refusal, marked to be drawn as one; rows by default');
+});
+
+test('circuit keep-alive: startBlazor has the page ping every 3 s it sends nothing else (heard however busy its download), before the page\'s own configureSignalR, which has the last word; 0 leaves SignalR\'s own', () => {
+  const client = { attach: c => c, bind: () => {} };
+  const started = options => {
+    let given;
+    startBlazor({ start: o => { given = o; } }, client, options);
+    const calls = [];
+    const builder = { withKeepAliveInterval: ms => calls.push(ms), build: () => ({}) };
+    given.circuit.configureSignalR(builder);
+    builder.build();
+    return calls;
+  };
+  assert.deepEqual(started({ reloadOnRestore: false }), [3000], 'pings every 3 s by default');
+  assert.deepEqual(started({ reloadOnRestore: false, circuit: { configureSignalR: b => b.withKeepAliveInterval(5000) } }), [3000, 5000], 'the page\'s own after: its own wins');
+  assert.deepEqual(started({ reloadOnRestore: false, keepAliveInterval: 0 }), [], '0: SignalR\'s own (15 s)');
+});
+
+test('grid keys by key: placed greatest first, as the server\'s key type compares — a .NET Guid as Guid.CompareTo (its first three fields little-endian), an integer by value, signed or not', () => {
+  const guid = hex => { const b = Buffer.from(hex.replaceAll('-', ''), 'hex'); return String.fromCharCode(b[3], b[2], b[1], b[0], b[5], b[4], b[7], b[6], ...b.subarray(8)); };
+  const ids = ['019a0000-0000-7000-8000-000000000002', '019a0000-0000-7000-8000-000000000010', '019a0000-0001-7000-8000-000000000001',
+    '019b0000-0000-7000-8000-000000000000', '019a0000-0000-7001-8000-000000000000'];
+  assert.deepEqual(keysByKey(ids.map(guid), 'guid'), ['019b0000-0000-7000-8000-000000000000', '019a0000-0001-7000-8000-000000000001',
+    '019a0000-0000-7001-8000-000000000000', '019a0000-0000-7000-8000-000000000010', '019a0000-0000-7000-8000-000000000002'].map(guid),
+    'by time first (its first 48 bits), then on, byte by byte as the canonical text reads');
+  const long = n => { const b = new Uint8Array(8); new DataView(b.buffer).setBigInt64(0, BigInt(n), true); return String.fromCharCode(...b); };
+  assert.deepEqual(keysByKey([3, -1, 256, 255, -300].map(long), 'int'), [256, 255, 3, -1, -300].map(long), 'signed integers by value');
+  const ulong = n => { const b = new Uint8Array(8); new DataView(b.buffer).setBigUint64(0, BigInt(n), true); return String.fromCharCode(...b); };
+  assert.deepEqual(keysByKey([1n, 2n ** 63n, 255n].map(ulong), 'uint'), [2n ** 63n, 255n, 1n].map(ulong), 'unsigned: the top bit large');
+  assert.equal(compareKeys(long(5), long(5), 'int'), 0, 'the same key: nought');
+});
+
+test('grid cells by their column\'s .NET format (a blotter\'s, here): a quantity grouped, no nought before its point, a dash for nought (a custom format\'s sections), half away from nought; a time by its pattern, the instant on hover; the default, .NET\'s G; booleans, enumerations, text cut and flagged, a fraction of one column over another; the least integer no value', () => {
+  const quantity = '#,###.####;-#,###.####;–';
+  assert.equal(formatDecimal(2_500n, 4, quantity), '.25');
+  assert.equal(formatDecimal(-2_500n, 4, quantity), '-.25', 'the negative section: its own sign');
+  assert.equal(formatDecimal(12_345_678n, 2, quantity), '123,456.78');
+  assert.equal(formatDecimal(0n, 4, quantity), '–', 'nought\'s section');
+  assert.equal(formatDecimal(-4n, 4, '#,###.##;-#,###.##;–'), '–', 'rounded to nought: nought\'s section, no sign');
+  assert.equal(formatDecimal(12_355n, 4, '0.00'), '1.24', 'half away from nought');
+  assert.equal(formatDecimal(-12_355n, 4, '0.00'), '-1.24');
+  assert.equal(formatDecimal(1_000_000_000_000_000_000n, 0, '#,0'), '1,000,000,000,000,000,000', 'exact past 2^53');
+  assert.equal(formatDecimal(12_300n, 4, null), '1.2300', 'G: a decimal keeps its places');
+  assert.equal(formatDouble(0.125, false, 'F2'), '0.12', 'a standard format: a double\'s exact value, half to even');
+  assert.equal(formatDouble(0.125, false, '0.00'), '0.13', 'a custom one: fifteen digits, half away from nought');
 
   const row = new Uint8Array(64), dv = new DataView(row.buffer);
   const columns = [
-    { name: 'qty', kind: 'fixed', offset: 0, scale: 4, decimals: 4 },
-    { name: 'filled', kind: 'fixed', offset: 8, scale: 4, decimals: 4 },
-    { name: 'placed', kind: 'time', offset: 16 },
+    { name: 'qty', kind: 'fixed', offset: 0, scale: 4, format: quantity },
+    { name: 'filled', kind: 'fixed', offset: 8, scale: 4 },
+    { name: 'placed', kind: 'time', offset: 16, format: "'… 'HH:mm:ss" },
     { name: 'side', kind: 'enum', offset: 24, size: 1, dictionary: ['Buy', 'Sell'] },
     { name: 'urgent', kind: 'bool', offset: 25 },
     { name: 'client', kind: 'text', offset: 26, size: 13 },
-    { name: 'fill', kind: 'percent', of: 'filled', over: 'qty', decimals: 1 },
+    { name: 'fill', kind: 'percent', of: 'filled', over: 'qty', format: '0.#%' },
     { name: 'count', kind: 'int', offset: 40, size: 4 },
-    { name: 'rate', kind: 'float', offset: 48, decimals: 3 },
-    { name: 'px', kind: 'fixed', offset: 56, scale: 8, figures: 6 }
+    { name: 'rate', kind: 'float', offset: 48, format: '#,##0.###;-#,##0.###;–' },
+    { name: 'px', kind: 'fixed', offset: 56, scale: 8, format: 'G6' }
   ];
   dv.setBigInt64(0, 1_000_000n, true);                    // 100
   dv.setBigInt64(8, 250_000n, true);                      // 25
-  const today = new Date(Date.UTC(2026, 9, 26, 15, 0, 0));
   dv.setBigInt64(16, BigInt(Date.UTC(2026, 9, 26, 14, 32, 5)) * 1000n + 123_456n, true);
   row[24] = 1; row[25] = 1;
   const text = new TextEncoder().encode('Client 0042 ltd');
@@ -1325,19 +1480,23 @@ test('grid cells: quantities as finance writes them (exact, half away from nough
   dv.setInt32(40, -2_147_483_648, true);                   // no value
   dv.setFloat64(48, 0.0004, true);
   dv.setBigInt64(56, 12_345_678_901n, true);               // 123.45678901
-  const cell = name => formatCell(columns.find(c => c.name === name), row, dv, columns, today);
-  assert.deepEqual(cell('qty'), { text: '100', title: '100' });
-  assert.deepEqual(cell('placed'), { text: '…14:32:05', title: '2026-10-26 14:32:05.123456 UTC' }, 'today: an ellipsis');
-  assert.equal(formatCell(columns[2], row, dv, columns, new Date(Date.UTC(2026, 9, 27))).text, '2026-10-26 14:32:05', 'another day: the date');
+  const cell = name => formatCell(columns.find(c => c.name === name), row, dv, columns);
+  assert.deepEqual(cell('qty'), { text: '100', title: '100.0000' }, 'whole on hover: the decimal, its places');
+  assert.deepEqual(cell('placed'), { text: '… 14:32:05', title: '2026-10-26 14:32:05.123456 UTC' }, 'by its pattern; the instant on hover');
+  assert.equal(formatCell({ ...columns[2], format: undefined }, row, dv, columns).text, '10/26/2026 14:32:05', 'no pattern: the invariant culture\'s G');
   assert.equal(cell('side').text, 'Sell');
   assert.deepEqual(cell('urgent'), { text: '✓', title: 'yes' });
   assert.deepEqual(cell('client'), { text: 'Client 0042 …', title: 'Client 0042 …', cut: true }, 'cut: flagged');
   assert.equal(cell('fill').text, '25%');
+  assert.equal(formatCell({ ...columns[6], format: undefined }, row, dv, columns).text, '25.00 %', 'a fraction\'s default: P');
   assert.equal(cell('count').text, '', 'the least integer: no value');
-  assert.equal(cell('rate').text, NOUGHT, 'rounded to nought: a dash');
+  assert.equal(cell('rate').text, '–', 'rounded to nought: nought\'s section');
   dv.setFloat64(48, -1234.5678, true);
-  assert.deepEqual(cell('rate'), { text: '-1,234.568', title: '-1234.5678' }, 'a float to its places, grouped; whole on hover');
-  assert.deepEqual(cell('px'), { text: '123.457', title: '123.45678901' }, 'six figures shown, exact on hover');
+  assert.deepEqual(cell('rate'), { text: '-1,234.568', title: '-1234.5678' }, 'a double to its places, grouped; whole on hover');
+  assert.deepEqual(cell('px'), { text: '123.457', title: '123.45678901' }, 'six figures shown (G6), exact on hover');
+  dv.setFloat64(8, 0, true);
+  dv.setBigInt64(0, 0n, true);
+  assert.equal(cell('fill').text, '', 'a fraction of nothing: none');
 });
 
 test('grid cells as LiveGrid describes its columns: unsigned integers (none taken as no value), a float, its shortest text on hover, a DateTime\'s ticks shown as UTC (zero: none), an enum of any size and sign by its dictionary, a Guid in its text (empty: none), a percentage of fields by place', () => {
@@ -1345,27 +1504,27 @@ test('grid cells as LiveGrid describes its columns: unsigned integers (none take
   const columns = [
     { name: 'u8', kind: 'int', offset: 0, size: 1, unsigned: true },
     { name: 'u64', kind: 'int', offset: 8, size: 8, unsigned: true },
-    { name: 'f32', kind: 'float', offset: 16, size: 4, decimals: 3 },
-    { name: 'at', kind: 'time', offset: 24, size: 8, unit: 'ticks' },
+    { name: 'f32', kind: 'float', offset: 16, size: 4 },
+    { name: 'at', kind: 'time', offset: 24, size: 8, unit: 'ticks', format: 'dd MMM HH:mm:ss.fff' },
     { name: 'side', kind: 'enum', offset: 32, size: 4, unsigned: false, dictionary: { '-1': 'None', '0': 'Buy', '1': 'Sell' } },
     { name: 'id', kind: 'uuid', offset: 40, size: 16 },
-    { name: 'fill', kind: 'percent', of: { offset: 56, size: 4, unsigned: true }, over: { offset: 60, size: 4, unsigned: true }, decimals: 1 }
+    { name: 'fill', kind: 'percent', of: { offset: 56, size: 4, unsigned: true }, over: { offset: 60, size: 4, unsigned: true }, format: '0%' }
   ];
   row[0] = 255;
   dv.setBigUint64(8, 2n ** 64n - 1n, true);
   dv.setFloat32(16, 0.1, true);
-  const today = new Date(Date.UTC(2026, 9, 26, 15, 0, 0));
   const ticks = BigInt(Date.UTC(2026, 9, 26, 14, 32, 5)) * 10_000n + 1_234_560n + 621_355_968_000_000_000n;
   dv.setBigUint64(24, ticks | (1n << 62n), true);          // (DateTimeKind.Utc in the top bits)
   dv.setInt32(32, -1, true);
   row.set([0x33, 0x22, 0x11, 0x00, 0x55, 0x44, 0x77, 0x66, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff], 40);
   dv.setUint32(56, 3, true);
   dv.setUint32(60, 4, true);
-  const cell = name => formatCell(columns.find(c => c.name === name), row, dv, columns, today);
+  const cell = name => formatCell(columns.find(c => c.name === name), row, dv, columns);
   assert.equal(cell('u8').text, '255', 'unsigned: its greatest a value, not none');
-  assert.equal(cell('u64').text, '18,446,744,073,709,551,615');
-  assert.deepEqual(cell('f32'), { text: '.1', title: '0.1' }, 'a float32 as written, not 0.10000000149011612');
-  assert.deepEqual(cell('at'), { text: '…14:32:05', title: '2026-10-26 14:32:05.123456 UTC' }, 'a DateTime\'s ticks, its kind bits aside');
+  assert.equal(cell('u64').text, '18446744073709551615', 'a ulong, exact: its G');
+  assert.equal(formatCell({ ...columns[1], format: 'N0' }, row, dv, columns).text, '18,446,744,073,709,551,615', 'and grouped (N0)');
+  assert.deepEqual(cell('f32'), { text: '0.1', title: '0.1' }, 'a float32 as .NET writes it, not 0.10000000149011612');
+  assert.deepEqual(cell('at'), { text: '26 Oct 14:32:05.123', title: '2026-10-26 14:32:05.123456 UTC' }, 'a DateTime\'s ticks, its kind bits aside');
   assert.equal(cell('side').text, 'None', 'a signed enum\'s -1');
   dv.setInt32(32, 1, true);
   assert.equal(cell('side').text, 'Sell');
@@ -1373,10 +1532,25 @@ test('grid cells as LiveGrid describes its columns: unsigned integers (none take
   assert.equal(cell('side').text, '#7', 'a value not in the dictionary: its number');
   assert.deepEqual(cell('id'), { text: '00112233-4455-6677-8899-aabbccddeeff', title: '00112233-4455-6677-8899-aabbccddeeff' }, 'a Guid\'s bytes as .NET lays them out');
   assert.equal(cell('fill').text, '75%');
+  assert.equal(formatCell({ ...columns[5], format: 'N' }, row, dv, columns).text, '00112233445566778899aabbccddeeff', 'a Guid by its format (N)');
   row.fill(0);
   assert.equal(cell('at').text, '', 'DateTime.MinValue: none');
   assert.equal(cell('id').text, '', 'Guid.Empty: none');
   assert.equal(cell('u8').text, '0');
+});
+
+test('grid flashes on a slow link: run from the stamp as late as the link usually makes the page hear of a change — the median of the last eight states\' slowest lags — or from when the page heard of it, if sooner; none measured, or no stamp: from when it was heard', () => {
+  assert.equal(lagShift([]), null, 'none measured');
+  assert.equal(lagShift([1800, 2600, 2100]), 2100, 'the median');
+  assert.equal(lagShift([90_000, 90_000, 2000, 2100, 1900, 2200, 2000, 1800, 2300, 2100]), 2100, 'the last eight states only (an even count: the upper middle)');
+  assert.equal(lagShift([-40]), 0, 'never less than nought');
+  const t = 1_000_000;
+  assert.equal(flashFrom(t + 5_900, t, 5_900), t + 5_900, 'heard 5.9 s after its stamp, as the link usually is: from its start');
+  assert.equal(flashFrom(t + 8_000, t, 5_900), t + 5_900, 'later than usual (a burst): 2.1 s on');
+  assert.equal(flashFrom(t + 1_500, t, 5_900), t + 1_500, 'heard sooner than usual: from when heard');
+  assert.equal(flashFrom(undefined, t, 2_100), t + 2_100, 'not heard of here (scrolled to): its stamp, shifted');
+  assert.equal(flashFrom(t + 5_900, t, null), t + 5_900, 'no delay measured, or the stamps not trusted: from when heard');
+  assert.equal(flashFrom(t + 5_900, null, 2_100), t + 5_900, 'no stamp: from when heard');
 });
 
 test('grid flashes as they happened: the delay showing a flash where it has got to (none once over, from its start if not yet begun), on its boundaries; a row\'s arrival stamp — µs since 1970, or a DateTime\'s ticks, its kind aside — in ms, none for none; a CSS time in ms', () => {
@@ -1404,7 +1578,112 @@ test('grid flashes as they happened: the delay showing a flash where it has got 
   assert.equal(cssMs(''), 0);
 });
 
-test('grid on the wire: a session\'s frames as Tapline.Grid writes them, through the client with { changed: true } — after each step the order read as written (live or held, first, total, rows let in, holds, keys) and the changed keys those whose rows differ; held, arrivals above: nothing at all', () => {
+test('grid stamps from keys and the page\'s clock: a UUIDv7 key\'s time from its bytes as a .NET Guid lays them out (another version or variant, another size: none); stamps trusted while the least lag of the last live arrivals is within 500 ms either way, and the page\'s round trip more the later way', () => {
+  // 0192f4a1-b2c3-7d5e-8f60-718293a4b5c6: ms 0x0192f4a1b2c3 (2024-10-30T…), version 7, variant 10
+  const rfc = [0x01, 0x92, 0xf4, 0xa1, 0xb2, 0xc3, 0x7d, 0x5e, 0x8f, 0x60, 0x71, 0x82, 0x93, 0xa4, 0xb5, 0xc6];
+  const memory = [rfc[3], rfc[2], rfc[1], rfc[0], rfc[5], rfc[4], rfc[7], rfc[6], ...rfc.slice(8)];   // (Data1–3 little-endian)
+  const key = String.fromCharCode(...memory);
+  assert.equal(keyTime(key), 0x0192f4a1b2c3, 'its first 48 bits, in ms');
+  assert.equal(stampOf({ unit: 'uuid7' }, new Uint8Array(0), null, key), 0x0192f4a1b2c3, 'as a stamp, the row unread');
+  const v4 = [...memory];
+  v4[7] = 0x4d;
+  assert.equal(keyTime(String.fromCharCode(...v4)), null, 'version 4: none');
+  const otherVariant = [...memory];
+  otherVariant[8] = 0xcf;
+  assert.equal(keyTime(String.fromCharCode(...otherVariant)), null, 'another variant: none');
+  assert.equal(keyTime('ø\u0007\u0006\u0005\u0004\u0003\u0002\u0001'), null, 'a long\'s key: none');
+
+  assert.equal(stampsTrusted([]), true, 'none heard yet: trusted');
+  assert.equal(stampsTrusted([40, 900, 120]), true, 'one arrival slow: the least is what counts');
+  assert.equal(stampsTrusted([500, 700]), true, 'on 500 ms');
+  assert.equal(stampsTrusted([501, 900]), false, 'every arrival later than a trip takes: the page\'s clock ahead');
+  assert.equal(stampsTrusted([-500, 30]), true);
+  assert.equal(stampsTrusted([-501, 30]), false, 'stamped further ahead than a trip: the page\'s clock behind');
+  assert.equal(stampsTrusted([3300, 3700], 5600), true, 'a slow link (16 Kbit): a round trip of 5.6 s, arrivals 3.3 s late');
+  assert.equal(stampsTrusted([6101], 5600), false, 'later than the round trip and 500 ms');
+  assert.equal(stampsTrusted([-501], 5600), false, 'ahead by more than 500 ms, however slow the link');
+});
+
+test('grid arrivals at the live top: those above the row that was first, or the first still held; by key, every row above the row that was first, the window turned over', () => {
+  assert.equal(arrivedAbove(['c', 'b', 'a'], ['e', 'd', 'c', 'b'], false), 2, 'above the row that was first');
+  assert.equal(arrivedAbove(['c', 'b', 'a'], ['e', 'd', 'b', 'a'], false), 2, 'that row gone: above the first still held');
+  assert.equal(arrivedAbove(['c', 'b', 'a'], ['f', 'e', 'd'], false), 0, 'none held still, in another order: none known');
+  assert.equal(arrivedAbove([], ['a'], false), 0, 'none held before');
+  const long = n => { const b = new Uint8Array(8); new DataView(b.buffer).setBigInt64(0, BigInt(n), true); return String.fromCharCode(...b); };
+  const keys = ns => ns.map(long);
+  assert.equal(arrivedAbove(keys([30, 20, 10]), keys([90, 80, 70]), true, 'int'), 3, 'by key, the window turned over: every row');
+  assert.equal(arrivedAbove(keys([30, 20, 10]), keys([50, 40, 20, 10]), true, 'int'), 2, 'by key, the row that was first gone: those above it');
+  assert.equal(arrivedAbove(keys([30, 20, 10]), keys([50, 30, 20]), true, 'int'), 1, 'by key, as the row that was first says');
+});
+
+test('grid stale rows: a new view\'s first rows late after twice the page\'s round trip — the median of its last answers\' times — and never more than 500 ms (500 ms before any answer)', () => {
+  assert.equal(staleAfter([]), 500, 'none answered yet');
+  assert.equal(staleAfter([12]), 24);
+  assert.equal(staleAfter([40, 9, 300]), 80, 'the median, not the slowest');
+  assert.equal(staleAfter([10, 20, 30, 40]), 60, 'an even count: the upper middle');
+  assert.equal(staleAfter([400, 260, 900]), 500, 'a slow link: at most 500 ms');
+});
+
+test('grid cells written by .NET\'s rules — its output (fixtures/formats.json, by the C# tests) for every integer type, decimals of several scales, doubles and floats (edges, ties, random bits), by every standard format and custom ones, times by standard and custom patterns, and Guids, in cultures that differ in their separators, groups, patterns, signs, names (genitive too) and calendars — written alike', () => {
+  const fx = JSON.parse(readFileSync(new URL('./fixtures/formats.json', import.meta.url)));
+  const cultures = Object.fromEntries(Object.entries(fx.cultures).map(([name, given]) => [name, cultureOf(given)]));
+  const f64 = new Float64Array(1), u64 = new BigUint64Array(f64.buffer), f32 = new Float32Array(1), u32 = new Uint32Array(f32.buffer);
+  const misses = [];
+  for (const [culture, type, value, format, want] of fx.numbers) {
+    const n = cultures[culture].n, kind = type[0], size = Number(type.slice(1));
+    const got = kind === 'i' || kind === 'u' ? formatInteger(size === 8 ? BigInt(value) : Number(value), size, kind === 'u', format, n)
+      : kind === 'd' ? formatDecimal(BigInt(value), size, format, n)
+        : type === 'f8' ? (u64[0] = BigInt('0x' + value), formatDouble(f64[0], false, format, n))
+          : (u32[0] = parseInt(value, 16), formatDouble(f32[0], true, format, n));
+    if (got !== want) misses.push(`${culture || 'invariant'} ${type} ${value} ${JSON.stringify(format)}: ${JSON.stringify(got)}, .NET ${JSON.stringify(want)}`);
+  }
+  for (const [culture, ticks, pattern, invariant, want] of fx.times) {
+    const got = formatTime(BigInt(ticks), pattern, invariant ? INVARIANT.d : cultures[culture].d);
+    if (got !== want) misses.push(`${culture || 'invariant'} ${ticks} ${JSON.stringify(pattern)}: ${JSON.stringify(got)}, .NET ${JSON.stringify(want)}`);
+  }
+  for (const [hex, format, want] of fx.guids) {
+    const got = formatGuid(Uint8Array.from(hex.match(/../g), h => parseInt(h, 16)), format);
+    if (got !== want) misses.push(`${hex} ${format}: ${got}, .NET ${want}`);
+  }
+  assert.ok(fx.numbers.length > 50_000 && fx.times.length > 2_000 && Object.keys(fx.cultures).length > 20, 'the fixture is whole');
+  assert.deepEqual(misses.slice(0, 20), [], `${misses.length} of ${fx.numbers.length + fx.times.length + fx.guids.length} written otherwise than .NET writes them`);
+});
+
+test('grid cells to significant figures (LiveColumn.Figures, MostDigits): rounded half away from nought, then by the format; past the most digits — those before the point and after it to its last that counts — in scientific notation to as many figures; the tooltip the value whole', () => {
+  const size = '#,###.########;-#,###.########;–', m = (c, e = 0) => ({c, e});
+  assert.equal(figuredText(m(123456789n), false, 6, 8, size), '1.23457e8', 'nine digits: scientific');
+  assert.equal(figuredText(m(123456789n), true, 6, 8, size), '-1.23457e8');
+  assert.equal(figuredText(m(12345678n), false, 6, 8, size), '12,345,700', 'eight: fixed, to six figures');
+  assert.equal(figuredText(m(123456n, -9), false, 6, 8, size), '1.23456e-4', '.000123456: nine digits');
+  assert.equal(figuredText(m(123456n, -8), false, 6, 8, size), '.00123456', '.00123456: eight');
+  assert.equal(figuredText(m(15n, -1), false, 6, 8, size), '1.5', 'its figures only those that count');
+  assert.equal(figuredText(m(1234565n, -3), false, 6, 8, size), '1,234.57', 'half away from nought');
+  assert.equal(figuredText(m(0n), false, 6, 8, size), '–', 'nought: the format\'s section');
+  assert.equal(figuredText(m(987654321n), false, 1, 8, size), '1e9', 'one figure');
+  assert.equal(figuredText(m(123456789n), false, 6, null, size), '123,457,000', 'no most: never scientific');
+  const row = new Uint8Array(8), dv = new DataView(row.buffer), qty = { name: 'qty', kind: 'float', offset: 0, size: 8, format: size, figures: 6, mostDigits: 8 };
+  dv.setFloat64(0, 123456789.25, true);
+  assert.deepEqual(formatCell(qty, row, dv, [qty]), { text: '1.23457e8', title: '123456789.25' }, 'a double: the tooltip, the value whole');
+  dv.setFloat64(0, 0.25, true);
+  assert.deepEqual(formatCell(qty, row, dv, [qty]), { text: '.25', title: '0.25' });
+  const fixed = { name: 'fixed', kind: 'fixed', offset: 0, size: 8, scale: 4, format: size, figures: 6, mostDigits: 8 };
+  dv.setBigInt64(0, 1234567891234n, true);   // 123,456,789.1234
+  assert.deepEqual(formatCell(fixed, row, dv, [fixed]), { text: '1.23457e8', title: '123456789.1234' }, 'a Fixed: its decimal whole on hover');
+});
+
+test('grid figures in the status line: to two significant figures, shown again only once they move by 5 %', () => {
+  assert.equal(twoFigures(0.004), '0');
+  assert.equal(twoFigures(0.0567), '0.057');
+  assert.equal(twoFigures(1.234), '1.2');
+  assert.equal(twoFigures(12.34), '12');
+  assert.equal(twoFigures(1234), '1200');
+  assert.ok(!moved(1.2, 1.25), '4 %: not again');
+  assert.ok(moved(1.2, 1.3), 'by 8 %, and reading differently: again');
+  assert.ok(moved(0, 0.5) && !moved(0, 0.004), 'from nought: once it reads as more than nought');
+  assert.ok(!moved(100, 104), 'by 4 % of a hundred: not again');
+});
+
+test('grid on the wire: a session\'s frames as Tapline.Grid writes them, through the client with { changed: true } — after each step the order read as written (live or held, first, total, rows let in, holds, keys; at the live top by key, no keys, the rows held placed by theirs), the status value (rows arrived above) and the changed keys those whose rows differ; held, arrivals above: the status alone', () => {
   const g = fx.grid;
   const client = newClient([]);
   const latin1 = id => { const b = new Uint8Array(8); new DataView(b.buffer).setBigInt64(0, BigInt(id), true); return String.fromCharCode(...b); };
@@ -1418,10 +1697,17 @@ test('grid on the wire: a session\'s frames as Tapline.Grid writes them, through
       continue;
     }
     assert.ok(states > before, `${step.what}: handed over`);
-    const order = readOrder(last.group.members[1]), e = step.expect;
-    assert.deepEqual([order.live, order.first, order.total, order.letIn, order.holds], [e.Live, e.First, e.Total, e.LetIn, e.Holds], `${step.what}: the order's header`);
-    assert.deepEqual(order.keys, e.keys.map(latin1), `${step.what}: its keys, in order`);
-    const table = last.group.members[0];
+    const order = readOrder(last.group.members[1]), e = step.expect, table = last.group.members[0];
+    assert.deepEqual([readStatus(last.group.members[2])?.above, readStatus(last.group.members[2])?.overscan], [e.Above, null],
+      `${step.what}: the status value, rows arrived above (no overscan told: the page's own)`);
+    if (step.statusOnly)
+      assert.deepEqual([last.info.changed[0].size, last.info.changed[1], last.info.changed[2]], [0, false, true], `${step.what}: the status alone changed`);
+    assert.deepEqual([order.live, order.byKey, order.first, order.total, order.letIn, order.holds], [e.Live, e.ByKey, e.First, e.Total, e.LetIn, e.Holds], `${step.what}: the order's header`);
+    if (order.byKey) {
+      assert.equal(order.keys, null, `${step.what}: by key, no keys sent`);
+      order.keys = keysByKey(table.rows.keys(), 'int');
+    }
+    assert.deepEqual(order.keys, e.keys.map(latin1), `${step.what}: its keys, in order${order.byKey ? ' (by key: the rows held, greatest first)' : ''}`);
     assert.equal(table.size, e.keys.length, `${step.what}: the rows table the window's rows alone`);
     assert.deepEqual(order.keys.map(k => new DataView(table.rows.get(k).row.buffer, table.rows.get(k).row.byteOffset).getInt32(16, true)), e.qty,
       `${step.what}: each row as the server has it`);

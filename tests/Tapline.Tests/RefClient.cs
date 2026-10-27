@@ -262,10 +262,10 @@ internal sealed class RefClient
 
     private static int TableSize(ReadOnlySpan<byte> f)
     {
-        var count = (int)BinaryPrimitives.ReadUInt32LittleEndian(f[26..]);
-        var stride = 1 + BinaryPrimitives.ReadUInt16LittleEndian(f[30..]) +
-                     BinaryPrimitives.ReadUInt16LittleEndian(f[32..]);
-        return Wire.TableHeader + count * stride;
+        int count = (int)BinaryPrimitives.ReadUInt32LittleEndian(f[26..]),
+            deletes = (int)BinaryPrimitives.ReadUInt32LittleEndian(f[34..]);
+        return Wire.TableHeader + count * (1 + BinaryPrimitives.ReadUInt16LittleEndian(f[30..])) +
+               (count - deletes) * BinaryPrimitives.ReadUInt16LittleEndian(f[32..]); // (a delete: its key alone)
     }
 
     /// <summary>
@@ -396,20 +396,23 @@ internal sealed class RefClient
             t.Deltas++;
         }
 
-        for (int i = 0, p = Wire.TableHeader; i < count; i++, p += 1 + k + rs)
+        for (int i = 0, p = Wire.TableHeader; i < count; i++)
         {
             var key = r.Slice(p + 1, k);
-            var row = r.Slice(p + 1 + k, rs);
             var id = Convert.ToHexString(key);
             if (t.Rows.TryGetValue(id, out var old)) t.Checksum -= RowHash.Of(old.Key, old.Row);
             if (r[p] == Wire.OpDelete)
             {
-                t.Rows.Remove(id);
+                t.Deletes++;
+                if (!t.Rows.Remove(id)) t.UnheldDeletes++;
+                p += 1 + k; // (its key alone)
             }
             else
             {
+                var row = r.Slice(p + 1 + k, rs);
                 t.Rows[id] = (key.ToArray(), row.ToArray());
                 t.Checksum += RowHash.Of(key, row);
+                p += 1 + k + rs;
             }
 
             t.Entries++;
@@ -432,6 +435,7 @@ internal sealed class RefClient
         public bool AwaitingReset = true, Degraded;
         public uint Checksum;
         public int KeySize, RowSize, Snapshots, Deltas, Entries, Failures;
+        public int Deletes, UnheldDeletes; // deletes received, and of those, of keys it didn't hold
         public long Seq = -1;
         public int SnapshotsBeforeDelta; // the activation's, normally one; later ones are the server's choice
     }

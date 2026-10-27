@@ -1,8 +1,152 @@
-/* tapline-grid.css — a LiveGrid: its body's layout, placeholders and flashes (tapline-grid.js draws the rows; this
-   places them), and the component's headings, footer, selection and focus. Colours are custom properties a page may
-   set anywhere above the grid: --tg-background, --tg-line, --tg-placeholder, --tg-changed, --tg-arrived, --tg-selected,
-   --tg-focus; and the flashes' length, --tg-flash-for. Widths and frozen offsets are the module's, as custom properties on the grid (--tg-w<i>, --tg-left<i>,
-   --tg-width, --tg-scrollbar), which the headings read too. */
+/* tapline-grid.css — a LiveGrid: its body's layout, skeleton, placeholders, tooltips and flashes (tapline-grid.js draws
+   the rows; this places them), and the component's headings, footer, selection and focus. Colours are custom properties a page may
+   set anywhere above the grid: --tg-background, --tg-line, --tg-placeholder (a placeholder's bar), --tg-placeholder-shine
+   (the shimmer across it), --tg-placeholder-still (the bar, fading in and out, where motion is reduced), --tg-changed, --tg-arrived,
+   --tg-selected, --tg-focus; and the flashes' length, --tg-flash-for.
+
+   Fonts are the page's: the cells' is the grid's own (.tg-grid — and its tooltips'), the headings' .tg-head's. Each column
+   has the room LiveGrid's style gives it (--tg-w<i>: its Width, or what its format writes, in ch), and a gutter beside its
+   text, --tg-cell-gutter (16px; set it where the grid's class is, or above): the columns stand at --tg-x<i> — the room and
+   gutters of those before them, worked out on the grid, in the cells' font, so a heading of another font lines up — and
+   the rows are --tg-width wide. The frozen columns' divider: --tg-frozen-line, --tg-frozen-line-width (2px; 0, none);
+   the fade of what scrolls under them, --tg-frozen-fade (12px; 0px, none); and beside them the rows' scrollbars' thumbs,
+   --tg-scrollbar-thumb. */
+
+/* ── where the columns stand: --tg-x<i>, a length the grid works out once, in its own font, for all inside it ── */
+
+@property --tg-x1{syntax:"<length>";inherits:true;initial-value:0px}
+@property --tg-x2{syntax:"<length>";inherits:true;initial-value:0px}
+@property --tg-x3{syntax:"<length>";inherits:true;initial-value:0px}
+@property --tg-x4{syntax:"<length>";inherits:true;initial-value:0px}
+@property --tg-x5{syntax:"<length>";inherits:true;initial-value:0px}
+@property --tg-x6{syntax:"<length>";inherits:true;initial-value:0px}
+@property --tg-x7{syntax:"<length>";inherits:true;initial-value:0px}
+@property --tg-x8{syntax:"<length>";inherits:true;initial-value:0px}
+@property --tg-x9{syntax:"<length>";inherits:true;initial-value:0px}
+@property --tg-x10{syntax:"<length>";inherits:true;initial-value:0px}
+@property --tg-x11{syntax:"<length>";inherits:true;initial-value:0px}
+@property --tg-x12{syntax:"<length>";inherits:true;initial-value:0px}
+@property --tg-x13{syntax:"<length>";inherits:true;initial-value:0px}
+@property --tg-x14{syntax:"<length>";inherits:true;initial-value:0px}
+@property --tg-x15{syntax:"<length>";inherits:true;initial-value:0px}
+@property --tg-x16{syntax:"<length>";inherits:true;initial-value:0px}
+@property --tg-x17{syntax:"<length>";inherits:true;initial-value:0px}
+@property --tg-x18{syntax:"<length>";inherits:true;initial-value:0px}
+@property --tg-x19{syntax:"<length>";inherits:true;initial-value:0px}
+@property --tg-x20{syntax:"<length>";inherits:true;initial-value:0px}
+@property --tg-x21{syntax:"<length>";inherits:true;initial-value:0px}
+@property --tg-x22{syntax:"<length>";inherits:true;initial-value:0px}
+@property --tg-x23{syntax:"<length>";inherits:true;initial-value:0px}
+@property --tg-x24{syntax:"<length>";inherits:true;initial-value:0px}
+@property --tg-x25{syntax:"<length>";inherits:true;initial-value:0px}
+@property --tg-x26{syntax:"<length>";inherits:true;initial-value:0px}
+@property --tg-x27{syntax:"<length>";inherits:true;initial-value:0px}
+@property --tg-x28{syntax:"<length>";inherits:true;initial-value:0px}
+@property --tg-x29{syntax:"<length>";inherits:true;initial-value:0px}
+@property --tg-x30{syntax:"<length>";inherits:true;initial-value:0px}
+@property --tg-x31{syntax:"<length>";inherits:true;initial-value:0px}
+@property --tg-x32{syntax:"<length>";inherits:true;initial-value:0px}
+@property --tg-x33{syntax:"<length>";inherits:true;initial-value:0px}
+@property --tg-x34{syntax:"<length>";inherits:true;initial-value:0px}
+@property --tg-x35{syntax:"<length>";inherits:true;initial-value:0px}
+@property --tg-x36{syntax:"<length>";inherits:true;initial-value:0px}
+@property --tg-x37{syntax:"<length>";inherits:true;initial-value:0px}
+@property --tg-x38{syntax:"<length>";inherits:true;initial-value:0px}
+@property --tg-x39{syntax:"<length>";inherits:true;initial-value:0px}
+@property --tg-x40{syntax:"<length>";inherits:true;initial-value:0px}
+@property --tg-x41{syntax:"<length>";inherits:true;initial-value:0px}
+@property --tg-x42{syntax:"<length>";inherits:true;initial-value:0px}
+@property --tg-x43{syntax:"<length>";inherits:true;initial-value:0px}
+@property --tg-x44{syntax:"<length>";inherits:true;initial-value:0px}
+@property --tg-x45{syntax:"<length>";inherits:true;initial-value:0px}
+@property --tg-x46{syntax:"<length>";inherits:true;initial-value:0px}
+@property --tg-x47{syntax:"<length>";inherits:true;initial-value:0px}
+@property --tg-x48{syntax:"<length>";inherits:true;initial-value:0px}
+@property --tg-x49{syntax:"<length>";inherits:true;initial-value:0px}
+@property --tg-x50{syntax:"<length>";inherits:true;initial-value:0px}
+@property --tg-x51{syntax:"<length>";inherits:true;initial-value:0px}
+@property --tg-x52{syntax:"<length>";inherits:true;initial-value:0px}
+@property --tg-x53{syntax:"<length>";inherits:true;initial-value:0px}
+@property --tg-x54{syntax:"<length>";inherits:true;initial-value:0px}
+@property --tg-x55{syntax:"<length>";inherits:true;initial-value:0px}
+@property --tg-x56{syntax:"<length>";inherits:true;initial-value:0px}
+@property --tg-x57{syntax:"<length>";inherits:true;initial-value:0px}
+@property --tg-x58{syntax:"<length>";inherits:true;initial-value:0px}
+@property --tg-x59{syntax:"<length>";inherits:true;initial-value:0px}
+@property --tg-x60{syntax:"<length>";inherits:true;initial-value:0px}
+@property --tg-x61{syntax:"<length>";inherits:true;initial-value:0px}
+@property --tg-x62{syntax:"<length>";inherits:true;initial-value:0px}
+@property --tg-x63{syntax:"<length>";inherits:true;initial-value:0px}
+@property --tg-x64{syntax:"<length>";inherits:true;initial-value:0px}
+
+.tg-grid {
+    --tg-g: var(--tg-cell-gutter, 16px);
+    --tg-x1: calc(var(--tg-w0, -1 * var(--tg-g)) + var(--tg-g));
+    --tg-x2:calc(var(--tg-x1) + var(--tg-w1,-1*var(--tg-g)) + var(--tg-g));
+    --tg-x3:calc(var(--tg-x2) + var(--tg-w2,-1*var(--tg-g)) + var(--tg-g));
+    --tg-x4:calc(var(--tg-x3) + var(--tg-w3,-1*var(--tg-g)) + var(--tg-g));
+    --tg-x5:calc(var(--tg-x4) + var(--tg-w4,-1*var(--tg-g)) + var(--tg-g));
+    --tg-x6:calc(var(--tg-x5) + var(--tg-w5,-1*var(--tg-g)) + var(--tg-g));
+    --tg-x7:calc(var(--tg-x6) + var(--tg-w6,-1*var(--tg-g)) + var(--tg-g));
+    --tg-x8:calc(var(--tg-x7) + var(--tg-w7,-1*var(--tg-g)) + var(--tg-g));
+    --tg-x9:calc(var(--tg-x8) + var(--tg-w8,-1*var(--tg-g)) + var(--tg-g));
+    --tg-x10:calc(var(--tg-x9) + var(--tg-w9,-1*var(--tg-g)) + var(--tg-g));
+    --tg-x11:calc(var(--tg-x10) + var(--tg-w10,-1*var(--tg-g)) + var(--tg-g));
+    --tg-x12:calc(var(--tg-x11) + var(--tg-w11,-1*var(--tg-g)) + var(--tg-g));
+    --tg-x13:calc(var(--tg-x12) + var(--tg-w12,-1*var(--tg-g)) + var(--tg-g));
+    --tg-x14:calc(var(--tg-x13) + var(--tg-w13,-1*var(--tg-g)) + var(--tg-g));
+    --tg-x15:calc(var(--tg-x14) + var(--tg-w14,-1*var(--tg-g)) + var(--tg-g));
+    --tg-x16:calc(var(--tg-x15) + var(--tg-w15,-1*var(--tg-g)) + var(--tg-g));
+    --tg-x17:calc(var(--tg-x16) + var(--tg-w16,-1*var(--tg-g)) + var(--tg-g));
+    --tg-x18:calc(var(--tg-x17) + var(--tg-w17,-1*var(--tg-g)) + var(--tg-g));
+    --tg-x19:calc(var(--tg-x18) + var(--tg-w18,-1*var(--tg-g)) + var(--tg-g));
+    --tg-x20:calc(var(--tg-x19) + var(--tg-w19,-1*var(--tg-g)) + var(--tg-g));
+    --tg-x21:calc(var(--tg-x20) + var(--tg-w20,-1*var(--tg-g)) + var(--tg-g));
+    --tg-x22:calc(var(--tg-x21) + var(--tg-w21,-1*var(--tg-g)) + var(--tg-g));
+    --tg-x23:calc(var(--tg-x22) + var(--tg-w22,-1*var(--tg-g)) + var(--tg-g));
+    --tg-x24:calc(var(--tg-x23) + var(--tg-w23,-1*var(--tg-g)) + var(--tg-g));
+    --tg-x25:calc(var(--tg-x24) + var(--tg-w24,-1*var(--tg-g)) + var(--tg-g));
+    --tg-x26:calc(var(--tg-x25) + var(--tg-w25,-1*var(--tg-g)) + var(--tg-g));
+    --tg-x27:calc(var(--tg-x26) + var(--tg-w26,-1*var(--tg-g)) + var(--tg-g));
+    --tg-x28:calc(var(--tg-x27) + var(--tg-w27,-1*var(--tg-g)) + var(--tg-g));
+    --tg-x29:calc(var(--tg-x28) + var(--tg-w28,-1*var(--tg-g)) + var(--tg-g));
+    --tg-x30:calc(var(--tg-x29) + var(--tg-w29,-1*var(--tg-g)) + var(--tg-g));
+    --tg-x31:calc(var(--tg-x30) + var(--tg-w30,-1*var(--tg-g)) + var(--tg-g));
+    --tg-x32:calc(var(--tg-x31) + var(--tg-w31,-1*var(--tg-g)) + var(--tg-g));
+    --tg-x33:calc(var(--tg-x32) + var(--tg-w32,-1*var(--tg-g)) + var(--tg-g));
+    --tg-x34:calc(var(--tg-x33) + var(--tg-w33,-1*var(--tg-g)) + var(--tg-g));
+    --tg-x35:calc(var(--tg-x34) + var(--tg-w34,-1*var(--tg-g)) + var(--tg-g));
+    --tg-x36:calc(var(--tg-x35) + var(--tg-w35,-1*var(--tg-g)) + var(--tg-g));
+    --tg-x37:calc(var(--tg-x36) + var(--tg-w36,-1*var(--tg-g)) + var(--tg-g));
+    --tg-x38:calc(var(--tg-x37) + var(--tg-w37,-1*var(--tg-g)) + var(--tg-g));
+    --tg-x39:calc(var(--tg-x38) + var(--tg-w38,-1*var(--tg-g)) + var(--tg-g));
+    --tg-x40:calc(var(--tg-x39) + var(--tg-w39,-1*var(--tg-g)) + var(--tg-g));
+    --tg-x41:calc(var(--tg-x40) + var(--tg-w40,-1*var(--tg-g)) + var(--tg-g));
+    --tg-x42:calc(var(--tg-x41) + var(--tg-w41,-1*var(--tg-g)) + var(--tg-g));
+    --tg-x43:calc(var(--tg-x42) + var(--tg-w42,-1*var(--tg-g)) + var(--tg-g));
+    --tg-x44:calc(var(--tg-x43) + var(--tg-w43,-1*var(--tg-g)) + var(--tg-g));
+    --tg-x45:calc(var(--tg-x44) + var(--tg-w44,-1*var(--tg-g)) + var(--tg-g));
+    --tg-x46:calc(var(--tg-x45) + var(--tg-w45,-1*var(--tg-g)) + var(--tg-g));
+    --tg-x47:calc(var(--tg-x46) + var(--tg-w46,-1*var(--tg-g)) + var(--tg-g));
+    --tg-x48:calc(var(--tg-x47) + var(--tg-w47,-1*var(--tg-g)) + var(--tg-g));
+    --tg-x49:calc(var(--tg-x48) + var(--tg-w48,-1*var(--tg-g)) + var(--tg-g));
+    --tg-x50:calc(var(--tg-x49) + var(--tg-w49,-1*var(--tg-g)) + var(--tg-g));
+    --tg-x51:calc(var(--tg-x50) + var(--tg-w50,-1*var(--tg-g)) + var(--tg-g));
+    --tg-x52:calc(var(--tg-x51) + var(--tg-w51,-1*var(--tg-g)) + var(--tg-g));
+    --tg-x53:calc(var(--tg-x52) + var(--tg-w52,-1*var(--tg-g)) + var(--tg-g));
+    --tg-x54:calc(var(--tg-x53) + var(--tg-w53,-1*var(--tg-g)) + var(--tg-g));
+    --tg-x55:calc(var(--tg-x54) + var(--tg-w54,-1*var(--tg-g)) + var(--tg-g));
+    --tg-x56:calc(var(--tg-x55) + var(--tg-w55,-1*var(--tg-g)) + var(--tg-g));
+    --tg-x57:calc(var(--tg-x56) + var(--tg-w56,-1*var(--tg-g)) + var(--tg-g));
+    --tg-x58:calc(var(--tg-x57) + var(--tg-w57,-1*var(--tg-g)) + var(--tg-g));
+    --tg-x59:calc(var(--tg-x58) + var(--tg-w58,-1*var(--tg-g)) + var(--tg-g));
+    --tg-x60:calc(var(--tg-x59) + var(--tg-w59,-1*var(--tg-g)) + var(--tg-g));
+    --tg-x61:calc(var(--tg-x60) + var(--tg-w60,-1*var(--tg-g)) + var(--tg-g));
+    --tg-x62:calc(var(--tg-x61) + var(--tg-w61,-1*var(--tg-g)) + var(--tg-g));
+    --tg-x63:calc(var(--tg-x62) + var(--tg-w62,-1*var(--tg-g)) + var(--tg-g));
+    --tg-x64:calc(var(--tg-x63) + var(--tg-w63,-1*var(--tg-g)) + var(--tg-g));
+    --tg-width: var(--tg-x64);
+}
 
 /* ── the component: sized by its class or style; it fills its height ── */
 
@@ -14,6 +158,8 @@
 }
 
 .live-grid > .tg-grid {
+    position: relative; /* (the frozen columns' divider stands in it) */
+    isolation: isolate; /* (its layers — headings, divider, the new-above pill — stacked among themselves) */
     flex: 1;
     min-height: 0;
     display: flex;
@@ -30,15 +176,30 @@
     min-height: 0;
 }
 
+/* Over the rows, and opaque: at a zoom that puts its edge between device pixels, nothing of a row cut at the top shows
+   through the seam. */
 .tg-head {
     flex: none;
+    position: relative;
+    z-index: 3;
     overflow: hidden; /* (scrolled sideways with the rows, by the module: its frozen headings sticky in it) */
+    background: var(--tg-background, Canvas);
     border-bottom: 1px solid var(--tg-line, color-mix(in srgb, CanvasText 18%, transparent));
 }
 
 .tg-head-row {
     display: flex;
     width: var(--tg-width, 100%);
+}
+
+/* The headings all at once: on a slow link the page's markup arrives over seconds, and a row of headings drawn as each
+   heading's arrives fills in one by one; none drawn till the mark after the last has arrived. */
+.tg-head-row:not(:has(> .tg-head-end)) {
+    visibility: hidden;
+}
+
+.tg-head-end {
+    flex: none;
 }
 
 .tg-head-row::after { /* (room for the rows' scrollbar: the headings scroll as far as the rows do) */
@@ -53,15 +214,28 @@
     align-items: center;
     gap: 4px;
     box-sizing: border-box;
-    padding: 0 8px;
+    padding: 0 calc(var(--tg-cell-gutter, 16px) / 2);
     height: var(--tg-row-height, 30px);
     overflow: hidden;
     white-space: nowrap;
     font-weight: 600;
 }
 
-.tg-heading.tg-right {
+/* A heading keeps to its column's side (LiveColumn.Align: Auto, a number's end, the rest's start). */
+.tg-heading.tg-center {
+    justify-content: center;
+}
+
+.tg-heading.tg-end {
     justify-content: flex-end;
+}
+
+.tg-heading.tg-left {
+    justify-content: left;
+}
+
+.tg-heading.tg-right {
+    justify-content: right;
 }
 
 .tg-heading.tg-frozen {
@@ -99,6 +273,10 @@
     opacity: .65;
 }
 
+.tg-arrow.tg-natural { /* (the source's own order: shown, muted, as no one chose it) */
+    opacity: .4;
+}
+
 .tg-foot {
     flex: none;
     display: flex;
@@ -113,6 +291,10 @@
 .tg-status {
     flex: 1;
     min-width: 0;
+}
+
+.tg-refusal { /* (the status line's: why the last read was refused) */
+    color: var(--tg-refusal, #c62828);
 }
 
 .tg-chooser {
@@ -165,7 +347,45 @@
     overflow: auto;
     position: relative;
     outline: none;
-    overscroll-behavior: contain;
+    /* (a scroll's end never carries on to the page; sideways, no bounce at it either: the browser's bounce moves the whole
+       of what scrolls, frozen columns too, from the headings and the divider over them, which stay) */
+    overscroll-behavior-x: none;
+    overscroll-behavior-y: contain;
+}
+
+/* Beside frozen columns, the rows' scrollbars drawn by the grid where the browser lets it (WebKit and Blink: Safari,
+   Chrome, Edge; Firefox keeps its own): the sideways one's track from the frozen columns' edge, an empty start their
+   width (--tg-frozen-x) before it, so it spans the columns that scroll. Thin, and shown as the platform's are: overlaid
+   (the Mac's), while the rows scroll that way and a second after (the module's data-scrolling-x, -y), or held; else
+   always (the module's data-overlay-scrollbars). --tg-scrollbar-thumb colours them. */
+.tg-grid[data-frozen] .tg-scroller::-webkit-scrollbar {
+    width: 11px;
+    height: 11px;
+    background: transparent;
+}
+
+.tg-grid[data-frozen] .tg-scroller::-webkit-scrollbar-corner {
+    background: transparent;
+}
+
+.tg-grid[data-frozen] .tg-scroller::-webkit-scrollbar-button:horizontal:start:decrement {
+    display: block;
+    width: var(--tg-frozen-x, 0px);
+}
+
+.tg-grid[data-frozen] .tg-scroller::-webkit-scrollbar-thumb {
+    border: 2px solid transparent;
+    border-radius: 6px;
+    background-clip: padding-box;
+    background-color: transparent;
+}
+
+.tg-grid[data-frozen]:not([data-overlay-scrollbars]) .tg-scroller::-webkit-scrollbar-thumb,
+.tg-grid[data-frozen][data-scrolling-x] .tg-scroller::-webkit-scrollbar-thumb:horizontal,
+.tg-grid[data-frozen][data-scrolling-y] .tg-scroller::-webkit-scrollbar-thumb:vertical,
+.tg-grid[data-frozen] .tg-scroller::-webkit-scrollbar-thumb:hover,
+.tg-grid[data-frozen] .tg-scroller::-webkit-scrollbar-thumb:active {
+    background-color: var(--tg-scrollbar-thumb, color-mix(in srgb, CanvasText 38%, transparent));
 }
 
 .tapline-grid .tg-scroller:focus-visible {
@@ -184,6 +404,14 @@
     width: var(--tg-width, 100%);
 }
 
+/* Stale rows (the host's data-stale): a refused read's, or a replaced view's while the new one's are late (the page
+   waits twice its round trip, at most 500 ms, before saying so). Greyed in a moment; back at once. */
+[data-stale] .tapline-grid .tg-rows, .tapline-grid[data-stale] .tg-rows {
+    opacity: var(--tg-stale-opacity, .45);
+    filter: grayscale(1);
+    transition: opacity var(--tg-stale-fade, .15s) ease, filter var(--tg-stale-fade, .15s) ease;
+}
+
 .tapline-grid .tg-row {
     position: absolute;
     left: 0;
@@ -195,17 +423,53 @@
     will-change: transform;
 }
 
+/* A row the view has no place for (the pool's spare, a short view's end): gone, not drawn where it last was — the flex
+   above would otherwise outrank the hidden attribute's own display. */
+.tapline-grid .tg-row[hidden] {
+    display: none;
+}
+
 .tapline-grid .tg-cell {
     flex: none;
     overflow: hidden;
     text-overflow: ellipsis;
-    padding: 0 8px;
+    padding: 0 calc(var(--tg-cell-gutter, 16px) / 2);
     box-sizing: border-box;
+}
+
+/* A cell's side (LiveColumn.Align); a number's figures all as wide, so its column's digits line up. */
+.tapline-grid .tg-start {
+    text-align: start;
+}
+
+.tapline-grid .tg-center {
+    text-align: center;
+}
+
+.tapline-grid .tg-end {
+    text-align: end;
+}
+
+.tapline-grid .tg-left {
+    text-align: left;
 }
 
 .tapline-grid .tg-right {
     text-align: right;
+}
+
+.tapline-grid .tg-num {
     font-variant-numeric: tabular-nums;
+}
+
+/* Text wider than its column (LiveColumn.Overflow): cut at its end (an ellipsis, by default, or clipped), or at its
+   start — the cell running right to left, its text isolated (left to right), so its end stays in view. */
+.tapline-grid .tg-clip, .tapline-grid .tg-clip-start {
+    text-overflow: clip;
+}
+
+.tapline-grid .tg-ellipsis-start, .tapline-grid .tg-clip-start {
+    direction: rtl;
 }
 
 .tapline-grid .tg-frozen {
@@ -214,9 +478,104 @@
     background: var(--tg-background, Canvas);
 }
 
+/* The frozen columns' divider: a line a little heavier than the grid's (--tg-frozen-line, --tg-frozen-line-width) down
+   the headings and the rows at the frozen columns' right edge — LiveGrid's own, there from the first paint: over the
+   rows, their flashes and placeholders, and the skeleton before them. */
+.tg-frozen-divider {
+    position: absolute;
+    top: 0;
+    bottom: var(--tg-scrollbar-x, 0px); /* (above a scrollbar sideways, the module's — but the grid's own, below) */
+    width: 0;
+    z-index: 4;
+    pointer-events: none;
+    /* (its colour over the grid's background: a colour of some transparency the same over a flash as beside one) */
+    box-shadow: 0 0 0 calc(var(--tg-frozen-line-width, 2px) / 2) var(--tg-frozen-line, var(--tg-line, color-mix(in srgb, CanvasText 22%, transparent))),
+        0 0 0 calc(var(--tg-frozen-line-width, 2px) / 2) var(--tg-background, Canvas);
+}
+
+/* Beside frozen columns, the others: in a span of their own (the module's), which — scrolled sideways — fades out
+   beside the divider, --tg-frozen-fade wide (12px; 0px, none), easing in (its middle a fifth as opaque as its end: by
+   the colour hint at 70 %, opacity ~ t^1.94) — the values more translucent the nearer the divider; the row's background
+   and flash whole behind them. As one, the headings (beside the frozen ones, the module's --tg-frozen-x). */
+.tapline-grid .tg-unfrozen {
+    flex: none;
+    display: flex;
+}
+
+.tg-grid[data-scrolled-x] .tapline-grid .tg-unfrozen {
+    --tg-fade-at: var(--tg-scroll-x, 0px);
+    -webkit-mask-image: linear-gradient(to right, transparent var(--tg-fade-at),
+        calc(var(--tg-fade-at) + .7 * var(--tg-frozen-fade, 12px)), #000 calc(var(--tg-fade-at) + var(--tg-frozen-fade, 12px)));
+    mask-image: linear-gradient(to right, transparent var(--tg-fade-at),
+        calc(var(--tg-fade-at) + .7 * var(--tg-frozen-fade, 12px)), #000 calc(var(--tg-fade-at) + var(--tg-frozen-fade, 12px)));
+}
+
+.tg-grid[data-frozen][data-scrolled-x] .tg-head-row {
+    --tg-fade-at: calc(var(--tg-scroll-x, 0px) + var(--tg-frozen-x, 0px));
+    -webkit-mask-image: linear-gradient(to right, #000 var(--tg-fade-at), transparent var(--tg-fade-at),
+        calc(var(--tg-fade-at) + .7 * var(--tg-frozen-fade, 12px)), #000 calc(var(--tg-fade-at) + var(--tg-frozen-fade, 12px)));
+    mask-image: linear-gradient(to right, #000 var(--tg-fade-at), transparent var(--tg-fade-at),
+        calc(var(--tg-fade-at) + .7 * var(--tg-frozen-fade, 12px)), #000 calc(var(--tg-fade-at) + var(--tg-frozen-fade, 12px)));
+}
+
 .tapline-grid .tg-link {
     color: LinkText;
     text-decoration: underline;
+}
+
+/* A cell's tooltip, the grid's own (in the top layer, where the browser has popovers): what the cell under the pointer
+   holds now, as rows move and change under it — none over a placeholder. */
+.tapline-grid .tg-tip {
+    position: fixed;
+    inset: auto;
+    margin: 0;
+    max-width: min(40em, 90vw);
+    overflow: hidden;
+    padding: 3px 7px;
+    border: 1px solid var(--tg-line, color-mix(in srgb, CanvasText 18%, transparent));
+    border-radius: 4px;
+    background: var(--tg-background, Canvas);
+    color: CanvasText;
+    font-size: .92em; /* (the cells' font: what the cell says, whole) */
+    line-height: 1.4;
+    white-space: pre-wrap;
+    pointer-events: none;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, .18);
+}
+
+.tapline-grid .tg-tip[hidden] {
+    display: none;
+}
+
+/* Rows arrived above a held grid: how many, and a click back to the live top (LiveGrid.NewAbove) — over the rows, at
+   their top. */
+.tapline-grid .tg-new-above {
+    position: absolute;
+    top: 8px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 5; /* (over the frozen columns' divider) */
+    padding: 2px 10px;
+    border: 1px solid var(--tg-line, color-mix(in srgb, CanvasText 18%, transparent));
+    border-radius: 999px;
+    background: var(--tg-background, Canvas);
+    color: LinkText;
+    font: inherit;
+    cursor: pointer;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, .18);
+}
+
+.tapline-grid .tg-new-above[hidden] {
+    display: none;
+}
+
+/* A link opens its row once the row is there: not a placeholder's. */
+.tapline-grid .tg-row:not(.tg-placeholder) .tg-link {
+    cursor: pointer;
+}
+
+/* Its rows clicked, and heard (LiveGrid's OnRowClick, as QuickGrid's row-clickable): once there, not a placeholder's. */
+.tapline-grid.tg-clickable .tg-row:not(.tg-placeholder) {
     cursor: pointer;
 }
 
@@ -247,33 +606,134 @@
     box-shadow: inset 0 0 0 2px var(--tg-focus, Highlight);
 }
 
-/* A row not answered yet: its place, shimmering — never a blank. */
-.tapline-grid .tg-placeholder .tg-cell::after {
+/* A row not answered yet: its place, a bar across it shimmering — never a blank. As wide as the columns, or the view if
+   that's narrower, and kept in view scrolled sideways (the module's --tg-view-width, --tg-scroll-x); in step with every
+   other (it starts each where the page's clock has the shimmer: --tg-shimmer-delay); as the skeleton below draws them.
+   The sheen leans down the view, --tg-shimmer-lean (30deg; 0deg, upright): each row's a little further on than the one
+   above, by its place in the view (the module's --tg-row-slot), so the rows' sheens make one slanting sweep. */
+.tapline-grid .tg-row.tg-placeholder::before {
+    --tg-shimmer-shift: calc(var(--tg-row-slot, 0) * var(--tg-row-height, 30px) * tan(var(--tg-shimmer-lean, 30deg)));
     content: '';
-    display: block;
+    position: absolute;
+    left: calc(var(--tg-scroll-x, 0px) + 8px);
+    width: calc(min(var(--tg-width, 100%), var(--tg-view-width, 100%)) - 16px);
+    top: calc((var(--tg-row-height, 30px) - .6em) / 2);
     height: .6em;
-    margin-top: calc((var(--tg-row-height, 30px) - .6em) / 2);
-    border-radius: 3px;
-    background: linear-gradient(90deg, transparent, var(--tg-placeholder, rgba(128, 128, 128, .18)), transparent);
-    background-size: 200% 100%;
+    z-index: 2; /* (over the frozen cells' own background) */
+    pointer-events: none;
+    background: linear-gradient(90deg, transparent 25%, var(--tg-placeholder-shine, rgba(128, 128, 128, .30)) 50%, transparent 75%) 0 0 / 200% 100%,
+        var(--tg-placeholder, rgba(128, 128, 128, .10));
+    animation: tg-shimmer 1.2s linear var(--tg-shimmer-delay, 0s) infinite;
+}
+
+/* The grid's own scrollbars beside frozen columns (below): the sideways one's thumb right of the divider, which goes on
+   down to the grid's foot, past the scrollbar's room. */
+@supports selector(::-webkit-scrollbar) {
+    .tg-grid[data-frozen] > .tg-frozen-divider {
+        bottom: 0;
+    }
+}
+
+/* Beside frozen columns, a placeholder's bar split where they end, with a gap either side of the divider as at the bar's
+   ends (the body's --tg-frozen-x, LiveGrid's): the frozen part one bar, the rest another — the skeleton's below too. */
+.tapline-grid[data-frozen] .tg-row.tg-placeholder::before {
+    --tg-split: linear-gradient(to right, #000 calc(var(--tg-frozen-x) - 16px), transparent calc(var(--tg-frozen-x) - 16px),
+        transparent var(--tg-frozen-x), #000 var(--tg-frozen-x));
+    -webkit-mask-image: var(--tg-split);
+    mask-image: var(--tg-split);
+}
+
+/* A placeholder's frozen cells: nothing of their own to keep clear of what scrolls beneath — the bar shows through them,
+   whatever stacks over it. */
+.tapline-grid .tg-row.tg-placeholder .tg-frozen {
+    background: transparent;
+}
+
+/* Before the module draws the body — its script still on its way: seconds, on a slow link — the rows' places, a bar
+   across each as a placeholder's (LiveGrid gives the row height, --tg-row-height, and the columns' room, from which the
+   rows' width, --tg-width). Painted by one element through a mask of the rows: nothing is in the body yet. Its sheen
+   leans as the placeholders' (--tg-shimmer-lean), its gradient turned by as much. */
+.live-grid .tg-body:not(.tapline-grid) {
+    position: relative;
+    overflow: hidden;
+}
+
+.live-grid .tg-body:not(.tapline-grid)::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 8px;
+    width: calc(min(100%, var(--tg-width, 100%)) - 16px);
+    background: linear-gradient(calc(90deg - var(--tg-shimmer-lean, 30deg)), transparent 25%,
+        var(--tg-placeholder-shine, rgba(128, 128, 128, .30)) 50%, transparent 75%) 0 0 / 200% 100%,
+        var(--tg-placeholder, rgba(128, 128, 128, .10));
     animation: tg-shimmer 1.2s linear infinite;
+    --tg-skeleton-rows: repeating-linear-gradient(transparent 0 calc((var(--tg-row-height, 30px) - .6em) / 2),
+        #000 0 calc((var(--tg-row-height, 30px) + .6em) / 2), transparent 0 var(--tg-row-height, 30px));
+    -webkit-mask-image: var(--tg-skeleton-rows);
+    mask-image: var(--tg-skeleton-rows);
+}
+
+.live-grid .tg-body[data-frozen]:not(.tapline-grid)::before {
+    --tg-split: linear-gradient(to right, #000 calc(var(--tg-frozen-x) - 16px), transparent calc(var(--tg-frozen-x) - 16px),
+        transparent var(--tg-frozen-x), #000 var(--tg-frozen-x));
+    -webkit-mask-image: var(--tg-skeleton-rows), var(--tg-split);
+    mask-image: var(--tg-skeleton-rows), var(--tg-split);
+    -webkit-mask-composite: source-in;
+    mask-composite: intersect;
 }
 
 /* Flashes: a cell changed in place, a row arrived at the live top — easing out over 5 s (--tg-flash-for; each alone,
-   --tg-changed-for, --tg-arrived-for). The module starts each where it has got to since the change (a negative
-   delay), so pages side by side show them alike. Two animations alike, alternated, so a flash under way starts again
-   without a reflow. */
-.tapline-grid .tg-changed-a { animation: tg-changed-a var(--tg-changed-for, var(--tg-flash-for, 5s)) ease-out; }
-.tapline-grid .tg-changed-b { animation: tg-changed-b var(--tg-changed-for, var(--tg-flash-for, 5s)) ease-out; }
-.tapline-grid .tg-arrived-a { animation: tg-arrived-a var(--tg-arrived-for, var(--tg-flash-for, 5s)) ease-out; }
-.tapline-grid .tg-arrived-b { animation: tg-arrived-b var(--tg-arrived-for, var(--tg-flash-for, 5s)) ease-out; }
-
-@keyframes tg-shimmer { from { background-position: 100% 0; } to { background-position: -100% 0; } }
-@keyframes tg-changed-a { from { background-color: var(--tg-changed, rgba(255, 196, 0, .45)); } to { background-color: transparent; } }
-@keyframes tg-changed-b { from { background-color: var(--tg-changed, rgba(255, 196, 0, .45)); } to { background-color: transparent; } }
-@keyframes tg-arrived-a { from { background-color: var(--tg-arrived, rgba(80, 160, 255, .30)); } to { background-color: transparent; } }
-@keyframes tg-arrived-b { from { background-color: var(--tg-arrived, rgba(80, 160, 255, .30)); } to { background-color: transparent; } }
-
-@media (prefers-reduced-motion: reduce) {
-    .tapline-grid .tg-placeholder .tg-cell::after { animation: none; }
+   --tg-changed-for, --tg-arrived-for). Each is a shade, not a background: a changed cell's over the cell, an arrived
+   row's over the row — and its frozen cells, over their own background, so what scrolls beneath never shows through,
+   and a value fading under them (scrolled sideways) fades over its row's shade. The module starts each where it has got to since its change
+   (a negative delay: --tg-changed-delay on a cell, --tg-arrived-delay on a row), so pages side by side show them
+   alike. Two animations alike, alternated, so a flash under way starts again without a reflow. */
+.tapline-grid .tg-changed-a {
+    animation: tg-changed-a var(--tg-changed-for, var(--tg-flash-for, 5s)) ease-out var(--tg-changed-delay, 0s);
 }
+.tapline-grid .tg-changed-b {
+    animation: tg-changed-b var(--tg-changed-for, var(--tg-flash-for, 5s)) ease-out var(--tg-changed-delay, 0s);
+}
+.tapline-grid .tg-arrived-a, .tapline-grid .tg-arrived-a > .tg-frozen {
+    animation: tg-arrived-a var(--tg-arrived-for, var(--tg-flash-for, 5s)) ease-out var(--tg-arrived-delay, 0s);
+}
+.tapline-grid .tg-arrived-b, .tapline-grid .tg-arrived-b > .tg-frozen {
+    animation: tg-arrived-b var(--tg-arrived-for, var(--tg-flash-for, 5s)) ease-out var(--tg-arrived-delay, 0s);
+}
+
+@keyframes tg-shimmer { from { background-position: calc(100% + var(--tg-shimmer-shift, 0px)) 0; } to { background-position: calc(-100% + var(--tg-shimmer-shift, 0px)) 0; } }
+@keyframes tg-changed-a { from { box-shadow: inset 0 0 0 999px var(--tg-changed, rgba(255, 196, 0, .45)); } to { box-shadow: inset 0 0 0 999px transparent; } }
+@keyframes tg-changed-b { from { box-shadow: inset 0 0 0 999px var(--tg-changed, rgba(255, 196, 0, .45)); } to { box-shadow: inset 0 0 0 999px transparent; } }
+@keyframes tg-arrived-a { from { box-shadow: inset 0 0 0 999px var(--tg-arrived, rgba(80, 160, 255, .30)); } to { box-shadow: inset 0 0 0 999px transparent; } }
+@keyframes tg-arrived-b { from { box-shadow: inset 0 0 0 999px var(--tg-arrived, rgba(80, 160, 255, .30)); } to { box-shadow: inset 0 0 0 999px transparent; } }
+
+/* Motion reduced: no sweep across the screen — each bar fades slowly in and out where it is, so it still reads as on its
+   way; the rows' fades a slow wave down the view, each a little behind the one above (by its place, the module's
+   --tg-row-slot), a crest every --tg-pulse-wave rows (24: about a view; the period over as many, a row's lag). The
+   skeleton, one element, waves alike: a band of its background, a crest as tall, drifting down as fast. */
+@media (prefers-reduced-motion: reduce) {
+    .tapline-grid .tg-row.tg-placeholder::before, .live-grid .tg-body:not(.tapline-grid)::before {
+        background: var(--tg-placeholder-still, rgba(128, 128, 128, .16));
+        animation: tg-pulse 4.8s ease-in-out var(--tg-shimmer-delay, 0s) infinite;
+    }
+
+    .tapline-grid .tg-row.tg-placeholder::before { /* (each behind the one above: a delay later, within the period) */
+        animation-delay: calc(var(--tg-shimmer-delay, 0s) + rem(var(--tg-row-slot, 0) * 4.8s / var(--tg-pulse-wave, 24), 4.8s) - 4.8s);
+    }
+
+    .live-grid .tg-body:not(.tapline-grid)::before { /* (the pulse's curve laid down the band: full, a third at its middle) */
+        --tg-still: var(--tg-placeholder-still, rgba(128, 128, 128, .16));
+        --tg-pulse-band: calc(var(--tg-pulse-wave, 24) * var(--tg-row-height, 30px));
+        background: linear-gradient(var(--tg-still), color-mix(in srgb, var(--tg-still) 90%, transparent) 12.5%,
+            color-mix(in srgb, var(--tg-still) 65%, transparent) 25%, color-mix(in srgb, var(--tg-still) 40%, transparent) 37.5%,
+            color-mix(in srgb, var(--tg-still) 30%, transparent) 50%, color-mix(in srgb, var(--tg-still) 40%, transparent) 62.5%,
+            color-mix(in srgb, var(--tg-still) 65%, transparent) 75%, color-mix(in srgb, var(--tg-still) 90%, transparent) 87.5%,
+            var(--tg-still)) 0 0 / 100% var(--tg-pulse-band);
+        animation: tg-wave 4.8s linear infinite;
+    }
+}
+
+@keyframes tg-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .3; } }
+@keyframes tg-wave { from { background-position: 0 0; } to { background-position: 0 var(--tg-pulse-band, 720px); } }

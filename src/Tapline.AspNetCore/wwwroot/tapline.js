@@ -171,9 +171,11 @@ const FLAG_STALE = 0x04;
 const CONTROL_SYNC = 7;                                     // (ControlKind: a RouterChange's controls, a bit each)
 const FLAG_RESET = 0x01, FLAG_DEGRADED = 0x02, OP_DELETE = 1, OOB_REFERENCE = 1, OOB_CONTENT_ADDRESSED = 0x80,
     OOB_MODE = 0x7f;
+const TABLE_HEADER = 38;
 const STALE_FUNCTION = 0, STALE_STATIC = 1, STALE_REPLAY = 2, ENTRY_PRESENT = 1;
 const FETCH_ATTEMPTS = 3;
 const RATE_TAU_MS = 2000;                                    // transfer rate smoothing: exponential, this time constant
+const SLOW_GAP_MS = 1500;                                    // frames this far apart (heartbeats at least every second): a slow path
 
 /** Same values as C# Tapline.FaultCode. */
 export const FaultCode = Object.freeze({
@@ -230,6 +232,12 @@ export function rowHash(keyBytes, keyOffset, keySize, rowBytes, rowOffset, rowSi
 }
 
 const i64 = (dv, o) => dv.getInt32(o + 4, true) * TWO32 + dv.getUint32(o, true);
+
+/** The Table record at offset o's length: its header and entries, each its op and key, an upsert its row too. */
+function tableLength(dv, o) {
+    const count = dv.getUint32(o + 26, true), deletes = dv.getUint32(o + 34, true);
+    return TABLE_HEADER + count * (1 + dv.getUint16(o + 30, true)) + (count - deletes) * dv.getUint16(o + 32, true);
+}
 
 function latin1(b, o, n) {
     let s = '';
@@ -332,18 +340,20 @@ export class Table {
         }
 
         let sum = this.checksum;
-        for (let i = 0, p = o + 34; i < count; i++, p += 1 + K + R) {
-            const k = p + 1, r = k + K;
+        for (let i = 0, p = o + TABLE_HEADER; i < count; i++) {
+            const k = p + 1, r = k + K, deleted = bytes[p] === OP_DELETE;   // (a delete: its key alone)
             const id = latin1(bytes, k, K);
             const entry = this.rows.get(id);
             if (changes && !changes.has(id)) changes.set(id, entry ? entry.row.slice() : null);   // (its row is changed in place)
             if (entry) sum = (sum - rowHash(entry.key, 0, K, entry.row, 0, R)) >>> 0;
-            if (bytes[p] === OP_DELETE) {
+            if (deleted) {
                 if (entry) this.rows.delete(id);
+                p = r;
             } else {
                 if (entry) entry.row.set(bytes.subarray(r, r + R));
                 else this.rows.set(id, {key: bytes.slice(k, k + K), row: bytes.slice(r, r + R)});
                 sum = (sum + rowHash(bytes, k, K, bytes, r, R)) >>> 0;
+                p = r + R;
             }
         }
         this.checksum = sum;
@@ -459,7 +469,9 @@ export class TaplineClient {
         // The connection's own timeout (a SignalR HubConnection's serverTimeoutInMilliseconds: on Blazor Server, the
         // circuit's), fed by the router's frames (a heartbeat at least every second): a dead connection noticed in seconds,
         // the transport then reconnecting. It follows the path: four times the longest recent gap between frames
-        // (halving every 30 s), at least the floor — never below what a slow path needs — at most SignalR's default.
+        // (halving every 30 s), at least the floor, at most SignalR's default — and that default itself while the gaps
+        // run past 1.5 s: on so slow a link one message can take longer than the floor to arrive (SignalR sends what
+        // its connection has gathered as one: frames, renders, pings), and a link mid-message isn't a dead one.
         this.serverTimeoutFloorMs = 10000;
         this.serverTimeoutCapMs = 30000;
         this.keepAliveMs = 3000;      // the client's SignalR ping, when it has sent nothing (its acks keep it quiet)
@@ -862,7 +874,8 @@ export class TaplineClient {
     #adaptTimeout(now) {
         const c = this.connection;
         if (!c || !('serverTimeoutInMilliseconds' in c) || now - this.firstFrameAt < 5000) return;
-        const target = Math.round(Math.min(this.serverTimeoutCapMs, Math.max(this.serverTimeoutFloorMs, 4 * this.maxGap)));
+        const floor = this.maxGap > SLOW_GAP_MS ? this.serverTimeoutCapMs : this.serverTimeoutFloorMs;
+        const target = Math.round(Math.min(this.serverTimeoutCapMs, Math.max(floor, 4 * this.maxGap)));
         if (Math.abs(target - c.serverTimeoutInMilliseconds) > c.serverTimeoutInMilliseconds * 0.1) c.serverTimeoutInMilliseconds = target;
     }
 
@@ -917,13 +930,12 @@ export class TaplineClient {
                     break;
                 }
                 case TABLE: {
-                    const id = dv.getUint32(o + 1, true), count = dv.getUint32(o + 26, true);
-                    const stride = 1 + dv.getUint16(o + 30, true) + dv.getUint16(o + 32, true);
+                    const id = dv.getUint32(o + 1, true);
                     if (this.watchers.has(id)) {
                         this.#bump(id);
                         this.#applyTable(id, frame, dv, o);
                     }
-                    o += 34 + stride * count;
+                    o += tableLength(dv, o);
                     break;
                 }
                 case GROUP: {
@@ -1088,8 +1100,6 @@ export class TaplineClient {
         for (let i = 0; i < count; i++) {
             const type = bytes[p], member = dv.getUint32(p + 1, true);
             if (type === TABLE) {
-                const n = dv.getUint32(p + 26, true),
-                    stride = 1 + dv.getUint16(p + 30, true) + dv.getUint16(p + 32, true);
                 let t = g.members[member];
                 if (!(t instanceof Table)) {
                     g.members[member] = t = new Table();
@@ -1103,7 +1113,7 @@ export class TaplineClient {
                     ok = false;
                     badSnapshot ||= t.lastWasReset && !t.degraded;
                 }
-                p += 34 + stride * n;
+                p += tableLength(dv, p);
             } else if (type === VALUE) {
                 const len = dv.getUint16(p + 5, true);
                 g.members[member] = bytes.slice(p + 7, p + 7 + len);

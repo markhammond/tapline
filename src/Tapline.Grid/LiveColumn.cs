@@ -39,17 +39,41 @@ public sealed class LiveColumn : IComponent, IDisposable
     [Parameter]
     public int? Scale { get; set; }
 
-    /// <summary>Fixed, Float, Percent: places shown (rounded half away from nought; nought a dash).</summary>
+    /// <summary>
+    ///     How its values are written (QuickGrid's <c>PropertyColumn.Format</c>): a .NET format string, applied as
+    ///     <see cref="IFormattable.ToString(string?, IFormatProvider?)" /> would apply it on the server, in the culture current
+    ///     as the grid renders — the page writes the cells to the same rules (tapline-grid.js). A number's (an integer's, a
+    ///     Fixed's as the decimal it stands for, a float's or double's, a Percent's as the fraction Of is of Over), a time's
+    ///     (as UTC, in the Gregorian calendar) or a Guid's. None: as <c>ToString()</c> writes it — but a Percent's
+    ///     <c>"P"</c>. A format the value's type refuses is refused, with the reason.
+    /// </summary>
     [Parameter]
-    public int? Decimals { get; set; }
+    public string? Format { get; set; }
 
-    /// <summary>Fixed: significant figures shown, instead of places.</summary>
+    /// <summary>
+    ///     A number rounded to so many significant figures (half away from nought) before its <see cref="Format" />
+    ///     writes it — whose places should cover them. Its tooltip, and a copy, keep the value whole.
+    /// </summary>
     [Parameter]
     public int? Figures { get; set; }
 
-    /// <summary>Its width in px; none: measured from the first rows answered, then held.</summary>
+    /// <summary>
+    ///     The most digits a number's cell shows: one that would show more, rounded to its <see cref="Figures" />, is
+    ///     written in scientific notation instead, to as many figures — 1.23457e8, 1.23456e-4 (the culture's point and
+    ///     signs).
+    /// </summary>
     [Parameter]
-    public int? Width { get; set; }
+    public int? MostDigits { get; set; }
+
+    /// <summary>
+    ///     The room its cells have for their text, as a CSS length (<c>"9em"</c>, <c>"14ch"</c>, <c>"120px"</c>, a
+    ///     <c>calc()</c> of them), in the cells' font (the grid's own, <c>.tg-grid</c>'s) — the cell's gutter
+    ///     (<c>--tg-cell-gutter</c>) is added to it. <c>"auto"</c>: as wide as the widest of the first rows answered, then
+    ///     held. None: as wide as its <see cref="Format" /> writes a value of its kind (or its label, if wider), counted in
+    ///     <c>ch</c> — so the headings stand where the rows will, before any arrive.
+    /// </summary>
+    [Parameter]
+    public string? Width { get; set; }
 
     /// <summary>Stays put at the left as the grid scrolls sideways. Frozen columns come first.</summary>
     [Parameter]
@@ -67,14 +91,26 @@ public sealed class LiveColumn : IComponent, IDisposable
     [Parameter]
     public bool Visible { get; set; } = true;
 
+    /// <summary>Which side its cells and heading keep to (QuickGrid's <c>Align</c>; Auto: a number's end, the rest's start).</summary>
     [Parameter]
     public CellAlign Align { get; set; }
+
+    /// <summary>
+    ///     What a cell does with text wider than its column: cut at its end with an ellipsis (as CSS's
+    ///     <c>text-overflow</c>), or at its start, keeping the end in view (an id's, a path's). Its tooltip says it whole.
+    /// </summary>
+    [Parameter]
+    public CellOverflow Overflow { get; set; }
+
+    /// <summary>A CSS class for its heading and its cells (QuickGrid's <c>Class</c>).</summary>
+    [Parameter]
+    public string? Class { get; set; }
 
     /// <summary><see cref="CellKind.Enum" /> on an integer: each value's name (an enum field's names are its own).</summary>
     [Parameter]
     public IReadOnlyDictionary<long, string>? Dictionary { get; set; }
 
-    /// <summary><see cref="CellKind.Percent" />: the integer field shown as a percentage of <see cref="Over" />.</summary>
+    /// <summary><see cref="CellKind.Percent" />: the number field (integer or floating point) shown as a percentage of <see cref="Over" />.</summary>
     [Parameter]
     public string? Of { get; set; }
 
@@ -84,6 +120,10 @@ public sealed class LiveColumn : IComponent, IDisposable
     /// <summary>Its cells are links: a click on one activates the row (the grid's <c>OnRowActivate</c>, naming the column).</summary>
     [Parameter]
     public bool Link { get; set; }
+
+    /// <summary>Its cells carry their text as <c>data-value</c>, for a page's styles to go by (a side's colour).</summary>
+    [Parameter]
+    public bool MarkValues { get; set; }
 
     public void Attach(RenderHandle renderHandle)
     {

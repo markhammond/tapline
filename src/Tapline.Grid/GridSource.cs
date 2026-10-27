@@ -199,4 +199,25 @@ public interface IGridSource<TKey, TRow> where TKey : unmanaged, IEquatable<TKey
     ///     doesn't hold — until the result is disposed.
     /// </summary>
     IDisposable Watch(Action changed);
+
+    /// <summary>
+    ///     The grid is done with <paramref name="view" />: a newer view it read has answered (rows, or a refusal), or the
+    ///     grid closed. What the source keeps for it alone, it may let go. Once for each view the grid read, after its
+    ///     last read returned: no read of it follows.
+    /// </summary>
+    void Leave(GridView view)
+    {
+    }
+
+    /// <summary>
+    ///     Whether <paramref name="view" />'s order is its rows' keys' — greatest first, as the key type compares (a
+    ///     <see cref="Guid" /> as <see cref="Guid.CompareTo(Guid)" />, an integer by value) — keys that only grow as rows
+    ///     arrive: monotonic UUIDv7s, a sequence. Then at the live top no list of keys goes on the wire: the page orders the
+    ///     rows by their keys, and each update carries only the rows that changed, conflated by Tapline for each client
+    ///     (<see cref="GridOrder.ByKey" />). Asked as the view is set, on the caller's thread.
+    /// </summary>
+    bool NewestFirstByKey(GridView view)
+    {
+        return false;
+    }
 }

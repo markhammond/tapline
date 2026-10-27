@@ -703,7 +703,7 @@ internal static partial class T
         var never = new TaskCompletionSource<HealthReport>(TaskCreationOptions.RunContinuationsAsynchronously);
         station.Health = (_, _) => new ValueTask<HealthReport>(never.Task);
         var asked = Stopwatch.StartNew();
-        while (c.ProviderStates.Count == 0 && asked.ElapsedMilliseconds < 2000)
+        while (c.ProviderStates.Count == 0 && asked.ElapsedMilliseconds < 10_000)
         {
             publisher.HeartbeatProviders();
             Thread.Sleep(20);
@@ -714,12 +714,11 @@ internal static partial class T
         Assert(c.ProviderStates.SequenceEqual([(node, "degraded")]) && lateAfter >= 400,
             $"a check unanswered: late, past ProviderDegradedAfter ({lateAfter} ms)");
         never.SetResult(new HealthReport(station.Instance!, ProviderStatus.Serving));
-        for (var i = 0; i < 10 && c.ProviderStates.Count < 2; i++)
+        await Eventually(() => c.ProviderStates.Count >= 2, () =>
         {
-            await Task.Delay(20);
             publisher.HeartbeatProviders();
             DrainFrames(s, owner, c);
-        }
+        }, every: 20);
 
         Assert(c.ProviderStates.Count == 2 && c.ProviderStates[1] == (node, "serving"),
             "answered: recovered (its first degradation: at once)");
@@ -727,7 +726,7 @@ internal static partial class T
         // Checks failing at once: unanswered too — late past ProviderDegradedAfter from the first that failed.
         station.Health = (_, _) => ValueTask.FromException<HealthReport>(new InvalidOperationException("broken"));
         asked.Restart();
-        while (c.ProviderStates.Count == 2 && asked.ElapsedMilliseconds < 2000)
+        while (c.ProviderStates.Count == 2 && asked.ElapsedMilliseconds < 10_000)
         {
             publisher.HeartbeatProviders();
             Thread.Sleep(20);

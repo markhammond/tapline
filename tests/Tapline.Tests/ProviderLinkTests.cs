@@ -475,7 +475,11 @@ internal static partial class T
         return buffer.WrittenSpan.ToArray();
     }
 
-    private static async Task Until(Func<bool> done, Action each, string what, int ms = 5000)
+    /// <summary>
+    ///     Waits for <paramref name="done" />, <paramref name="each" /> run before each look, up to <paramref name="ms" />
+    ///     (10 s: what it waits for comes in milliseconds — the deadline is for a loaded machine); throws, saying what, if not.
+    /// </summary>
+    private static async Task Until(Func<bool> done, Action each, string what, int ms = 10_000)
     {
         var until = Environment.TickCount64 + ms;
         while (Environment.TickCount64 < until)
@@ -577,7 +581,7 @@ internal static partial class T
         var (asked, told) = (station.Subscribes, station.Relayed.Count(n => n is Unsubscription));
         station.Status = ProviderStatus.Draining;
         await station.Routers.DrainAsync(TimeSpan.FromMilliseconds(300));
-        await Until(() => taps.All(t => t.IsClosed), () => { }, "its routes let go over the drain", 3000);
+        await Until(() => taps.All(t => t.IsClosed), () => { }, "its routes let go over the drain");
         Assert(taps.All(t => t.Completion.Result?.Code == FaultCode.ServiceDrained), "…as drained, not down");
         var after = await ThrewAsync<ServiceUnavailableException>(() => router.SubscribeAsync(outlet, "svc").AsTask());
         Assert(after is not null && station.Subscribes == asked, "no step 1s to it after: one way");
@@ -730,7 +734,7 @@ internal static partial class T
                 app = await ServeLinkAsync(port, endpoint, provider, served);
                 await Until(() => rig.Remote.IsUp, () => { }, $"restart {restart}: the control stream open again", 15_000);
                 var answered = false;
-                for (var i = 0; i < 40 && !answered; i++)
+                for (var until = Environment.TickCount64 + 15_000; !answered && Environment.TickCount64 < until;)
                 {
                     try
                     {

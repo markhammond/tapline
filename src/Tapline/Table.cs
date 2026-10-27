@@ -238,7 +238,8 @@ public sealed class Table<TKey, TRow> : Source, ITransactional
 {
     private static readonly int KeySize = Unsafe.SizeOf<TKey>();
     private static readonly int RowSize = Unsafe.SizeOf<TRow>();
-    private static readonly int EntrySize = 1 + KeySize + RowSize;
+    private static readonly int UpsertSize = 1 + KeySize + RowSize; // an entry: op, key, row
+    private static readonly int DeleteSize = 1 + KeySize; // a delete's: op, key
     private readonly Stack<int> _free = new();
     private readonly Dictionary<TKey, int> _index = new();
 
@@ -253,6 +254,8 @@ public sealed class Table<TKey, TRow> : Source, ITransactional
     private TKey[] _keys = new TKey[64];
     private bool[] _live = new bool[64];
     private long[] _modPos = new long[64];
+    private long[] _bornPos = new long[64]; // where the slot's row last came into being (log position)
+    private long[] _priorGonePos = new long[64]; // where the one before it in the slot went (long.MinValue: none)
     private TRow[] _rows = new TRow[64];
     private int _slots, _liveCount, _stamp, _undoCount, _txId, _txLiveCount;
     private uint? _txExpectedChecksum;
@@ -694,6 +697,8 @@ public sealed class Table<TKey, TRow> : Source, ITransactional
             }
 
             _log[(int)(_head & _logMask)] = slot;
+            if (live && !u.WasLive) // (a row coming into being: in a slot of its own, or one whose row went before)
+                (_bornPos[slot], _priorGonePos[slot]) = (_head, u.Created ? long.MinValue : _modPos[slot]);
             _modPos[slot] = _head++;
             if (!live) _tombstones.Enqueue((slot, _modPos[slot]));
         }
@@ -774,6 +779,8 @@ public sealed class Table<TKey, TRow> : Source, ITransactional
         Array.Resize(ref _keys, n);
         Array.Resize(ref _rows, n);
         Array.Resize(ref _modPos, n);
+        Array.Resize(ref _bornPos, n);
+        Array.Resize(ref _priorGonePos, n);
         Array.Resize(ref _live, n);
         Array.Resize(ref _txMark, n);
         Array.Resize(ref _batchStamp, n);
@@ -919,16 +926,66 @@ public sealed class Table<TKey, TRow> : Source, ITransactional
     }
 
     /// <summary>
-    ///     Rows changed (or deleted, still tombstoned) since log position <paramref name="since" />, by a pass over the
-    ///     slots.
+    ///     A deleted row a cursor at log position <paramref name="since" /> never held — it came into being after the
+    ///     cursor, and no row before it in the slot outlived the cursor — so its delete is nothing to that client: a slow
+    ///     one isn't sent the deletes of every row that came and went while it was behind. (Exact for keys used once; a
+    ///     key gone and back again since the cursor keeps its delete.)
     /// </summary>
-    private int CountChangedSince(long since)
+    private bool Unheld(int slot, long since)
     {
-        var count = 0;
+        return !_live[slot] && _bornPos[slot] >= since && _priorGonePos[slot] < since;
+    }
+
+    /// <summary>
+    ///     The entries' bytes a pass over the slots writes for a delta from log position <paramref name="since" />, as
+    ///     <see cref="Write" /> does: the rows changed since (or deleted, still tombstoned), less the deletes of rows it never
+    ///     had — or a snapshot's, once those are no fewer.
+    /// </summary>
+    private long ScannedBytes(long since)
+    {
+        long bytes = 0, snapshot = (long)_liveCount * UpsertSize;
         for (var i = 0; i < _slots; i++)
-            if (_modPos[i] >= since)
-                count++;
-        return count;
+        {
+            if (_modPos[i] < since || Unheld(i, since)) continue;
+            var size = _live[i] ? UpsertSize : DeleteSize;
+            if (bytes + size >= snapshot) return snapshot;
+            bytes += size;
+        }
+
+        return bytes;
+    }
+
+    /// <summary>The entries' bytes a delta walking the log from <paramref name="since" /> writes, as <see cref="Write" /> does.</summary>
+    private long LoggedBytes(long since)
+    {
+        long bytes = 0;
+        for (var p = since; p < _head; p++)
+        {
+            var slot = _log[(int)(p & _logMask)];
+            if (_modPos[slot] != p || Unheld(slot, since)) continue;
+            bytes += _live[slot] ? UpsertSize : DeleteSize;
+        }
+
+        return bytes;
+    }
+
+    /// <summary>
+    ///     The entries' bytes <see cref="WriteRange" /> writes: a snapshot's of the range, or the rows changed in it since the
+    ///     cursor, less the deletes of rows never sent this subscriber (<paramref name="state" />).
+    /// </summary>
+    private long RangeBytes(in Cursor cursor, bool reset, ReadOnlySpan<byte> prefix, RangeState state)
+    {
+        if (reset) return (long)CountLive(prefix) * UpsertSize;
+        long bytes = 0;
+        for (var p = cursor.Pos; p < _head; p++)
+        {
+            var slot = _log[(int)(p & _logMask)];
+            if (_modPos[slot] != p || !Matches(slot, prefix)) continue;
+            if (_live[slot]) bytes += UpsertSize;
+            else if (state.Sent.ContainsKey(slot)) bytes += DeleteSize;
+        }
+
+        return bytes;
     }
 
     private bool Matches(int slot, ReadOnlySpan<byte> prefix)
@@ -936,25 +993,14 @@ public sealed class Table<TKey, TRow> : Source, ITransactional
         return prefix.IsEmpty || MemoryMarshal.AsBytes(new ReadOnlySpan<TKey>(in _keys[slot])).StartsWith(prefix);
     }
 
-    /// <summary>Rows a delta from <paramref name="cursor" /> (or a snapshot) would carry, optionally within a key range.</summary>
-    private int CountEntries(in Cursor cursor, bool reset, ReadOnlySpan<byte> prefix)
+    /// <summary>The rows a snapshot carries: those live, optionally within a key range.</summary>
+    private int CountLive(ReadOnlySpan<byte> prefix)
     {
+        if (prefix.IsEmpty) return _liveCount;
         var count = 0;
-        if (reset)
-        {
-            if (prefix.IsEmpty) return _liveCount;
-            for (var i = 0; i < _slots; i++)
-                if (_live[i] && Matches(i, prefix))
-                    count++;
-            return count;
-        }
-
-        for (var p = cursor.Pos; p < _head; p++)
-        {
-            var slot = _log[(int)(p & _logMask)];
-            if (_modPos[slot] == p && Matches(slot, prefix)) count++;
-        }
-
+        for (var i = 0; i < _slots; i++)
+            if (_live[i] && Matches(i, prefix))
+                count++;
         return count;
     }
 
@@ -1070,10 +1116,10 @@ public sealed class Table<TKey, TRow> : Source, ITransactional
     {
         if (payload || record.Length < Wire.TableHeader || record[0] != Wire.Table) return false;
         var n = (int)BinaryPrimitives.ReadUInt32LittleEndian(record[26..]);
-        if (BinaryPrimitives.ReadUInt16LittleEndian(record[30..]) != KeySize || BinaryPrimitives.ReadUInt16LittleEndian(
-                                                                                 record[32..]) != RowSize
-                                                                             || record.Length <
-                                                                             Wire.TableHeader + (long)n * EntrySize)
+        var deletes = BinaryPrimitives.ReadUInt32LittleEndian(record[34..]);
+        if (BinaryPrimitives.ReadUInt16LittleEndian(record[30..]) != KeySize ||
+            BinaryPrimitives.ReadUInt16LittleEndian(record[32..]) != RowSize || deletes > (uint)n ||
+            record.Length < Wire.TableHeader + (long)n * UpsertSize - deletes * (long)RowSize)
             return false;
         var flags = record[5];
         var format = EffectiveFormat();
@@ -1086,10 +1132,11 @@ public sealed class Table<TKey, TRow> : Source, ITransactional
         w.WriteNumber("entries", n);
         w.WritePropertyName("changes");
         w.WriteStartArray();
-        for (int i = 0, o = Wire.TableHeader; i < n && i < 1000; i++, o += EntrySize)
+        for (int i = 0, o = Wire.TableHeader; i < n && i < 1000; i++)
         {
-            w.WriteStartObject();
             var delete = record[o] == Wire.OpDelete;
+            if (o + (delete ? DeleteSize : UpsertSize) > record.Length) break; // (its ops not as its header says)
+            w.WriteStartObject();
             w.WriteString("op", delete ? "delete" : "upsert");
             w.WritePropertyName("key");
             Rendering.Fixed(w, record.Slice(o + 1, KeySize), format?.KeyLayout);
@@ -1100,6 +1147,7 @@ public sealed class Table<TKey, TRow> : Source, ITransactional
             }
 
             w.WriteEndObject();
+            o += delete ? DeleteSize : UpsertSize;
         }
 
         w.WriteEndArray();
@@ -1115,12 +1163,12 @@ public sealed class Table<TKey, TRow> : Source, ITransactional
         {
             var reset = BeyondHorizon(cursor);
             if (!reset && cursor.Seq == _seq) return 0;
-            var count = reset
-                ? _liveCount
+            var bytes = reset
+                ? (long)_liveCount * UpsertSize
                 : ScanCheaper(cursor)
-                    ? Math.Min(CountChangedSince(cursor.Pos), _liveCount) // as Write: a snapshot once it is no bigger
-                    : CountEntries(cursor, false, default);
-            return Wire.TableHeader + count * EntrySize;
+                    ? ScannedBytes(cursor.Pos)
+                    : LoggedBytes(cursor.Pos);
+            return (int)(Wire.TableHeader + bytes);
         }
         finally
         {
@@ -1129,15 +1177,15 @@ public sealed class Table<TKey, TRow> : Source, ITransactional
     }
 
     /// <summary>Exact size of the record <see cref="WriteRange" /> would produce now (0 = nothing in range changed).</summary>
-    internal int MeasureRange(in Cursor cursor, ReadOnlySpan<byte> prefix)
+    internal int MeasureRange(in Cursor cursor, ReadOnlySpan<byte> prefix, RangeState state)
     {
         if (!Gates.TryEnter(Gate)) return Busy;
         try
         {
             var reset = NeedsReset(cursor);
             if (!reset && cursor.Seq == _seq) return 0;
-            var count = CountEntries(cursor, reset, prefix);
-            return !reset && count == 0 ? 0 : Wire.TableHeader + count * EntrySize;
+            var bytes = RangeBytes(cursor, reset, prefix, state);
+            return !reset && bytes == 0 ? 0 : (int)(Wire.TableHeader + bytes);
         }
         finally
         {
@@ -1159,18 +1207,18 @@ public sealed class Table<TKey, TRow> : Source, ITransactional
         {
             var reset = NeedsReset(cursor);
             if (!reset && cursor.Seq == _seq) return 0;
-            var count = CountEntries(cursor, reset, prefix);
-            if (!reset && count == 0)
+            var bytes = RangeBytes(cursor, reset, prefix, state);
+            if (!reset && bytes == 0) // (nothing in range — or only rows it never had came and went: no record)
             {
                 cursor.Seq = _seq;
                 cursor.Pos = _head;
                 return 0;
             }
 
-            if (dst.Length < Wire.TableHeader + (long)count * EntrySize) return -1;
+            if (dst.Length < Wire.TableHeader + bytes) return -1;
 
             var sent = state.Sent;
-            var o = Wire.TableHeader;
+            int o = Wire.TableHeader, count = 0, deletes = 0;
             if (reset)
             {
                 sent.Clear();
@@ -1181,30 +1229,31 @@ public sealed class Table<TKey, TRow> : Source, ITransactional
                     var h = HashOf(_keys[i], _rows[i]);
                     sent[i] = h;
                     state.Checksum += h;
-                    WriteEntry(dst[o..], i);
-                    o += EntrySize;
+                    o += WriteEntry(dst[o..], i);
+                    count++;
                 }
             }
             else
-            {
                 for (var p = cursor.Pos; p < _head; p++)
                 {
                     var slot = _log[(int)(p & _logMask)];
                     if (_modPos[slot] != p || !Matches(slot, prefix)) continue;
                     if (sent.Remove(slot, out var old)) state.Checksum -= old;
+                    else if (!_live[slot]) continue; // (gone, and never sent this subscriber: nothing to it)
                     if (_live[slot])
                     {
                         var h = HashOf(_keys[slot], _rows[slot]);
                         sent[slot] = h;
                         state.Checksum += h;
                     }
+                    else deletes++;
 
-                    WriteEntry(dst[o..], slot);
-                    o += EntrySize;
+                    o += WriteEntry(dst[o..], slot);
+                    count++;
                 }
-            }
 
-            WriteHeader(dst, tapId, reset ? Wire.FlagReset : 0, reset ? 0 : state.SentSeq + 1, state.Checksum, count);
+            WriteHeader(dst, tapId, reset ? Wire.FlagReset : 0, reset ? 0 : state.SentSeq + 1, state.Checksum, count,
+                deletes);
             state.SentSeq = _seq;
             cursor.Seq = _seq;
             cursor.Pos = _head;
@@ -1220,8 +1269,9 @@ public sealed class Table<TKey, TRow> : Source, ITransactional
     ///     The record that brings <paramref name="cursor" /> up to date, at no more CPU than a snapshot: a delta from walking
     ///     the log while that is cheaper than a pass over the slots; past that, one pass over the slots either way — writing
     ///     just the rows changed since the cursor (<c>_modPos</c>; deleted rows keep their keys while their delete is on the
-    ///     log), so a slow client gets the fewer bytes, unless that is no fewer rows than a snapshot. Past the log's horizon,
-    ///     a snapshot.
+    ///     log), so a slow client gets the fewer bytes, unless that is no fewer bytes than a snapshot. Either way, no delete
+    ///     for a row that came and went since the cursor (<see cref="Unheld" />): the client never had it; and a delete is its
+    ///     key alone. Past the log's horizon, a snapshot.
     /// </summary>
     internal override int Write(uint tapId, ref Cursor cursor, Span<byte> dst)
     {
@@ -1232,34 +1282,37 @@ public sealed class Table<TKey, TRow> : Source, ITransactional
             if (!reset && cursor.Seq == _seq) return 0;
             if (dst.Length < Wire.TableHeader) return -1;
 
-            int o = Wire.TableHeader, count = 0;
+            int o = Wire.TableHeader, count = 0, deletes = 0;
             var scan = !reset && ScanCheaper(cursor);
             if (scan)
+            {
+                var snapshot = (long)_liveCount * UpsertSize;
                 for (var i = 0; i < _slots; i++)
                 {
-                    if (_modPos[i] < cursor.Pos) continue;
-                    if (count + 1 >= _liveCount) // a snapshot is no bigger: write that instead
+                    if (_modPos[i] < cursor.Pos || Unheld(i, cursor.Pos)) continue;
+                    var size = _live[i] ? UpsertSize : DeleteSize;
+                    if (o - Wire.TableHeader + size >= snapshot) // a snapshot is no bigger: write that instead (ScannedBytes)
                     {
                         reset = true;
                         o = Wire.TableHeader;
-                        count = 0;
+                        count = deletes = 0;
                         break;
                     }
 
-                    if (o + EntrySize > dst.Length) return -1;
-                    WriteEntry(dst[o..], i);
-                    o += EntrySize;
+                    if (o + size > dst.Length) return -1;
+                    o += WriteEntry(dst[o..], i);
                     count++;
+                    if (!_live[i]) deletes++;
                 }
+            }
 
             if (reset)
             {
-                if (dst.Length < Wire.TableHeader + (long)_liveCount * EntrySize) return -1;
+                if (dst.Length < Wire.TableHeader + (long)_liveCount * UpsertSize) return -1;
                 for (var i = 0; i < _slots; i++)
                 {
                     if (!_live[i]) continue;
-                    WriteEntry(dst[o..], i);
-                    o += EntrySize;
+                    o += WriteEntry(dst[o..], i);
                     count++;
                 }
             }
@@ -1269,14 +1322,16 @@ public sealed class Table<TKey, TRow> : Source, ITransactional
                 {
                     var slot = _log[(int)(p & _logMask)];
                     if (_modPos[slot] != p) continue; // superseded by a later change to the same row
-                    if (o + EntrySize > dst.Length) return -1;
-                    WriteEntry(dst[o..], slot);
-                    o += EntrySize;
+                    if (Unheld(slot, cursor.Pos)) continue;
+                    var size = _live[slot] ? UpsertSize : DeleteSize;
+                    if (o + size > dst.Length) return -1;
+                    o += WriteEntry(dst[o..], slot);
                     count++;
+                    if (!_live[slot]) deletes++;
                 }
             }
 
-            WriteHeader(dst, tapId, reset ? Wire.FlagReset : 0, reset ? 0 : cursor.Seq + 1, _checksum, count);
+            WriteHeader(dst, tapId, reset ? Wire.FlagReset : 0, reset ? 0 : cursor.Seq + 1, _checksum, count, deletes);
             cursor.Seq = _seq;
             cursor.Pos = _head;
             return o;
@@ -1322,7 +1377,7 @@ public sealed class Table<TKey, TRow> : Source, ITransactional
             var stride = KeySize + RowSize;
             if (rows.Length % stride != 0) return 0;
             var count = rows.Length / stride;
-            if (dst.Length < Wire.TableHeader + (long)count * EntrySize) return -1;
+            if (dst.Length < Wire.TableHeader + (long)count * UpsertSize) return -1;
             var o = Wire.TableHeader;
             uint checksum = 0;
             for (var r = 0; r < count; r++)
@@ -1333,7 +1388,7 @@ public sealed class Table<TKey, TRow> : Source, ITransactional
                 key.CopyTo(dst[(o + 1)..]);
                 row.CopyTo(dst[(o + 1 + KeySize)..]);
                 checksum += RowHash.Of(key, row);
-                o += EntrySize;
+                o += UpsertSize;
             }
 
             WriteHeader(dst, tapId, Wire.FlagReset | Wire.FlagDegraded, 0, checksum, count);
@@ -1354,9 +1409,9 @@ public sealed class Table<TKey, TRow> : Source, ITransactional
         {
             if (!ReferenceEquals(Fault, fault)) return FaultCleared; // recovered (or re-faulted) since the tap looked
             if (degrade is null) return 0;
-            if (!first && dst.Length < Wire.TableHeader + (long)_liveCount * EntrySize)
+            if (!first && dst.Length < Wire.TableHeader + (long)_liveCount * UpsertSize)
                 return -1; // wait for a frame of its own
-            int stride = 4 + KeySize + RowSize, count = CountEntries(default, true, prefix);
+            int stride = 4 + KeySize + RowSize, count = CountLive(prefix);
             EnsureScratch(count * stride, count);
             var entries = _batchRows.AsSpan(0, count * stride);
             for (int i = 0, r = 0; i < _slots; i++)
@@ -1382,7 +1437,7 @@ public sealed class Table<TKey, TRow> : Source, ITransactional
             for (var r = 0; r < count; r++)
                 if ((BinaryPrimitives.ReadUInt32LittleEndian(entries[(r * stride)..]) & FoldEntry.Present) != 0)
                     kept++;
-            if (dst.Length < Wire.TableHeader + (long)kept * EntrySize) return -1;
+            if (dst.Length < Wire.TableHeader + (long)kept * UpsertSize) return -1;
 
             var o = Wire.TableHeader;
             uint checksum = 0;
@@ -1396,7 +1451,7 @@ public sealed class Table<TKey, TRow> : Source, ITransactional
                 key.CopyTo(dst[(o + 1)..]);
                 row.CopyTo(dst[(o + 1 + KeySize)..]);
                 checksum += RowHash.Of(key, row);
-                o += EntrySize;
+                o += UpsertSize;
             }
 
             WriteHeader(dst, tapId, Wire.FlagReset | Wire.FlagDegraded, 0, checksum, kept);
@@ -1408,7 +1463,8 @@ public sealed class Table<TKey, TRow> : Source, ITransactional
         }
     }
 
-    private void WriteHeader(Span<byte> dst, uint tapId, int flags, long fromSeq, uint checksum, int count)
+    private void WriteHeader(Span<byte> dst, uint tapId, int flags, long fromSeq, uint checksum, int count,
+        int deletes = 0)
     {
         dst[0] = Wire.Table;
         BinaryPrimitives.WriteUInt32LittleEndian(dst[1..], tapId);
@@ -1419,15 +1475,22 @@ public sealed class Table<TKey, TRow> : Source, ITransactional
         BinaryPrimitives.WriteUInt32LittleEndian(dst[26..], (uint)count);
         BinaryPrimitives.WriteUInt16LittleEndian(dst[30..], (ushort)KeySize);
         BinaryPrimitives.WriteUInt16LittleEndian(dst[32..], (ushort)RowSize);
+        BinaryPrimitives.WriteUInt32LittleEndian(dst[34..], (uint)deletes);
     }
 
-    private void WriteEntry(Span<byte> dst, int slot)
+    /// <summary>A slot's entry: its key and row, or, deleted, its key alone. Returns its size.</summary>
+    private int WriteEntry(Span<byte> dst, int slot)
     {
-        var live = _live[slot];
-        dst[0] = live ? Wire.OpUpsert : Wire.OpDelete;
         MemoryMarshal.Write(dst[1..], in _keys[slot]);
-        if (live) MemoryMarshal.Write(dst[(1 + KeySize)..], in _rows[slot]);
-        else dst.Slice(1 + KeySize, RowSize).Clear();
+        if (!_live[slot])
+        {
+            dst[0] = Wire.OpDelete;
+            return DeleteSize;
+        }
+
+        dst[0] = Wire.OpUpsert;
+        MemoryMarshal.Write(dst[(1 + KeySize)..], in _rows[slot]);
+        return UpsertSize;
     }
 
     private static uint HashOf(in TKey key, in TRow row)

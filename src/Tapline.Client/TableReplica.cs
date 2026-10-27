@@ -115,25 +115,33 @@ public sealed class TableReplica : IEnumerable<TableRow>
 
         var sum = Checksum;
         var rows = _rows.GetAlternateLookup<ReadOnlySpan<byte>>();
-        var stride = 1 + keySize + rowSize;
         var entries = record[Wire.TableHeader..];
-        for (var i = 0; i < count; i++)
+        for (int i = 0, o = 0; i < count; i++)
         {
-            var entry = entries.Slice(i * stride, stride);
-            var key = entry.Slice(1, keySize);
-            var row = entry.Slice(1 + keySize, rowSize);
+            var deleted = entries[o] == Wire.OpDelete; // (a delete: its key alone)
+            var size = 1 + keySize + (deleted ? 0 : rowSize);
+            if (o + size > entries.Length)
+            {
+                (AwaitingReset, Verified) = (true, false); // (its ops not as its header says)
+                return false;
+            }
+
+            var key = entries.Slice(o + 1, keySize);
             var held = rows.TryGetValue(key, out var heldKey, out var heldRow);
             if (held) sum -= RowHash.Of(heldKey, heldRow);
-            if (entry[0] == Wire.OpDelete)
+            if (deleted)
             {
                 if (held) rows.Remove(key);
             }
             else
             {
+                var row = entries.Slice(o + 1 + keySize, rowSize);
                 if (held) row.CopyTo(heldRow);
                 else rows[key] = row.ToArray();
                 sum += RowHash.Of(key, row);
             }
+
+            o += size;
         }
 
         (Checksum, Version) = (sum, to);
@@ -142,14 +150,18 @@ public sealed class TableReplica : IEnumerable<TableRow>
         return Verified;
     }
 
-    /// <summary>A Table record's length: its header and entries — or −1 if <paramref name="record" /> is too short to say.</summary>
+    /// <summary>
+    ///     A Table record's length: its header and entries, each its op and key, and an upsert its row — or −1 if
+    ///     <paramref name="record" /> is too short to say, or says more deletes than entries.
+    /// </summary>
     internal static int LengthOf(ReadOnlySpan<byte> record)
     {
         if (record.Length < Wire.TableHeader) return -1;
-        long count = BinaryPrimitives.ReadUInt32LittleEndian(record[26..]);
-        long stride = 1 + BinaryPrimitives.ReadUInt16LittleEndian(record[30..]) +
-                      BinaryPrimitives.ReadUInt16LittleEndian(record[32..]);
-        var length = Wire.TableHeader + count * stride;
+        long count = BinaryPrimitives.ReadUInt32LittleEndian(record[26..]),
+            deletes = BinaryPrimitives.ReadUInt32LittleEndian(record[34..]);
+        if (deletes > count) return -1;
+        var length = Wire.TableHeader + count * (1 + BinaryPrimitives.ReadUInt16LittleEndian(record[30..])) +
+                     (count - deletes) * BinaryPrimitives.ReadUInt16LittleEndian(record[32..]);
         return length <= record.Length ? (int)length : -1;
     }
 
@@ -231,13 +243,13 @@ public readonly ref struct TableBatch
     public ref struct Enumerator
     {
         private readonly ReadOnlySpan<byte> _entries;
-        private readonly int _keySize, _stride, _count;
-        private int _index;
+        private readonly int _keySize, _rowSize, _count;
+        private int _index, _at, _size;
 
         internal Enumerator(ReadOnlySpan<byte> record)
         {
             _keySize = BinaryPrimitives.ReadUInt16LittleEndian(record[30..]);
-            _stride = 1 + _keySize + BinaryPrimitives.ReadUInt16LittleEndian(record[32..]);
+            _rowSize = BinaryPrimitives.ReadUInt16LittleEndian(record[32..]);
             _count = (int)BinaryPrimitives.ReadUInt32LittleEndian(record[26..]);
             _entries = record[Wire.TableHeader..];
             _index = -1;
@@ -247,21 +259,24 @@ public readonly ref struct TableBatch
         {
             get
             {
-                var entry = _entries.Slice(_index * _stride, _stride);
+                var entry = _entries.Slice(_at, _size);
                 return new TableEntry(entry[0] == Wire.OpDelete, entry.Slice(1, _keySize), entry[(1 + _keySize)..]);
             }
         }
 
         public bool MoveNext()
         {
-            return ++_index < _count;
+            if (++_index >= _count) return false;
+            _at += _size;
+            _size = 1 + _keySize + (_entries[_at] == Wire.OpDelete ? 0 : _rowSize); // (a delete: its key alone)
+            return true;
         }
     }
 }
 
 /// <summary>
-///     An entry of a <see cref="TableBatch" />: a key, and its row set — or <see cref="Deleted" /> (its row bytes
-///     zero).
+///     An entry of a <see cref="TableBatch" />: a key, and its row set — or <see cref="Deleted" /> (no row: the wire
+///     carries a delete's key alone).
 /// </summary>
 public readonly ref struct TableEntry(bool deleted, ReadOnlySpan<byte> key, ReadOnlySpan<byte> row)
 {
@@ -275,10 +290,10 @@ public readonly ref struct TableEntry(bool deleted, ReadOnlySpan<byte> key, Read
         return MemoryMarshal.Read<TKey>(Key);
     }
 
-    /// <summary>Its row, read as the app's own struct of the table's row layout (zeros when deleted).</summary>
+    /// <summary>Its row, read as the app's own struct of the table's row layout (<c>default</c> when deleted).</summary>
     public TRow RowAs<TRow>() where TRow : unmanaged
     {
-        return MemoryMarshal.Read<TRow>(Row);
+        return Deleted ? default : MemoryMarshal.Read<TRow>(Row);
     }
 }
 

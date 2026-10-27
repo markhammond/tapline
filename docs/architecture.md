@@ -177,8 +177,10 @@ else waiting for an ack — behind one; a small frame that waited behind our own
 collapse; and the pacing gate follows a rate change at once rather than keeping a slower rate's wait. Rate samples span
 the longer of the send and ack intervals, as in BBR, so acks bunched by the path or a busy client don't read as a
 faster path; a frame sent with nothing in flight starts its sample at its own send, also as in BBR, so an idle spell
-doesn't read as a slow path. A round that only a heartbeat ended — nothing to send — leaves the rounds that measured the
-path in the estimate: seconds of heartbeats alone don't leave the next burst paced at the heartbeats' rate.
+doesn't read as a slow path. An ack is sampled from the newest data frame it brings home, not the heartbeats behind it:
+where a data frame takes longer on the path than the heartbeat interval and the client acknowledges only the newest
+frame waiting, the heartbeats ride on the same ack. A round of heartbeats alone — nothing to send — leaves the rounds that
+measured the path in the estimate: seconds of heartbeats alone don't leave the next burst paced at the heartbeats' rate.
 
 **An acknowledgement overdue (adaptive): state waits, messages go.** A client acknowledges a frame once it has applied it — a
 browser, on its page's main thread. A frame unacknowledged for longer than `OutletOptions.AckOverdue` (50 ms; zero: off)
@@ -205,22 +207,24 @@ record larger than the budget, sent alone, doesn't hold it open).
 unpaced) — the sample page shows them.
 
 Simulated on a manual clock (`PathSimulation`): a bottleneck behind a FIFO of unbounded depth (Kestrel, a middlebox), a
-hot book (3 row changes per ms) and a value published every ms; *age at paint* is how old the newest value shown is at
-each 60 Hz paint — p99.5 (frames per second):
+hot book (3 row changes per ms, one in ten a delete) and a value published every ms; *age at paint* is how old the
+newest value shown is at each 60 Hz paint — p99.5 (frames per second); on 16 kbit/s, the medians of 13 walks of the
+book:
 
 | Path | Fixed, 2 frames | Adaptive | Adaptive, 60 Hz |
 |---|---|---|---|
 | colo, 10 Gbit/s, 0.05 ms one way | 1.0 ms (1,000) | 1.0 ms (1,000) | 1.7 ms (60) |
 | 50 Mbit/s, 15 ms | 44.8 ms (66) | 16.0 ms (1,000) | 21.5 ms (60) |
 | 50 Mbit/s, 100 ms | 296 ms (10) | 106 ms (182) | 101 ms (60) |
-| 2 Mbit/s, 40 ms, + 60 KB bursts every 2 s | 305 ms | 277 ms | 280 ms |
-| 16 kbit/s, 75 ms | 649 ms (p50 518) | 737 ms (p50 498) | 737 ms (p50 498) |
-| 50 → 1 Mbit/s at 6 s, 20 ms | 66.5 ms | 41.8 ms | 28.0 ms |
-| 50 Mbit/s → 16 kbit/s at 6 s, 20 ms | 703 ms (p50 556) | 4.7 s (p50 480) | 1.39 s (p50 547) |
+| 2 Mbit/s, 40 ms, + 60 KB bursts every 2 s | 308 ms | 277 ms | 277 ms |
+| 16 kbit/s, 75 ms | 634 ms (p50 501) | 748 ms (p50 488) | 748 ms (p50 488) |
+| 50 → 1 Mbit/s at 6 s, 20 ms | 66.0 ms | 32.5 ms | 28.0 ms |
+| 50 Mbit/s → 16 kbit/s at 6 s, 20 ms | 690 ms (p50 541) | 4.7 s (p50 446) | 1.41 s (p50 550) |
 
 Fast paths run at the data rate with one way's delay as the floor. A 60 KB burst ahead in the FIFO is 240 ms at 2 Mbit/s
 for whatever is behind it, in any mode. At 16 kbit/s a frame takes ~225 ms to send: fresher at the median, while probing
-for more bandwidth costs at the tail; a new connection there overshoots at first (the 1.1 KB activation
+for more bandwidth costs at the tail — and a few bytes more or less in a frame move one walk's figures by tens of
+milliseconds either way (the fixed window's hardly), hence the medians; a new connection there overshoots at first (the 1.1 KB activation
 snapshot alone takes 0.56 s, and nothing is known about the path until it is acked), clearing in ~3 s, which that run
 leaves out. A sudden 3,000× drop turns what was in flight at that instant into queue — rate × round trip, ~4 KB for an
 uncapped 100 KB/s stream at 40 ms, seconds at 16 kbit/s — the price of not holding fast clients back; the hold stops it
@@ -278,7 +282,9 @@ to 10 s (`CircuitClientTimeout`; SignalR's default is 30 s) and its keep-alive p
 for before the heartbeats start) — leaving the app's own hub settings, if it made any. The browser client sets its
 connection's server timeout from what it sees: four times the longest recent gap between frames (halving every 30 s),
 at least 10 s, at most SignalR's 30 s — seconds on a fast path, longer where a slow one needs it (its timer resets only
-on whole messages: one large message on a slow link must not read as a dead connection). A dead connection is dropped
+on whole messages: one large message on a slow link must not read as a dead connection). While the gaps run past 1.5 s,
+it keeps SignalR's 30 s: SignalR sends what its connection has gathered as one message (frames, renders, pings), which
+on a 16 Kbit/s link can take longer than 10 s to arrive. A dead connection is dropped
 by SignalR within that, Blazor reconnects, and the router resumes. `tapline.staleMs` says how long ago the router was
 last heard from (wall clock: across a sleep too) — for a staleness indicator.
 
@@ -644,3 +650,9 @@ Four packages, each bundling assemblies of its own, versioned together:
   kernel, Kestrel's socket transport output pipe (`SocketTransportOptions.MaxWriteBufferSize`, app-wide), and SignalR's
   `TransportMaxBufferSize` (64 KB), which Blazor exposes from .NET 11 (`ServerComponentsEndpointOptions.ConfigureConnection`).
   On Linux, `CircuitNotSentLowWatermarkBytes` (`TCP_NOTSENT_LOWAT`) limits unsent bytes without limiting the window.
+- LiveGrid's own words are English, and not localised: its built-in status line (the rows, live or held, up to date or
+  catching up, selected; `RowName` and `RowsName` name the rows), its headings' sort labels and hints, the column
+  chooser, the new-above pill (`NewAbove`), a tick's tooltip (yes, no), a time's tooltip (UTC), and why it can't show its
+  rows. A `StatusTemplate` puts the page's own words in place of the status line. Its cells are the culture's: each
+  column's `Format` is applied in the culture current as the grid renders, as `ToString` would apply it on the server —
+  times as UTC, in the Gregorian calendar (a culture of another calendar in its Gregorian one).

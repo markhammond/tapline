@@ -24,9 +24,10 @@ public sealed class BlazorRealtimeOptions : OutletOptions
     ///     How long the server waits without hearing from a circuit's client before it drops the connection: SignalR's
     ///     <c>ClientTimeoutInterval</c>, on Blazor's circuit hub only (30 s by SignalR's default). A live client is never
     ///     quiet that long — it acknowledges every frame, a heartbeat among them every
-    ///     <see cref="TaplineOptions.HeartbeatInterval" /> — so a gone or frozen one is noticed in seconds; Blazor then keeps
-    ///     its circuit for it to reconnect to. Applied unless the app set the hub's own value
-    ///     (<c>AddInteractiveServerComponents().AddHubOptions(…)</c>).
+    ///     <see cref="TaplineOptions.HeartbeatInterval" />, and pings every 3 s it sends nothing else (<c>startBlazor</c>'s
+    ///     <c>keepAliveInterval</c>), however long a large message takes to come down a slow link — so a gone or frozen one
+    ///     is noticed in seconds; Blazor then keeps its circuit for it to reconnect to. Applied unless the app set the hub's
+    ///     own value (<c>AddInteractiveServerComponents().AddHubOptions(…)</c>).
     /// </summary>
     public TimeSpan CircuitClientTimeout { get; set; } = TimeSpan.FromSeconds(10);
 

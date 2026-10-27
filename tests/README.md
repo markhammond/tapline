@@ -2,8 +2,8 @@
 
 ## Verification
 
-`dotnet run --project tests/Tapline.Tests` (174 tests; `TAPLINE_TEST=<part of a name>` runs only those,
-`TAPLINE_TEST_REPEAT=n` each n times), then `node tests/js/test.mjs` (53 tests, using the fixtures the C# run writes).
+`dotnet run --project tests/Tapline.Tests` (186 tests; `TAPLINE_TEST=<part of a name>` runs only those,
+`TAPLINE_TEST_REPEAT=n` each n times), then `node tests/js/test.mjs` (67 tests, using the fixtures the C# run writes).
 Nothing to install for either: the JS tests use Node's own modules, and the SignalR JS client's side of the wire —
 how it encodes every control invocation tapline.js sends over a circuit, at each integer width, and how it reads a frame
 envelope — is captured in `tests/js/fixtures/signalr.json` (client 10.0.11), which the C# tests hold the library to.
@@ -92,32 +92,75 @@ Debug reports what the writes that found the ring full allocated. Highlights:
 - Grid (Tapline.Grid): a window kept by the server against an oracle worked out apart from the source (LINQ over the
   rows) — five seeds of random scrolling, jumps, arrivals, updates, deletes, sorts of up to three columns and filters
   of up to two: every window a run of the view's order at its ranks (its view position plus the rows above not shown),
-  the rows table its rows alone, each as the source has it; held still, every window the oracle's exactly. Held, rows
-  arriving above are counted and nothing is sent; a row in view changing sends that row alone. Letting rows in at each
-  boundary (200: none; 199: thirty; no more until the page has applied them; no more than it fetches above). Its
+  the rows table its rows alone, each as the source has it (its own order by key: at the live top, the order without
+  keys, the rows placed by theirs); held still, every window the oracle's exactly. By key: at the live top the order is
+  its 40-byte header, five arriving five rows in and five out; held, sorted another way, or a jump's view read first while
+  rows linger, with its keys. Held from the live top on the page's row (the key it shows at its view's first position):
+  thirty arrived since the window the page drew, the hold keeps that row where the page has it — its first answer the
+  view and a view below, alone, then the rows round it; unanchored, the row now at that rank stands there (the shift a
+  slow link showed); the row gone, placed by rank. Held, rows
+  arriving above are counted and only the status value goes (rows above: not the rows, nor their order and its keys);
+  a row in view changing sends that row alone. Letting rows in at each
+  boundary (200: none; 199: thirty; no more until the page has applied them; no more than it fetches above; only as the
+  reader scrolls up, none at rest however wide the pre-fetch; at the first
+  row shown with a view's worth or more above, let in, held; fewer, or the live top asked for, live; racing up, as many
+  as it fetches above, three views at a time at the first row shown, or fewer above than the view holds, live). Its
   session on the wire: each request answered by a rendezvous, the .NET client's replica the oracle's window; a view the
   window published doesn't hold (a jump, or a scroll outrunning the pre-fetch) answered view first (its view read and
   sent alone with the rendezvous, then the rows round it — the window's other rows left on the page until then, none
-  sent twice), a newer jump between the stages giving up the rest; a new sort or filter numbered, a request asked in
-  the view before it dropped unread; its cadences on a clock moved by hand (live 100 ms, held 500 ms: a microsecond before,
-  not read; on it, read); hidden, nothing read; a jump cancels the read in flight, its token in the source, a request
+  sent twice), a newer jump between the stages giving up the rest; a window's first answer alone on a slow link, till the
+  page has it (the tap says): the live top's view, a hold's view and a view below with the rows above counted, the
+  window not widened meanwhile — its rest not read, a request whose view it holds answered as the window stands — then
+  the last request's window; a new sort or filter numbered, a request asked in
+  the view before it dropped unread, the source told once of each view the grid is done with (a newer one answered,
+  or the grid closed); its cadences on a clock moved by hand (live 100 ms, held 500 ms: a microsecond before,
+  not read; on it, read); hidden, nothing read; passive, the status alone saying once that the source moved past the
+  page's rows (no rows, no order, nothing more as it moves again), and back in sight, its window asked again, read at
+  once, the flag unsaid; a jump cancels the read in flight, its token in the source, a request
   touching it letting it finish; disposed mid-read, clean, nothing unobserved; bounds refused with the reason. 10,000
   answers on the way to the wire: 0 B; 20,000 through the session's loop: some KB at most (the process's). A window's
   structures as large over 50,000,000 rows as over 5,000. On the wire, uncompressed, with the blotter's rows (136 B) and
-  UUID keys: 360 B a row entering, scrolling a view at a time.
+  UUID keys: 224 B a row entering, scrolling a view at a time (the row 153 B, the one leaving it 17 B: its key); an
+  arrival at the live top 1,323 B with every key, 267 B by key (a row in, a row out, the order's header; the status
+  value unchanged). The order and status values written
+  and read back; another format, or one cut short, not one. The overscan the session tells the page: none under fixed
+  flow control or with no time for the fill (the page's own count); adaptive, none before the link's measured, then
+  what its delivery rate carries in a second, both sides, in powers of two (up once the next fits; down once a quarter
+  fewer than told fit, only while the link is the limit — not while the application leaves it idle); and while the
+  reader rests, climbing on a clock moved by hand: held, once the page has asked with the last step and rested a second,
+  its state sent, a step in the status alone (doubled, by no more than four fills) to the page's most, none sooner;
+  its state waiting longer than a step takes, halved with the rows; back at the live top, afresh, four seconds a step.
 - LiveGrid (the component): its columns resolved against the row's fields — each where it is in the bytes Tapline sends,
   laid out by the runtime (two bools side by side, not as marshalled) and read back as written, its kind from its type
   — and every configuration that can't work refused, saying why; keys as the page holds them and back; text written
-  as the page reads it; rendered statically, refused in its place with the render mode to give it (HtmlRenderer). In a
-  browser: `dotnet run --project samples/LiveGrid.Sample` (http://localhost:5970).
+  as the page reads it; rendered statically, refused in its place with the render mode to give it (HtmlRenderer); a
+  heading's clicks cycling its sort (ascending or descending first, then back to the source's own order), shift-clicks
+  within a sort by several; the first window it reads before the page asks, from the body's height (the view and a
+  quarter ahead, as the page's module asks first). In a browser: `dotnet run --project samples/LiveGrid.Sample` (http://localhost:5970).
 - JS, the grid's page body (tapline-grid.js), in Node: scrolling scaled past the safe height (the thumb at 90 % shows
   90 %, the bottom the last row; the wheel by rows, the row standing through the browser's rounding); the pre-fetch's
   steps at each boundary on a fake clock (150 ms and 500 ms medians, hold-backs of 30 s doubling to 5 min); a fling's
-  lead (as mip-chart projects a pan); requests held to an interval and by the answers outstanding; the order value and
-  cells as the server writes them, and as LiveGrid describes its columns (unsigned, float32, DateTime ticks, enums of
-  any size and sign, Guids, a percentage by place); flashes started where they have got to since the change (a negative
-  delay, none once over, on its boundaries) and arrival stamps read as written; a session's real frames through the
-  client, each step's order and changed keys. Its DOM in a browser, laid out as LiveGrid lays it out (keys, focus and
+  lead (as mip-chart projects a pan), and a steady pace's, stepped scrolling included, covering an answer's trip (from
+  setting off after rest, or turning back; rows let in above moving its samples); the overscan, held either side as
+  the reader moves, the lead ahead if further; a view ahead at least, unless the link carries fewer rows in time (the
+  live top on such a link: the pre-fetch's quarter view below); the first window before any overscan is told (the
+  rows LiveGrid reads from the body's height); racing up at two views a second; requests held to an interval and by the
+  answers outstanding (asked again, as a grid back in sight does, even the same window); the order value (by key, the header alone; its keys placed greatest first, as a .NET Guid or an
+  integer compares) and cells as the server writes them, and as LiveGrid describes its columns (unsigned, float32, DateTime ticks, enums of
+  any size and sign, Guids, a percentage by place), by their .NET formats (a blotter's custom ones, a time's pattern, the
+  default G), to significant figures (scientific past the most digits, the tooltip whole) — held to .NET's own output (`fixtures/formats.json`, the C# run's: some 130,000 numbers of every integer
+  type, decimals, doubles and floats — edges, ties, random bits — by every standard format and custom ones, 5,000 times
+  by standard and custom patterns, and Guids, in 27 cultures that differ in separators, groups, patterns, signs, names,
+  genitive months and calendars: all alike, in about a third of a second); flashes started where they
+  have got to since the change (a negative delay, none once over, on its boundaries) and arrival stamps read as
+  written, or from a UUIDv7 key, trusted while the last live arrivals' least lag is within 500 ms either way, and the
+  page's round trip more the later way (a 16 kbit/s link's 3.3 s lags trusted on its 5.6 s trips); the rows arrived at
+  the live top, those above the row that was first, or the first still held — by key, every row above it once more
+  arrived than the window holds; flashes on a slow link run from the stamp as late as the link usually is (the median of
+  the last eight states' slowest lags), or from when heard if sooner, none measured: from when heard; a new view's rows late once past twice the page's round trip (at most 500 ms), the rows drawn then greyed;
+  the status value read as written (its overscan, none told null; the source moved while passive) and the status line from it, the order and the page (totals estimated or at least,
+  freshness, a refusal marked, the selection); a session's real frames through the client, each step's order, status
+  value and changed keys (held, arrivals above: the status alone). Its DOM in a browser, laid out as LiveGrid lays it out (keys, focus and
   selection by key too): `node tests/js/serve.mjs 5966`, then `/tests/js/grid-harness.html` (a server played in the
   page; `?rows=50000000` for scaled scrolling, `?visible=1` for a pane in the background, driven by
   `harness.body.draw()`).
@@ -286,8 +329,9 @@ Debug reports what the writes that found the ring full allocated. Highlights:
 - Stale data on instance death: a station's top-of-book function, handed over with its route; the station withdrawn —
   one frame: the degraded book (best bid and ask, sizes zero), the error with the station's payload, the service-down
   notice; that frame lost, all of it again after the reconnect. The circuit hub's SignalR timeouts (10 s, pings at 3 s)
-  unless the app set its own; the browser's server timeout — SignalR's until 5 s are seen, then the floor (10 s) at a
-  heartbeat a second, four times a 7 s gap (28 s), back to the floor as it eases.
+  unless the app set its own, and the page's pings every 3 s (startBlazor, in JS: before the page's own configureSignalR); the browser's server timeout — SignalR's until 5 s are seen, then the floor (10 s) at a
+  heartbeat a second; past a 1.5 s gap, a slow path, SignalR's 30 s (more than four times a 2 s gap, or a 7 s gap's
+  28 s), back to the floor as it eases.
 - Reconciled at a rebind: an overflow's error written into a frame lost with the connection, and a subscription the app
   closed server-side meanwhile — the client's re-sent activations answered with an `Ended` record for each (Overflowed;
   None), nothing for the one still held; once forgotten (70 more ended since), `Gone`; an id never issued, ignored.
@@ -320,6 +364,10 @@ Debug reports what the writes that found the ring full allocated. Highlights:
 - A slow client 4,000 changes behind on a ~450-row book churning at its hot levels gets 50 deltas of 18 rows rather
   than 51 snapshots, reconstructing exactly through deletes and recycled slots; a whole-table watch
   agrees; once every row changed, a snapshot.
+- A delete is its key alone on the wire (op and key; the header counts the deletes), the record as long as its header
+  says; each record's size measured exactly before it's written — a walk of the log, a pass over the slots (a snapshot
+  once that's no more bytes), a key range (no delete for a row it never sent that subscriber) — and the client's
+  replica rebuilding the table from them.
 - Random table updates with fast/slow/very slow taps reconstruct exactly (sequence + checksum on every record),
   including snapshot fallback, slot recycling and client resync.
 - `Fold<long, Add<long>>` matches a reference model; a no-op fold on an absent key leaves nothing behind. The batch ABI
@@ -347,8 +395,12 @@ Debug reports what the writes that found the ring full allocated. Highlights:
 - Flow control, simulated over seven paths ([the table](../docs/architecture.md#flow-control--after-bbr-steered-to-the-shortest-queue)): uncapped, colo and broadband run at the data rate with one
   way's delay as the floor and no worse than the fixed window anywhere fast; 60 Hz holds 60.0 frames/s, interval p99
   ≤ 17.2 ms, wherever the path carries it; 16 kbit/s fresher at the median, ≤ 1.2× at p99.5; after a drop to 16 kbit/s
-  both settle fresher than the fixed window. `TAPLINE_TRACE_PATH=bytes/s,one-way ms[,frame rate[,at s,to bytes/s]]`
-  traces the controller over a path.
+  uncapped settles fresher than the fixed window at the median, 60 Hz within a tenth of it, its tail under half
+  uncapped's — on 16 kbit/s the medians of 13 walks of the book (a few bytes more or less in a frame move one walk's
+  adaptive figures by tens of ms). `TAPLINE_TRACE_PATH=bytes/s,one-way ms[,frame rate[,at s,to bytes/s]]`
+  traces the controller over a path. On 16 kbit/s with 7 KB frames (3.5 s each on the path) and a client that
+  acknowledges only the newest frame waiting — each ack a data frame and the heartbeats behind it — the delivery rate is
+  measured from the data frames: 1,942 B/s of the path's 2,000 (before, never: 0).
 - Slow link (one frame per two heartbeats, as under Chrome's 16 kbit/s throttle where every WebSocket message waits
   for a 750 ms packet tick): the backlog stays ≤ 2 frames and a book + value arrive conflated (404 records for 8,000
   updates). Before, heartbeats were sent every interval and held the window: the backlog grew without bound and no

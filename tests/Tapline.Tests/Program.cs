@@ -56,6 +56,10 @@ var tests = new (string Name, Func<Task> Run)[]
         T.ErrorRaces),
     ("Slow client far behind: a delta of the rows changed (one pass over the slots, no more CPU than a snapshot) — hot rows, deletes, recycled slots; watch agrees; snapshot once all rows changed",
         T.SlowClientScanDelta),
+    ("Unheld deletes: a client behind gets no delete for a row that came and went meanwhile (it never had it) — close behind (a walk of the log) and far behind (a pass over the slots), plain tap and watch alike; a delete for each row it held; a key gone and back again since keeps its delete (conservative); the replica verified",
+        T.UnheldDeletes),
+    ("Key-only deletes: a delete on the wire is its op and key — the header counts the deletes, the record as long as it says — and each record's size is measured exactly first: a walk of the log, a pass over the slots (a snapshot once that's no more bytes), a key range (no delete for a row never sent it); the client's replica rebuilds the table",
+        T.KeyOnlyDeletes),
     ("Fault injection: test connections (same sources, same pump) see a shared injected fault — tables, values, watches — while sources and production carry on; recover; real faults reach all",
         T.FaultInjection),
     ("Review regressions: degrade runs once per faulted tap even when blocked; a tier change applies mid-debt",
@@ -111,8 +115,10 @@ var tests = new (string Name, Func<Task> Run)[]
         T.SlowLinkHeartbeats),
     ("Ack overdue: a client that stops acknowledging (a blocked page) — state waits, then goes as one record each, the newest; a busy topic's messages and a mailbox's keep going, in order, none overflowing; a message ordered after state brings it along; nothing spins; off, state goes on",
         T.AckOverdueHoldsState),
-    ("Path simulation: fixed window vs adaptive vs adaptive 60 Hz, colo to 16 kbit/s, bursts, a capacity drop — update latency, cadence, queue",
+    ("Path simulation: fixed window vs adaptive vs adaptive 60 Hz, colo to 16 kbit/s, bursts, a capacity drop — update latency, cadence, queue (on 16 kbit/s, the medians of 13 walks of the book)",
         T.PathSimulation),
+    ("Flow control's delivery rate on 16 kbit/s, data frames longer on the path than the heartbeat interval, each acknowledgement covering a data frame and the heartbeats behind it (a transport sending only the newest waiting): measured from the data frames, within a quarter of the path's",
+        T.FlowControlCoalescedAcks),
     ("Path simulation: an app-limited link on colo (a turn's records every half second, seconds of heartbeats alone, a receiver late now and then) — no turn held back",
         T.BurstSimulation),
     ("Frame cadence changed at runtime: uncapped → 60 → 30 → 120 → uncapped holds each rate; a higher cap applies from the last frame, not the old period",
@@ -335,41 +341,59 @@ var tests = new (string Name, Func<Task> Run)[]
         T.StreamingRateFromQuery),
     ("Fault injection: only connections opened under /test become test connections (a circuit: by its page); invalid options rejected; the shared cycle runs",
         T.FaultInjectionPages),
-    ("Grid rules: a held total kept within 1 % of the one held (a row past it either way taken afresh; set where the rows end; grown by rows let in); a read for changes due its cadence after the last began (a microsecond before: not; on it and after: yes); the order value written and read back, another format or one cut short not one",
+    ("Grid rules: a held total kept within 1 % of the one held (a row past it either way taken afresh; set where the rows end; grown by rows let in); a read for changes due its cadence after the last began (a microsecond before: not; on it and after: yes); the order value and the status value written and read back, another format or one cut short not one; the overscan told, what the link's delivery rate carries in a second in powers of two (up once the next fits; down once a quarter fewer than told fit, only while the link is the limit), and a resting reader's step (doubled, by no more than four fills, to the page's most; halved, the link the limit, never below the fill)",
         T.GridRules),
     ("Grid window, live and held: the live top at ranks, arrivals pushing rows down; held, arrivals above counted and nothing sent, a row in the window changed sent alone (the order unchanged), rows deleted in it and above keeping the rest in place, far reads placed by rank past the rows not shown; back at the top, live; a refusal kept stale with its reason until answered; a source's key twice refused; a new sort and filter from its top, the old rows gone; a key located, held about it, or not found and nothing changed",
         T.GridWindowLiveHeld),
-    ("Grid letting rows in: held with fifty above — at 200 none, at 199 thirty, no more until the page has applied them (its request read in its own positions), then no more than it fetches above, none fetching none; a window reaching the top takes them; back at the top, live",
+    ("Grid window, held on the page's row: on a slow link the page draws a live window the session has moved on from; asked from it with the key of the row at its view's first position, the hold keeps that row there (thirty arrived since, above and not shown) — unanchored, the row now at that rank stands there instead; the row gone, placed by rank",
+        T.GridWindowAnchoredHold),
+    ("Grid letting rows in: held with fifty above — at 200 none, at 199 thirty, no more until the page has applied them (its request read in its own positions), then no more than it fetches above, none fetching none, none at rest however wide its pre-fetch (only as the reader scrolls up); a window reaching the top takes them; back at the top, live. At the first row shown with a view's worth or more above, held, thirty let in, the window from the top taking them; fewer, live; the live top asked for (the pill, Home), live with five hundred above. Racing up: with fewer above than the view holds, live at once, the window the top's, wherever the reader was; with as many or more, held, as many let in as it fetches above near the top, three views at a time at the first row shown, none further down",
         T.GridLetIn),
-    ("Grid against an oracle: five seeds of random scrolling, jumps, arrivals, updates, deletes, sorts of up to three columns and filters of up to two — every window a run of the view's order worked out apart, at its ranks, the table its rows alone as the source has them; held still, every window the oracle's exactly",
+    ("Grid by key: a source whose own order is its keys', greatest first — at the live top the order its header alone (40 bytes), the rows held the oracle's window placed by their keys; five arriving, five rows in at the top and five out, by key still; held, with its keys; back at the top from far away, its view first with its keys while the rows before linger, then its rest by key; sorted another way, with its keys",
+        T.GridByKey),
+    ("Grid against an oracle: five seeds of random scrolling, jumps, arrivals, updates, deletes, sorts of up to three columns and filters of up to two, its own order by key — every window a run of the view's order worked out apart, at its ranks, the table its rows alone as the source has them (by key at the live top, placed by their keys); held still, every window the oracle's exactly",
         T.GridOracleRuns),
-    ("Grid session on the wire: each request answered by a rendezvous, the page's replica (rows verified, order) the oracle's window; held, arrivals above read at its cadence and nothing sent; a row in view changed: one cut; back at the top, live",
+    ("Grid session on the wire: each request answered by a rendezvous, the page's replica (rows verified, order) the oracle's window — live, by key, the order its header alone and the rows placed by their keys; held, with its keys; held, arrivals above read at its cadence and the status value alone sent (five above; not the rows, nor their order); a row in view changed: one cut; back at the top, live, none above",
         T.GridSessionWire),
+    ("Grid session's first answers alone: on a slow link a window's answers merge on their way, the first waiting for the rest — the live top's view alone, its rest once the page has it; held from it on the page's row with thirty arrived since, the view and a view below alone, thirty above in the status; a request whose view the window holds answered as it stands, not widened; the page having the first, the last request's window",
+        T.GridSessionFirstAlone),
+    ("Grid overscan told by the link: under fixed flow control, or with no time for the fill, none (the page's own count); adaptive, none before the link's measured, then what its delivery rate carries in a second, both sides, in powers of two",
+        T.GridOverscan),
+    ("Grid overscan climbing while the reader rests: held, the page having asked with the overscan last told and rested a second since, its state sent, the overscan told climbs a step in the status alone — doubled, by no more than four fills — to the page's most; not before the reader has rested a second, nor again before the page has asked with it; its state waiting longer than a step takes, halved with the rows; back at the live top, afresh, a step each four seconds",
+        T.GridOverscanClimb),
     ("Grid session's cadence on a clock moved by hand: live, a change read 100 ms after the last read began (a microsecond before: not), at once past it; held, 500 ms likewise; hidden, nothing read and the subscription's interval long; shown, read at once; a request, at once",
         T.GridSessionCadence),
+    ("Grid session passive (hidden, or out of view): the source's changes not read, the status saying once that the source moved past the page's rows (alone: rows and order as they were), nothing more as it moves again; back in sight, its window asked again, read at once, its answer the rows now and the flag unsaid — the request alone saying it's shown, should the word of that be lost",
+        T.GridSessionPassive),
     ("Grid session cancelled: a jump cancels the read in flight (its token in the source), the older never answered; a newer request touching it lets it finish and is read next; disposed mid-read, the read cancelled, the session ended and its subscription closed; no unobserved exception",
         T.GridSessionCancel),
     ("Grid session's jumps, the view first: a jump's view read and sent alone with its rendezvous, then the rows round it read from the view's; a scroll the window holds read whole, in one; one past it (outrunning the pre-fetch), its view first, the window's other rows left on the page until the rest and none sent again; a newer jump between a jump's stages gives up the first's rest (its read cancelled), the newer's view read, the rows left gone with it",
         T.GridSessionJumps),
-    ("Grid session's views: a new sort or filter numbered, its rows' order saying which; the read in flight cancelled, a request waiting dropped, and one asked in the view before, crossing it, dropped unread — none answered; the page's request in the new view answered",
+    ("Grid session's views: a new sort or filter numbered, its rows' order saying which; the read in flight cancelled, a request waiting dropped, and one asked in the view before, crossing it, dropped unread — none answered; the page's request in the new view answered; the source told once of each view the grid is done with — once a newer one's answered, not as it's read — and as the grid closes",
         T.GridSessionViews),
-    ("Grid session's bounds: options that can't work refused when made, saying why; a client's grids at most so many (another client's its own); a window wider than its most refused, saying why; the session over with its subscription",
+    ("Grid session's bounds: options that can't work refused when made, saying why (a negative overscan fill among them); a client's grids at most so many (another client's its own); a window wider than its most refused, saying why; the session over with its subscription",
         T.GridSessionBounds),
     ("Grid allocation: a held window sliding through 100,000 rows, a row in and out and the order each answer — 10,000 answers on the thread, nothing allocated; 2,000 through the session's loop",
         T.GridAllocation),
     ("Grid memory: a session holds its window, not its view — as much over 50,000,000 rows as over 5,000",
         T.GridMemory),
-    ("Grid on the wire, uncompressed, the blotter's rows (136 B) and UUID keys: bytes a row entering, scrolling a view at a time (S1: at most 400), and an arrival at the live top — deletes as Tapline sends them (decision (k))",
+    ("Grid on the wire, uncompressed, the blotter's rows (136 B) and UUID keys: bytes a row entering, scrolling a view at a time (S1: at most 400), and an arrival at the live top, with every key and by key (a row in, a row out and the order's header) — a row out its key alone",
         T.GridWireCost),
-    ("LiveGrid's columns resolved against their rows: each field where it is in the bytes Tapline sends (laid out by the runtime, not as marshalled; read back as written), its kind from its type (integers signed or not, floats, bools, enums and their names, DateTime ticks, Guids, inline byte arrays as text, a record struct's properties), a scale making a fixed, a percentage of fields by place",
+    ("LiveGrid's columns resolved against their rows: each field where it is in the bytes Tapline sends (laid out by the runtime, not as marshalled; read back as written), its kind from its type (integers signed or not, floats, bools, enums and their names, DateTime ticks, Guids, inline byte arrays as text, a record struct's properties), a scale making a fixed, a percentage of fields by place; formats .NET's (none: its default, a time's G spelt out), alignment, classes, overflow, figures; each as wide, in ch, as its format writes a wide value of its kind (figured, its widest over magnitudes), or its label",
         T.LiveColumnsResolved),
-    ("LiveGrid's columns refused, saying why: none, no name, a name twice, frozen after not, no such field (naming those there are), a decimal, a struct of its own, a kind that can't read its field, fixed without a scale, an enum without names, names or Of where they don't belong, a percentage of nothing or of a double or sorted by, widths, scales and figures out of range",
+    ("LiveGrid's formats in a culture, as the page gets it: what differs from the invariant culture's (a date's names only where a pattern writes them; genitive months where a culture has them); a culture of another calendar in its Gregorian one; a time's standard format spelt out, o, r, s and u in the invariant culture's names",
+        T.GridFormatsCulture),
+    ("LiveGrid's columns refused, saying why: none, no name, a name twice, frozen after not, no such field (naming those there are), a decimal, a struct of its own, a kind that can't read its field, fixed without a scale, an enum without names, names or Of where they don't belong, a percentage of nothing or of text or sorted by, formats their values' types refuse (or of too many digits, or for kinds that have none), figures out of range or of what isn't a number written as a decimal, widths that aren't CSS lengths, scales out of range, more columns than the stylesheet places; an arrival time from a field that isn't one, from a field and the key both, or from a key that isn't a Guid",
         T.LiveColumnsRefused),
-    ("LiveGrid's keys as the page holds them (a character a byte, as tapline.js keys its replica) and back, anything else no key; text written as the page reads it, cut at a character's end and flagged",
+    ("LiveGrid's keys as the page holds them (a character a byte, as tapline.js keys its replica) and back, anything else no key; a UUIDv7's time where the page reads it from its key; text written as the page reads it, cut at a character's end and flagged",
         T.LiveGridKeysAndText),
     ("LiveGrid rendered statically: refused where it would be, with the reason and the render mode to give it; no grid",
         T.LiveGridStaticRefused),
-    ("Fixtures: frames for the JS client test", T.WriteJsFixtures)
+    ("LiveGrid's sorts by a heading's click: ascending first (sorted by it alone, then reversed, and again), or descending first as a blotter sorts (then ascending, then the source's own order); shift-clicked, added the first way, reversed, taken out; a column named in any case",
+        T.LiveGridSorts),
+    ("LiveGrid's first window, read before the page asks, from the body's height: the rows in view and a quarter of them ahead (as the page's module asks first), in the view asked in, within the window's bound; no height, none",
+        T.LiveGridFirstWindow),
+    ("Fixtures: frames for the JS client test, and .NET's formats for the grid's cells", T.WriteJsFixtures)
 };
 
 // TAPLINE_TEST=<part of a name>: only those; TAPLINE_TEST_REPEAT=n: each n times (an intermittent failure).
@@ -1464,11 +1488,188 @@ internal static partial class T
     }
 
     /// <summary>
+    ///     A delete is its key alone on the wire: a delta's header says how many it carries, each entry is its op and key (an
+    ///     upsert's row after), and the record is as long as the header says. Its size is measured exactly before it's
+    ///     written, however it's written — a walk of the log, a pass over the slots (a snapshot once that's no more bytes),
+    ///     a key range (no delete for a row never sent that subscriber) — and the client's replica rebuilds the table.
+    /// </summary>
+    public static Task KeyOnlyDeletes()
+    {
+        const int upsert = 1 + sizeof(long) + 16, delete = 1 + sizeof(long); // (op, key and a Guid's row; op and key)
+        var buffer = new byte[1 << 16];
+
+        // The record: as long as its header says, its deletes those it counts — each its key alone.
+        int Deletes(ReadOnlySpan<byte> record, string what)
+        {
+            int count = (int)BinaryPrimitives.ReadUInt32LittleEndian(record[26..]),
+                deletes = (int)BinaryPrimitives.ReadUInt32LittleEndian(record[34..]), seen = 0, at = Wire.TableHeader;
+            for (var i = 0; i < count; i++)
+                if (record[at] == Wire.OpDelete) (seen, at) = (seen + 1, at + delete);
+                else at += upsert;
+            Assert(seen == deletes && at == record.Length && Tapline.Client.TableReplica.LengthOf(record) == record.Length,
+                $"{what}: {deletes} deletes said, {seen} sent; {record.Length} B, the entries {at} B");
+            return deletes;
+        }
+
+        var table = new Table<long, Guid>("KD", 1 << 10);
+        void Change(Action<Table<long, Guid>.Updater> change)
+        {
+            using var u = table.BeginUpdate();
+            change(u);
+            u.Complete();
+        }
+
+        for (long k = 0; k < 100; k++) Change(u => u.Set(k, Guid.CreateVersion7()));
+        var replica = new Tapline.Client.TableReplica();
+        var cursor = Cursor.Snapshot;
+        (int Bytes, int Deletes, bool Reset) Send(string what)
+        {
+            var measured = table.Measure(cursor);
+            var n = table.Write(7, ref cursor, buffer);
+            Assert(n == measured, $"{what}: measured {measured} B, written {n} B");
+            var record = buffer.AsSpan(0, n);
+            var deletes = Deletes(record, what);
+            Assert(replica.Apply(record) && replica.Checksum == table.Checksum && replica.Count == table.Count,
+                $"{what}: the replica rebuilt ({replica.Count} rows of {table.Count})");
+            return (n - Wire.TableHeader, deletes, (record[5] & Wire.FlagReset) != 0);
+        }
+
+        Assert(Send("the snapshot") == (100 * upsert, 0, true), "the snapshot: its rows");
+
+        // Close behind (a walk of the log): ten go, five come, three change; a row comes and goes (never had: no delete).
+        for (long k = 0; k < 10; k++) Change(u => u.Delete(k));
+        for (long k = 100; k < 105; k++) Change(u => u.Set(k, Guid.CreateVersion7()));
+        for (long k = 20; k < 23; k++) Change(u => u.Set(k, Guid.CreateVersion7()));
+        Change(u => u.Set(500L, Guid.CreateVersion7()));
+        Change(u => u.Delete(500L));
+        var close = Send("close behind");
+        Assert(close == (10 * delete + 8 * upsert, 10, false),
+            $"close behind: ten deletes, {delete} B each, and eight rows: {close}");
+
+        // Far behind (a pass over the slots): a row changed often, 30 go.
+        for (var i = 0; i < 600; i++) Change(u => u.Set(50L, Guid.CreateVersion7()));
+        for (long k = 60; k < 90; k++) Change(u => u.Delete(k));
+        var far = Send("far behind");
+        Assert(far == (30 * delete + upsert, 30, false), $"far behind: thirty deletes and the row changed: {far}");
+
+        // Far behind again, every row changed: no fewer bytes than a snapshot, so a snapshot — its rows alone.
+        for (var i = 0; i < 600; i++) Change(u => u.Set(51L, Guid.CreateVersion7()));
+        var live = table.Count;
+        for (long k = 0; k < 105; k++)
+            if (k is < 10 or (>= 60 and < 90)) continue;
+            else Change(u => u.Set(k, Guid.CreateVersion7()));
+        Change(u => u.Delete(104L));
+        var whole = Send("every row changed");
+        Assert(whole == ((live - 1) * upsert, 0, true), $"every row changed: a snapshot of {live - 1} rows: {whole}");
+
+        // A key range (a watch member's): no delete for a row never sent it; its size measured exactly, with the state.
+        var ranged = new Table<long, Guid>("KR", 1 << 10);
+        void ChangeRange(Action<Table<long, Guid>.Updater> change)
+        {
+            using var u = ranged.BeginUpdate();
+            change(u);
+            u.Complete();
+        }
+
+        for (long i = 0; i < 20; i++)
+            ChangeRange(u =>
+            {
+                u.Set(i << 8 | 1, Guid.CreateVersion7()); // (in range: its first byte 1)
+                u.Set(i << 8, Guid.CreateVersion7());
+            });
+        byte[] prefix = [1];
+        var state = new RangeState();
+        var at = Cursor.Snapshot;
+        (int Bytes, int Deletes) SendRange(string what)
+        {
+            var measured = ranged.MeasureRange(at, prefix, state);
+            var n = ranged.WriteRange(9, ref at, buffer, prefix, state);
+            Assert(n == measured, $"{what}: measured {measured} B, written {n} B");
+            return n == 0 ? (0, 0) : (n - Wire.TableHeader, Deletes(buffer.AsSpan(0, n), what));
+        }
+
+        Assert(SendRange("the range's snapshot") == (20 * upsert, 0), "the range's snapshot: its twenty rows");
+        for (long i = 0; i < 3; i++) ChangeRange(u => u.Delete(i << 8 | 1));
+        for (long i = 3; i < 6; i++) ChangeRange(u => u.Delete(i << 8));
+        ChangeRange(u => u.Set(99L << 8 | 1, Guid.CreateVersion7()));
+        ChangeRange(u => u.Delete(99L << 8 | 1));
+        var ranges = SendRange("the range behind");
+        Assert(ranges == (3 * delete, 3), $"the range behind: three deletes in range, none for the row never sent it: {ranges}");
+        ChangeRange(u => u.Delete(7L << 8));
+        Assert(SendRange("only out of range") == (0, 0), "only out of range: no record");
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
     ///     A slow client far behind (well past the point where walking the log costs more than a pass over the slots) gets a
     ///     delta of just the rows changed since its cursor — hot levels, deletions, re-created and brand-new keys in recycled
     ///     slots — not a snapshot of the whole table, and reconstructs exactly; a whole-table watch (sized by Measure first)
     ///     agrees; once as many rows changed as are live, it gets the snapshot.
     /// </summary>
+    public static Task UnheldDeletes()
+    {
+        var registry = new OutletRegistry();
+        var table = new Table<long, long>("UD", 1 << 13);
+        void Change(Action<Table<long, long>.Updater> change)
+        {
+            using var u = table.BeginUpdate();
+            change(u);
+            u.Complete();
+        }
+
+        for (long k = 0; k < 100; k++) Change(u => u.Set(k, k));
+        var s = NewOutlet(registry);
+        var tap = s.Tap(table, activate: true);
+        var watch = s.Watch("w", WatchMember.Of(table));
+        watch.Activate();
+        var c = new RefClient();
+        var scratch = new byte[1 << 20];
+        Drain(s, c, scratch);
+
+        // Behind, close (its delta a walk of the log): 200 rows come and go; ten it holds go; five new stay; one it holds
+        // goes, comes back and goes again; and one it never held does the same.
+        void Behind(long born)
+        {
+            for (var k = born; k < born + 200; k++) Change(u => u.Set(k, 1));
+            for (var k = born; k < born + 200; k++) Change(u => u.Delete(k));
+        }
+
+        Behind(1_000);
+        for (long k = 0; k < 10; k++) Change(u => u.Delete(k));
+        for (long k = 2_000; k < 2_005; k++) Change(u => u.Set(k, 2));
+        Change(u => u.Delete(50L));
+        Change(u => u.Set(50L, 5));
+        Change(u => u.Delete(50L));
+        Change(u => u.Set(3_000L, 3));
+        Change(u => u.Delete(3_000L));
+        Change(u => u.Set(3_000L, 3));
+        Change(u => u.Delete(3_000L));
+        Drain(s, c, scratch);
+        foreach (var (mirror, what) in new[] { (c.Tables[tap.Id], "tap"), (c.Groups[watch.Id].Tables[0], "watch") })
+        {
+            AssertMirror(mirror, table, $"close behind, its {what}");
+            Assert(mirror is { Failures: 0, Deletes: 12, UnheldDeletes: 1 },
+                $"close behind, its {what}: a delete for each row it held that went (eleven) — none for the 200 that came and " +
+                $"went, but one for the key it never held that went and came back (kept: conservative) ({mirror.Deletes} deletes, " +
+                $"{mirror.UnheldDeletes} of keys it didn't hold)");
+        }
+
+        // Behind, far (its delta a pass over the slots): many changes to a row it holds, 200 rows coming and going.
+        var (deletes, unheld) = (c.Tables[tap.Id].Deletes, c.Tables[tap.Id].UnheldDeletes);
+        for (var i = 0; i < 3_000; i++) Change(u => u.Set(99L, i));
+        Behind(5_000);
+        Change(u => u.Delete(98L));
+        Drain(s, c, scratch);
+        foreach (var (mirror, what) in new[] { (c.Tables[tap.Id], "tap"), (c.Groups[watch.Id].Tables[0], "watch") })
+        {
+            AssertMirror(mirror, table, $"far behind, its {what}");
+            Assert(mirror.Failures == 0 && mirror.Deletes - deletes == 1 && mirror.UnheldDeletes == unheld,
+                $"far behind, its {what}: the one it held that went — none for the 200 ({mirror.Deletes - deletes} deletes)");
+        }
+
+        return Task.CompletedTask;
+    }
+
     public static Task SlowClientScanDelta()
     {
         var registry = new OutletRegistry();
@@ -3723,8 +3924,8 @@ internal static partial class T
         var expiring = await publisher.SubscribeAsync(s, "told");
         await Task.Delay(120);
         s.Heartbeat();
-        Assert(await NextNotice(told) is { Notice.Remaining: 0 } && !told.Live,
-            "an orphan's expiry is a notice too: none left, the provider (acting on notices) stops");
+        Assert(await NextNotice(told) is { Notice.Remaining: 0 }, "an orphan's expiry is a notice too: none left");
+        Assert(!told.Live, "…the provider (acting on notices) stops");
         var other = NewOutlet(registry);
         await publisher.SubscribeAsync(other, "told");
         var renewed = told.Epoch;
@@ -3755,15 +3956,11 @@ internal static partial class T
     }
 
     /// <summary>The next step 2 or end relayed to <paramref name="provider" />, or null if none comes within a second.</summary>
+    /// <summary>The provider's next relayed step 2 or end, or null: waited for up to 10 s (<see cref="Eventually" />).</summary>
     private static async Task<object?> NextRelayed(TestProvider provider)
     {
-        for (var i = 0; i < 200; i++)
-        {
-            if (provider.Relayed.TryDequeue(out var m)) return m;
-            await Task.Delay(5);
-        }
-
-        return null;
+        object? m = null;
+        return await Eventually(() => provider.Relayed.TryDequeue(out m)) ? m : null;
     }
 
     public static async Task ProviderEndpoints()
@@ -3903,16 +4100,48 @@ internal static partial class T
     ///     Calls the router's provider heartbeat every 10 ms until <paramref name="done" /> (at most 2 s); false if it
     ///     never was.
     /// </summary>
-    private static async Task<bool> HeartbeatUntil(Publisher publisher, Func<bool> done)
+    /// <summary>Heartbeats the providers every 10 ms until <paramref name="done" /> holds, or 10 s pass (<see cref="Eventually" />).</summary>
+    private static Task<bool> HeartbeatUntil(Publisher publisher, Func<bool> done)
     {
-        for (var i = 0; i < 200; i++)
+        return Eventually(done, publisher.HeartbeatProviders, every: 10);
+    }
+
+    /// <summary>
+    ///     Waits for <paramref name="done" />, looked at every <paramref name="every" /> ms — <paramref name="each" /> run
+    ///     between looks (a heartbeat, frames drained) — up to <paramref name="ms" /> (10 s): true if it held. What a test
+    ///     waits for happens in milliseconds; the deadline is for a machine too loaded to run it sooner, and a passing test
+    ///     never waits it out. (What a test expects not to happen it waits a set time for instead: a fixed delay.)
+    /// </summary>
+    private static async Task<bool> Eventually(Func<bool> done, Action? each = null, int ms = 10_000, int every = 5)
+    {
+        var until = Deadline(ms);
+        while (true)
         {
             if (done()) return true;
-            publisher.HeartbeatProviders();
+            if (Stopwatch.GetTimestamp() >= until) return false;
+            each?.Invoke();
+            await Task.Delay(every);
+        }
+    }
+
+    /// <summary>The Stopwatch timestamp <paramref name="ms" /> from now (10 s): a wait's deadline.</summary>
+    private static long Deadline(int ms = 10_000)
+    {
+        return Stopwatch.GetTimestamp() + ms * Stopwatch.Frequency / 1000;
+    }
+
+    /// <summary>
+    ///     Runs <paramref name="each" /> every 10 ms for <paramref name="ms" />: a stretch of time a test needs to pass with
+    ///     something going on (heartbeats past a timeout many times over), by the clock, however few rounds it gets.
+    /// </summary>
+    private static async Task For(int ms, Action each)
+    {
+        var until = Deadline(ms);
+        while (Stopwatch.GetTimestamp() < until)
+        {
+            each();
             await Task.Delay(10);
         }
-
-        return done();
     }
 
     public static async Task ProviderInstances()
@@ -3942,8 +4171,9 @@ internal static partial class T
         DrainFrames(s, owner, c);
 
         // Heartbeats while it holds routes — to the instance expected, one at a time — answered as itself: alive.
+        await For(2_000, publisher.HeartbeatProviders); // (its timeout many times over)
         Assert(
-            !await HeartbeatUntil(publisher, () => t1.IsClosed) && station.Heartbeats > 10 &&
+            !t1.IsClosed && station.Heartbeats > 10 &&
             station.LastExpected == first && idle.Heartbeats == 0,
             "answered as itself, past the timeout many times over: alive; heartbeats to the instance expected; none to an instance without routes");
 
@@ -4003,7 +4233,7 @@ internal static partial class T
             throw new UnreachableException();
         };
         Assert(await HeartbeatUntil(publisher, () => t3.IsClosed), "silent past the timeout: dead");
-        await Task.Delay(20);
+        await Eventually(() => abandoned); // (the check in flight cancelled on the router's own time)
         Assert(
             (await t3.Completion)?.Code == FaultCode.ServiceDown && station.Heartbeats == before + 1 && abandoned &&
             publisher.InstancesDown == 2,
@@ -4370,7 +4600,7 @@ internal static partial class T
         while (onA.Count(x => x.Client == 0) < 2) await Subscribe(0);
         Assert(onA.Count == 7 && onB.Count >= 6, $"routes: {onA.Count} on a, {onB.Count} on b");
         var serviceA = onA[0].Tap.Binding.NodeId;
-        for (var i = 0; i < 20 && pa.Relayed.Count < onA.Count; i++) await Task.Delay(5);
+        await Eventually(() => pa.Relayed.Count >= onA.Count);
         while (pa.Relayed.TryDequeue(out _))
         {
         } // (their activations)
@@ -4401,7 +4631,7 @@ internal static partial class T
         Assert(allB && pa.Subscribes == asked, "draining: no step 1s to it — one way, whatever it reports after");
 
         // Its clients let go one at a time, evenly over the 600 ms — each with all its routes there at once.
-        for (var i = 0; i < 200 && closedAt.Count < onA.Count; i++) await Task.Delay(10);
+        await Eventually(() => closedAt.Count >= onA.Count);
         Assert(closedAt.Count == onA.Count, $"all its routes let go ({closedAt.Count} of {onA.Count})");
         var perClient = onA.GroupBy(x => x.Client)
             .Select(g => (Min: g.Min(x => closedAt[x.Tap]), Max: g.Max(x => closedAt[x.Tap]))).OrderBy(x => x.Min)
@@ -4421,13 +4651,11 @@ internal static partial class T
         Assert(!pa.Relayed.Any(m => m is Unsubscription), "nothing relayed for the routes it let go (it asked for it)");
 
         // Each client told drained — not down, and not waiting for up: it subscribes again at once, onto b.
-        for (var i = 0; i < 5; i++)
+        await Eventually(() =>
         {
-            publisher.HeartbeatProviders();
-            await Task.Delay(10);
-        }
-
-        foreach (var c in clients) DrainFrames(c.Outlet, c.Owner, c.Client);
+            foreach (var c in clients) DrainFrames(c.Outlet, c.Owner, c.Client);
+            return clients.All(c => c.Client.ServicesDrained.Count > 0);
+        }, publisher.HeartbeatProviders, every: 10);
         Assert(
             clients.All(c =>
                 c.Client.ServicesDrained.SequenceEqual([serviceA!.Value]) && c.Client.ServicesDown.Count == 0 &&
@@ -4439,7 +4667,7 @@ internal static partial class T
         // A new instance at a: it takes step 1s again.
         pa.Instance = ProviderInstance.Start("a", At("a"));
         var backOnA = false;
-        for (var i = 0; i < 20 && !backOnA; i++)
+        for (var until = Deadline(); !backOnA && Stopwatch.GetTimestamp() < until;)
         {
             publisher.HeartbeatProviders();
             await Task.Delay(10);
@@ -4494,11 +4722,7 @@ internal static partial class T
             $"none reached: unavailable at once, not after SubscribeTimeout ({timer.ElapsedMilliseconds} ms)");
 
         a.Set(true); // (its link up: probed at once, its answer the waiting client's up)
-        for (var i = 0; i < 100 && client.ServicesUp.Count == 0; i++)
-        {
-            await Task.Delay(10);
-            DrainFrames(outlet, owner, client);
-        }
+        await Eventually(() => client.ServicesUp.Count > 0, () => DrainFrames(outlet, owner, client), every: 10);
 
         Assert(client.ServicesUp.SequenceEqual(["svc"]), "a reached again: the waiting client told the service is up, with no heartbeat");
         Assert((await publisher.SubscribeAsync(outlet, "svc"))?.Provider?.Endpoint == At("a"), "its step 1 answered there");
@@ -4552,7 +4776,7 @@ internal static partial class T
         var overlapped = new bool[viewers.Length];
         var dropped = new bool[viewers.Length];
         byte n = 0;
-        for (var step = 0; step < 300 && (dropped.Take(5).Any(d => !d) || !viewers[5].Old.IsClosed); step++)
+        for (var until = Deadline(); Stopwatch.GetTimestamp() < until && (dropped.Take(5).Any(d => !d) || !viewers[5].Old.IsClosed);)
         {
             publisher.HeartbeatProviders(); // blue checked all along: not deemed dead
             n++;
@@ -4653,18 +4877,6 @@ internal static partial class T
             return p;
         }
 
-        static async Task<bool> Until(Func<bool> done, Action? each = null)
-        {
-            for (var i = 0; i < 200; i++)
-            {
-                if (done()) return true;
-                each?.Invoke();
-                await Task.Delay(10);
-            }
-
-            return done();
-        }
-
         // Introduced, named in every message; heartbeats both ways while it holds routes.
         var older = Router(r1);
         var refusedBy = new List<ProviderEndpoint>();
@@ -4687,8 +4899,7 @@ internal static partial class T
         older.HeartbeatProviders();
         Assert(provider.LastProbe?.Router == r1 && provider.Routers.RoutesOf(r1) == 1,
             "its health checks too; the provider keeps the route under it");
-        await Until(() => false,
-            provider.Routers.HeartbeatRouters); // the provider's heartbeats, 2 s — its timeout many times over
+        await For(2_000, provider.Routers.HeartbeatRouters); // the provider's heartbeats, 2 s — its timeout many times over
         Assert(provider.Lost.IsEmpty && provider.Routers.RoutesOf(r1) == 1,
             "the router answering the provider's heartbeats: alive");
 
@@ -4731,7 +4942,7 @@ internal static partial class T
         var (o3, _, _) = Viewer();
         var t3 = (await far.SubscribeAsync(o3, "far"))!;
         t3.Activate();
-        Assert(await Until(() => !cut.Lost.IsEmpty, cut.Routers.HeartbeatRouters),
+        Assert(await Eventually(() => !cut.Lost.IsEmpty, cut.Routers.HeartbeatRouters, every: 10),
             "the provider's heartbeats unanswered: the router presumed dead");
         Assert(
             cut.Lost.TryDequeue(out var gone) && gone.Router == far.Router && gone.Routes.Length == 1 &&
@@ -4752,7 +4963,7 @@ internal static partial class T
         Assert(farHealth.Any(c => c.Event == ServiceHealthEvent.Recovered && c.Reason.Contains("taken back")),
             "the router's log: the instance taken back");
         t3b!.Activate();
-        await Until(() => false, () =>
+        await For(2_000, () =>
         {
             cut.Routers.HeartbeatRouters();
             far.HeartbeatProviders();
@@ -4772,7 +4983,7 @@ internal static partial class T
             throw new UnreachableException();
         }; // it can't answer the router…
         Assert(await HeartbeatUntil(near, () => t4.IsClosed), "…which deems it dead");
-        Assert(await Until(() => !mute.Lost.IsEmpty, mute.Routers.HeartbeatRouters) &&
+        Assert(await Eventually(() => !mute.Lost.IsEmpty, mute.Routers.HeartbeatRouters, every: 10) &&
                mute.Lost.TryDequeue(out var dropped) && dropped.Routes.Length == 1
                && mute.Routers.Admits(near.Router) && mute.Routers.RoutesOf(near.Router) == 0,
             "its own heartbeat answered 'unknown instance': those routes forgotten — the router still served");
@@ -5035,17 +5246,6 @@ internal static partial class T
             return (o, owner, new RefClient());
         }
 
-        static async Task<bool> Until(Func<bool> done)
-        {
-            for (var i = 0; i < 300; i++)
-            {
-                if (done()) return true;
-                await Task.Delay(10);
-            }
-
-            return done();
-        }
-
         var clients = Enumerable.Range(0, 4).Select(_ => Viewer()).ToArray();
         var old = new Tap[clients.Length];
         for (var i = 0; i < clients.Length; i++)
@@ -5065,11 +5265,11 @@ internal static partial class T
         await HeartbeatUntil(router, () => router.Describe().Endpoints.Any(e => e.Load is not null));
         var moving = await pa.Routers.MoveAsync(null, null, TimeSpan.FromMilliseconds(200), TimeSpan.FromSeconds(1), "rebalance");
         Assert(moving is [{ Answer: { Accepted: true, Routes: 4 } }], $"taken: four to move ({string.Join(", ", moving.Select(x => x.Answer))})");
-        var told = await Until(() =>
+        var told = await Eventually(() =>
         {
             foreach (var (o, owner, c) in clients) DrainFrames(o, owner, c);
             return clients.All(c => c.Client.Moves.Count == 1);
-        });
+        }, every: 10);
         Assert(told && clients.Select((c, i) => c.Client.Moves[0]).All(m => m.GraceMs == 1000) &&
                clients.Select((c, i) => c.Client.Moves[0].TapId == old[i].Id).All(x => x),
             "each client told to move its one subscription, with its grace");
@@ -5088,7 +5288,7 @@ internal static partial class T
         var code = await old[3].Completion.WaitAsync(TimeSpan.FromSeconds(5));
         Assert(code?.Code == FaultCode.Moved && router.RoutesMoved == 4 && router.RoutesLetGo == 1,
             $"the one not moved in time: let go (Moved) at the grace's end ({code?.Code}, {router.RoutesMoved} moved, {router.RoutesLetGo} let go)");
-        Assert(await Until(() => pa.Relayed.Any(m => m is Unsubscription u && u.Route == new RouteId(clients[3].Outlet.Id, old[3].Id))),
+        Assert(await Eventually(() => pa.Relayed.Any(m => m is Unsubscription u && u.Route == new RouteId(clients[3].Outlet.Id, old[3].Id))),
             "its provider told it ended, as for an unsubscribe");
         DrainFrames(clients[3].Outlet, clients[3].Owner, clients[3].Client);
         Assert(clients[3].Client.Ended.Contains((FaultCode.Moved, old[3].Id, old[3].Id)),
@@ -5213,7 +5413,7 @@ internal static partial class T
         p.Instance = ProviderInstance.Start("p", At("p")); // restarted: every client down — then, it being back, up
         var arrived = new TimeSpan?[clients.Length];
         var start = Stopwatch.GetTimestamp();
-        for (var step = 0; step < 300 && arrived.Any(a => a is null); step++)
+        for (var until = Deadline(); Stopwatch.GetTimestamp() < until && arrived.Any(a => a is null);)
         {
             publisher.HeartbeatProviders();
             for (var i = 0; i < clients.Length; i++)
@@ -5234,15 +5434,14 @@ internal static partial class T
         Assert(span >= 150 && span <= 650, $"spread over the window, not at once: {span:F0} ms");
     }
 
+    /// <summary>
+    ///     The provider's next unsubscription notice, or null: told in milliseconds, on the router's own time — waited for
+    ///     up to 10 s, as long as a loaded machine may keep its thread pool from it.
+    /// </summary>
     private static async Task<(Unsubscription Notice, int RoutesThen)?> NextNotice(TestProvider provider)
     {
-        for (var i = 0; i < 200; i++)
-        {
-            if (provider.Notices.TryDequeue(out var n)) return n;
-            await Task.Delay(5);
-        }
-
-        return null;
+        (Unsubscription, int) n = default;
+        return await Eventually(() => provider.Notices.TryDequeue(out n)) ? n : null;
     }
 
     public static Task EpochArbitration()
@@ -6981,6 +7180,23 @@ internal static partial class T
             }
         }
 
+        // Heartbeats until a step's outcome — the router's, or the client's, frames drained as it goes — 10 s at most.
+        void PumpUntil(Func<bool> done, bool drain = false)
+        {
+            for (var until = Deadline(); !done() && Stopwatch.GetTimestamp() < until;)
+            {
+                publisher.HeartbeatProviders();
+                Thread.Sleep(10);
+                if (drain) DrainFrames(s, owner, c);
+            }
+        }
+
+        // Late to answer: the router's sweep marks it degraded, and tells its clients, in the one heartbeat.
+        bool Late(Guid node)
+        {
+            return publisher.Describe().Instances.Any(i => i.NodeId == node && i.Degraded);
+        }
+
         // The book's station hands over its stale-data function (the top of the book, sizes zero) …
         var book = new Table<Level, long>("DEGRADED-BOOK");
         FillBook(book, 10);
@@ -7013,7 +7229,7 @@ internal static partial class T
         // Late to answer its health check: degraded — told first, then shown its stale data; held, not ended.
         var late = new TaskCompletionSource<HealthReport>(TaskCreationOptions.RunContinuationsAsynchronously);
         bookStation.Health = (_, _) => new ValueTask<HealthReport>(late.Task);
-        Pump(250);
+        PumpUntil(() => Late(bookInstance));
         Assert(s.TryBuildFrame(owner, false, out var f, out var seq), "a frame");
         c.Decode(f);
         c.LastFrame = seq;
@@ -7037,7 +7253,7 @@ internal static partial class T
         Assert(c.Tables[bookTap.Id].Degraded, "held: nothing over the stale state while degraded");
         bookStation.Health = null;
         late.SetResult(new HealthReport(bookStation.Instance!, ProviderStatus.Serving)); // it answers again
-        Pump(60);
+        PumpUntil(() => c.ProviderStates.Last() == (bookInstance, "serving") && !c.Tables[bookTap.Id].Degraded, drain: true);
         DrainFrames(s, owner, c);
         Assert(
             c.ProviderStates.Last() == (bookInstance, "serving") &&
@@ -7047,14 +7263,14 @@ internal static partial class T
 
         // Unhealthy by its own word: degraded at once; healthy again: recovered. A fixed stale value meanwhile.
         priceStation.Status = ProviderStatus.NotServing;
-        Pump(30);
+        PumpUntil(() => c.ProviderStates.Contains((priceTap.Binding.NodeId!.Value, "degraded")), drain: true);
         price.Publish([2]);
         DrainFrames(s, owner, c);
         Assert(
             c.ProviderStates.Contains((priceTap.Binding.NodeId!.Value, "degraded")) && c.Values[priceTap.Id][0] == 0xEE,
             "not serving: degraded, the fixed value shown");
         priceStation.Status = ProviderStatus.Serving;
-        Pump(30);
+        PumpUntil(() => c.ProviderStates.Last() == (priceTap.Binding.NodeId!.Value, "serving"), drain: true);
         DrainFrames(s, owner, c);
         Assert(c.ProviderStates.Last() == (priceTap.Binding.NodeId!.Value, "serving") && c.Values[priceTap.Id][0] == 2,
             "serving again: its current value");
@@ -7062,7 +7278,7 @@ internal static partial class T
         // The last trade again, flagged stale; trades meanwhile held, then in order; gone while degraded: the error, once.
         var lateTrades = new TaskCompletionSource<HealthReport>(TaskCreationOptions.RunContinuationsAsynchronously);
         tradesStation.Health = (_, _) => new ValueTask<HealthReport>(lateTrades.Task);
-        Pump(250);
+        PumpUntil(() => Late(tradesTap.Binding.NodeId!.Value));
         trades.Publish([3]);
         DrainFrames(s, owner, c);
         var got = Of(c, tradesTap);
@@ -7070,13 +7286,13 @@ internal static partial class T
             "the last trade replayed, flagged stale (not a new one); the new one held");
         tradesStation.Health = null;
         lateTrades.SetResult(new HealthReport(tradesStation.Instance!, ProviderStatus.Serving));
-        Pump(60);
+        PumpUntil(() => Of(c, tradesTap).Count == 4, drain: true);
         DrainFrames(s, owner, c);
         Assert(Of(c, tradesTap).Count == 4 && Of(c, tradesTap)[3] is { Seq: 3, Flags: 0 } held && held.Payload[0] == 3,
             "recovered: the trade held meanwhile, in order");
         var gone = new TaskCompletionSource<HealthReport>();
         tradesStation.Health = (_, _) => new ValueTask<HealthReport>(gone.Task);
-        Pump(1000); // degraded (the last trade again), then past its timeout: deemed dead
+        PumpUntil(() => tradesTap.IsClosed); // degraded (the last trade again), then past its timeout: deemed dead
         DrainFrames(s, owner, c);
         Assert(tradesTap.IsClosed && c.Errors.Single() is { Code: FaultCode.ServiceDown } e &&
                e.TapId == tradesTap.Id && Of(c, tradesTap).Count == 5
@@ -11450,7 +11666,7 @@ internal static partial class T
     private static PathResult SimulatePath(Action<OutletOptions> configure, double bytesPerSecond, double oneWayMs,
         double seconds,
         (int Bytes, double Every)? bursts = null, (double At, double BytesPerSecond)? change = null,
-        List<string>? trace = null, double warmSeconds = 2)
+        List<string>? trace = null, double warmSeconds = 2, int seed = 17)
     {
         var clock = new ManualTime();
         var wheel = new TimingWheel(TimeSpan.FromMilliseconds(1), time: clock, autoStart: false);
@@ -11465,7 +11681,7 @@ internal static partial class T
         s.Tap(book, activate: true);
         var probeTap = s.Tap(probe[0], activate: true);
         var c = new RefClient();
-        var rnd = new Random(17);
+        var rnd = new Random(seed); // (the book's walk)
 
         long f = clock.TimestampFrequency,
             start = clock.Now,
@@ -12034,6 +12250,56 @@ internal static partial class T
     }
 
     /// <summary>
+    ///     Adaptive flow control on 16 kbit/s (2,000 B/s, 50 ms each way), a manual clock: 7 KB data frames, 3.5 s each on the
+    ///     path — longer than the heartbeat interval — to a client whose transport sends only the newest acknowledgement
+    ///     waiting (as <c>ITaplineConnection</c> allows, and the .NET client's MagicOnion transport does), so each ack brings
+    ///     home a data frame and the heartbeats queued behind it. The delivery rate is measured from the data frames: within
+    ///     a quarter of the path's.
+    /// </summary>
+    public static Task FlowControlCoalescedAcks()
+    {
+        const long f = 1_000_000; // µs
+        const int pathRate = 2_000, frameBytes = 7_000, heartbeatBytes = 13;
+        const long oneWay = 50_000;
+        var flow = new FlowControl(new OutletOptions(), f, f / 1000);
+        var path = new Queue<(long Arrives, long Seq)>(); // at the client
+        var acks = new Queue<(long Arrives, long Seq)>(); // at the server
+        long seq = 1, linkFree = 0, nextHeartbeat = 0, received = 0, receivedAt = long.MaxValue;
+        for (long now = 0; now < 60 * f; now += 1_000)
+        {
+            while (acks.TryPeek(out var a) && a.Arrives <= now) flow.OnAck(acks.Dequeue().Seq, now);
+
+            void Send(int bytes, bool data)
+            {
+                flow.OnSent(seq, bytes, data, tookEverything: !data, now);
+                linkFree = Math.Max(linkFree, now) + bytes * f / pathRate;
+                path.Enqueue((linkFree + oneWay, seq++));
+            }
+
+            if (now >= nextHeartbeat) // a heartbeat a second, whatever is in flight
+            {
+                Send(heartbeatBytes, false);
+                nextHeartbeat += f;
+            }
+
+            if (flow.HasRoom && flow.PaceAllows(now) && now >= flow.SpacedUntil) Send(frameBytes, true); // (data always ready)
+            else flow.MarkLimited();
+
+            while (path.TryPeek(out var p) && p.Arrives <= now) (received, receivedAt) = (path.Dequeue().Seq, now);
+            if (received > 0 && now - receivedAt >= 10_000) // quiet 10 ms: the newest acknowledgement waiting goes, alone
+            {
+                acks.Enqueue((now + oneWay, received));
+                (received, receivedAt) = (0, long.MaxValue);
+            }
+        }
+
+        var rate = flow.DeliveryRate;
+        Notes.Add($"coalesced acks on 16 kbit/s, 7 KB frames: delivery rate {rate:N0} B/s (the path's {pathRate:N0})");
+        Assert(Math.Abs(rate - pathRate) <= pathRate / 4, $"the delivery rate measured from the data frames: {rate:N0} B/s");
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
     ///     The old fixed window (2 frames), adaptive flow control, and adaptive at 60 Hz, over paths from colo to 16 kbit/s:
     ///     update latency (probe publish → arrival, delay one way included), data frames per second, worst FIFO queue.
     /// </summary>
@@ -12113,13 +12379,43 @@ internal static partial class T
         foreach (var i in new[] { 3, 5 }) // bursts sharing the FIFO, a capacity drop: no worse than the fixed window
             Assert(R(i, Adaptive).AgeP995 <= R(i, Fixed).AgeP995,
                 $"{paths[i].Name}: adaptive p99.5 {R(i, Adaptive).AgeP995:F1} ms > fixed {R(i, Fixed).AgeP995:F1} ms");
-        // 16 kbit/s: a frame takes 225 ms to send. Fresher at the median; probing for more bandwidth costs a little at the tail.
-        Assert(R(4, Adaptive).AgeP50 <= R(4, Fixed).AgeP50 && R(4, Adaptive).AgeP995 <= 1.2 * R(4, Fixed).AgeP995,
-            $"16 kbit/s: adaptive p50 {R(4, Adaptive).AgeP50:F0} / p99.5 {R(4, Adaptive).AgeP995:F0} ms vs fixed {R(4, Fixed).AgeP50:F0} / {R(4, Fixed).AgeP995:F0} ms");
-        // 50 Mbit/s → 16 kbit/s: what was in flight at the drop has to drain (seconds, uncapped), then it settles.
-        foreach (var c in new[] { Adaptive, At60 })
-            Assert(R(6, c).AgeP50 <= R(6, Fixed).AgeP50,
-                $"drop to 16 kbit/s, {configs[c].Name}: age p50 {R(6, c).AgeP50:F0} ms > fixed {R(6, Fixed).AgeP50:F0} ms");
+        // On 16 kbit/s a few bytes more or less in a frame move adaptive's figures by tens of ms either way (the fixed
+        // window's hardly), so these are judged over the book's walk with 13 seeds: the median of each figure.
+        var walks = new ConcurrentDictionary<(int Path, int Config, int Seed), PathResult>();
+        Parallel.ForEach(
+            from i in new[] { 4, 6 } from c in new[] { Fixed, Adaptive, At60 } from seed in Enumerable.Range(1, 12)
+            select (i, c, seed), new ParallelOptions { MaxDegreeOfParallelism = 8 }, run =>
+                walks[run] = SimulatePath(configs[run.c].Configure, paths[run.i].Bps, paths[run.i].OneWayMs,
+                    paths[run.i].Seconds, paths[run.i].Bursts, paths[run.i].Change, warmSeconds: paths[run.i].Warm,
+                    seed: run.seed));
+        double Walked(int path, int config, Func<PathResult, double> figure)
+        {
+            var all = Enumerable.Range(1, 12).Select(seed => figure(walks[(path, config, seed)]))
+                .Append(figure(R(path, config))).Order().ToArray();
+            return all[all.Length / 2];
+        }
+
+        foreach (var i in new[] { 4, 6 })
+        foreach (var c in new[] { Fixed, Adaptive, At60 })
+            Notes.Add($"{paths[i].Name,-38} {configs[c].Name,-16} over 13 walks: age at paint p50 " +
+                      $"{Walked(i, c, r => r.AgeP50),7:F1}  p99.5 {Walked(i, c, r => r.AgeP995),7:F1} ms (medians)");
+        // 16 kbit/s: a frame takes 225 ms to send. Fresher at the median; probing for more bandwidth costs at the tail.
+        Assert(Walked(4, Adaptive, r => r.AgeP50) <= Walked(4, Fixed, r => r.AgeP50) &&
+               Walked(4, Adaptive, r => r.AgeP995) <= 1.2 * Walked(4, Fixed, r => r.AgeP995),
+            $"16 kbit/s over 13 walks: adaptive p50 {Walked(4, Adaptive, r => r.AgeP50):F0} / p99.5 " +
+            $"{Walked(4, Adaptive, r => r.AgeP995):F0} ms vs fixed {Walked(4, Fixed, r => r.AgeP50):F0} / " +
+            $"{Walked(4, Fixed, r => r.AgeP995):F0} ms");
+        // 50 Mbit/s → 16 kbit/s: what was in flight at the drop has to drain (seconds, uncapped), then it settles — fresher
+        // than the fixed window at the median; a 60 Hz stream, as fresh within a tenth, its tail far shorter than uncapped
+        // (less in flight at the drop).
+        Assert(Walked(6, Adaptive, r => r.AgeP50) <= Walked(6, Fixed, r => r.AgeP50),
+            $"drop to 16 kbit/s over 13 walks, adaptive: age p50 {Walked(6, Adaptive, r => r.AgeP50):F0} ms > fixed " +
+            $"{Walked(6, Fixed, r => r.AgeP50):F0} ms");
+        Assert(Walked(6, At60, r => r.AgeP50) <= 1.1 * Walked(6, Fixed, r => r.AgeP50) &&
+               Walked(6, At60, r => r.AgeP995) < Walked(6, Adaptive, r => r.AgeP995) / 2,
+            $"drop to 16 kbit/s over 13 walks, 60 Hz: age p50 {Walked(6, At60, r => r.AgeP50):F0} ms (fixed " +
+            $"{Walked(6, Fixed, r => r.AgeP50):F0}), p99.5 {Walked(6, At60, r => r.AgeP995):F0} ms (uncapped " +
+            $"{Walked(6, Adaptive, r => r.AgeP995):F0})");
         return Task.CompletedTask;
     }
 
@@ -12486,6 +12782,8 @@ internal static partial class T
         Directory.CreateDirectory(Path.Combine(RepoRoot(), "tests", "js", "fixtures"));
         File.WriteAllText(Path.Combine(RepoRoot(), "tests", "js", "fixtures", "frames.json"),
             JsonSerializer.Serialize(fixture));
+        File.WriteAllText(Path.Combine(RepoRoot(), "tests", "js", "fixtures", "formats.json"),
+            JsonSerializer.Serialize(FormatsFixture()));
         Notes.Add($"fixture: {frames.Count} frames, {rows.Count} live rows (9-byte keys, prices near 2^52)");
         return Task.CompletedTask;
     }
@@ -12739,8 +13037,7 @@ internal static partial class T
 
         public ValueTask UnsubscribeAsync(Unsubscription notice, CancellationToken cancellationToken)
         {
-            Relayed.Enqueue(notice);
-            Notices.Enqueue((notice, notice.Topic.Routes));
+            var routesThen = notice.Topic.Routes;
             Routers.Ended(notice.Router, notice.Route);
             if (actOnNotices && notice.Remaining == 0)
                 lock (Gate)
@@ -12748,6 +13045,9 @@ internal static partial class T
                     if (naive || Epoch == notice.Epoch) Live = false;
                 }
 
+            // Kept once acted on: a test that sees the notice sees what the provider made of it.
+            Relayed.Enqueue(notice);
+            Notices.Enqueue((notice, routesThen));
             return default;
         }
 

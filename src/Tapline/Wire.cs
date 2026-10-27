@@ -139,7 +139,7 @@ public static class Wire
         RouterChangeHeader = 22,
         RouterChangeControls = 18,
         ValueHeader = 7,
-        TableHeader = 34,
+        TableHeader = 38,
         ErrorHeader = 17,
         GroupHeader = 12,
         OobRefSize = 47,

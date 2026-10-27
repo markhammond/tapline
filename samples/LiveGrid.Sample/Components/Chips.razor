@@ -1,0 +1,55 @@
+@* What the page shows above the grid, as the ChalkQL blotter's status bar: the house's state, the process's memory, the
+   page's lag and the feed. It renders on its own, every second, and only when a figure has moved by 5 % or more: on a
+   slow link every render is sent, and a figure that flickers in its last digit says nothing. *@
+@implements IDisposable
+@inject House House
+
+<span class="chip @(House.Paused ? "behind" : "live")"><b>@(House.Paused ? "Outage" : "Live")</b></span>
+<span class="chip" title="The process's working set, and its managed heap: read in the process, approximate">
+    <span class="label">host</span><b>@Figures.Two(_workingSet) MB</b><span class="label">heap</span>@Figures.Two(_heap) MB
+</span>
+<span class="chip" title="How far this page is behind the house: from a change to this browser drawing it, the worst in the last second it drew one">
+    <span class="label">lag</span><b>@(_lag is { } lag ? Figures.Two(lag) + " s" : "–")</b>
+</span>
+<span class="chip" title="Changes a second the house is making now: new orders, fills and cancels">
+    <span class="label">feed</span><b>@_rate.ToString("N0", System.Globalization.CultureInfo.InvariantCulture)/s</b>
+</span>
+
+@code {
+    /// <summary>The grid whose lag it shows (null until it's rendered).</summary>
+    [Parameter]
+    public LiveGrid<Guid, OrderRow>? Grid { get; set; }
+
+    private double _workingSet, _heap, _rate;
+    private double? _lag;
+    private bool _paused;
+    private Timer? _timer;
+
+    protected override void OnInitialized()
+    {
+        Read();
+        _timer = new Timer(_ => InvokeAsync(() =>
+        {
+            var (workingSet, heap, rate, lag, paused) = (_workingSet, _heap, _rate, _lag, _paused);
+            Read();
+            if (paused != _paused || Figures.Moved(workingSet, _workingSet) || Figures.Moved(heap, _heap) ||
+                Figures.Moved(rate, _rate) || Figures.Moved(lag ?? 0, _lag ?? 0))
+                StateHasChanged();
+        }), null, 1000, 1000);
+    }
+
+    private void Read()
+    {
+        _workingSet = Environment.WorkingSet / 1048576.0;
+        _heap = GC.GetTotalMemory(false) / 1048576.0;
+        _rate = House.CurrentRate;
+        _lag = Grid?.Status.Lag?.TotalSeconds;
+        _paused = House.Paused;
+    }
+
+    public void Dispose()
+    {
+        _timer?.Dispose();
+    }
+
+}

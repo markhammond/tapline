@@ -362,6 +362,13 @@ public sealed class Tap : IDisposable
     public bool IsClosed => Volatile.Read(ref State) == TapState.Closed;
 
     /// <summary>
+    ///     Its source has state its client hasn't been sent: a record waits to go — for room on the link, its interval, an
+    ///     overdue acknowledgement, a fetch. Looked at now and then, a subscription that keeps up with its source is seldom
+    ///     waiting; one whose source changes faster than its link carries, nearly always.
+    /// </summary>
+    public bool Waiting => Source.Version != Volatile.Read(ref Cursor.Seq);
+
+    /// <summary>
     ///     The data provider instance holding this route (its step 2 and end are relayed there), or null for a tap made
     ///     directly. The router's: not in <see cref="Binding" />.
     /// </summary>
@@ -454,10 +461,10 @@ public sealed class Tap : IDisposable
 
     /// <summary>
     ///     Its client has its state at <paramref name="version" /> or past it: sent, applied (nothing out of band unfetched,
-    ///     no
-    ///     provider's snapshot or initial state outstanding), not set back by a reconnect not yet resumed.
+    ///     no provider's snapshot or initial state outstanding), not set back by a reconnect not yet resumed. A provider
+    ///     staging in stages — what's looked at first, the rest after — holds the rest till its first is there.
     /// </summary>
-    internal bool HasReached(long version)
+    public bool HasReached(long version)
     {
         return Volatile.Read(ref Cursor.Seq) >= version && Volatile.Read(ref Pending) is null
                                                         && Volatile.Read(ref AwaitingFetch) == 0 &&
@@ -890,6 +897,18 @@ public sealed class Outlet : IDisposable, IWheelTarget
 
     /// <summary>Round trip of the most recent heartbeat (server → client frame → client ack), including client processing.</summary>
     public TimeSpan Rtt => TimeSpan.FromTicks(Volatile.Read(ref _rttTicks));
+
+    /// <summary>
+    ///     How it limits what it has in flight (<see cref="OutletOptions.FlowControl" />): the path's measures below are
+    ///     adaptive's.
+    /// </summary>
+    public FlowControlMode FlowControl => _options.FlowControl;
+
+    /// <summary>
+    ///     The largest record it sends in band (<see cref="OutletOptions.OutOfBandThreshold" />; 0: all): a larger one is
+    ///     fetched by its client, apart from the stream and as it is, uncompressed.
+    /// </summary>
+    public int OutOfBandThreshold => _options.OutOfBandThreshold;
 
     /// <summary>
     ///     Adaptive flow control: the path's minimum round trip, frame bound → acked (zero before the first ack, or under

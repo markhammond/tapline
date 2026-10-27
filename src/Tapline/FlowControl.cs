@@ -9,8 +9,9 @@ public enum FlowControlMode
     ///     Model-based, after BBR, steered to the shortest queue rather than the highest throughput. From every frame's ack it
     ///     measures the round trip — from the instant the frame was bound, so every buffer on the way (server pipes, a
     ///     middlebox, the network) is in it — and the delivery rate: a frame sent with nothing in flight measures from its
-    ///     own send, not from the last ack before an idle spell, and a round a heartbeat ended (nothing to send) leaves the
-    ///     rounds that measured the path in the estimate. The bytes in flight are capped at twice rate × minimum
+    ///     own send, not from the last ack before an idle spell; an ack is sampled from the newest data frame it brings home,
+    ///     not the heartbeats behind it; and a round of heartbeats alone (nothing to send) leaves the rounds that measured
+    ///     the path in the estimate. The bytes in flight are capped at twice rate × minimum
     ///     round trip (taken as at least 5 ms: below that a busy thread looks like a queue) — headroom while the application
     ///     is the limit, when frames go at once, unpaced, whole; while ready data is held back the cap doubles each round trip
     ///     (startup). Data frames are spaced at least minimum round trip ÷ half the <see cref="OutletOptions.Window" /> apart:
@@ -89,6 +90,7 @@ internal sealed class FlowControl
     private int _lastSentBytes, _quantum, _roundMaxFrame; // the send quantum: the largest data frame lately (see Apply)
     private long _limit, _pacingRate, _nextSendAt, _spacedUntil, _lastSentAt;
     private bool _limited; // held back data that was ready, since the round began
+    private bool _roundData; // a rate sample from a data frame, since the round began
     private long _minRtt, _minRttAt, _srtt;
     private int _minRttBytes; // the size of the frame that measured it
 
@@ -278,9 +280,14 @@ internal sealed class FlowControl
     private void Release(long upTo, long now)
     {
         if (upTo <= _oldest) return;
-        long bytes = 0;
+        long bytes = 0, sampled = upTo - 1; // (the frame the rate is sampled from: see below)
         ref var newest = ref _sent[(upTo - 1) & _mask];
-        for (var s = _oldest; s < upTo; s++) bytes += _sent[s & _mask].Bytes;
+        for (var s = _oldest; s < upTo; s++)
+        {
+            ref var f = ref _sent[s & _mask];
+            bytes += f.Bytes;
+            if (f.Data) sampled = s;
+        }
         _oldest = upTo;
         Volatile.Write(ref _oldestSentAt, upTo < _next ? _sent[upTo & _mask].SentAt : 0);
         Volatile.Write(ref _inflight, Math.Max(0, _inflight - bytes));
@@ -312,11 +319,16 @@ internal sealed class FlowControl
         if (newest.InflightAtSend == 0) _jitter += (Math.Max(0, excess) - _jitter) / 8;
 
         // Over the longer of the send and the ack intervals (as BBR): acks bunched together — by a link that delivers in
-        // bursts, or a busy client — would otherwise look like a faster path.
-        var interval = Math.Max(1, Math.Max(now - newest.DeliveredTimeAtSend, newest.SentAt - newest.FirstSentAtSend));
-        var rate = (_delivered - newest.DeliveredAtSend) * _frequency / interval;
+        // bursts, or a busy client — would otherwise look like a faster path. Sampled from the newest data frame released,
+        // not a heartbeat sent behind it: on a path where a data frame takes longer than the heartbeat interval (seconds, on
+        // 16 kbit/s), the ack that brings one home brings the heartbeats queued after it too — application-limited all —
+        // and a sample from those would never measure the path.
+        ref var sample = ref _sent[sampled & _mask];
+        var interval = Math.Max(1, Math.Max(now - sample.DeliveredTimeAtSend, sample.SentAt - sample.FirstSentAtSend));
+        var rate = (_delivered - sample.DeliveredAtSend) * _frequency / interval;
         _deliveredSentAt = newest.SentAt;
-        if (!newest.AppLimited || rate > bandwidth) _roundRate = Math.Max(_roundRate, rate);
+        if (!sample.AppLimited || rate > bandwidth) _roundRate = Math.Max(_roundRate, rate);
+        _roundData |= sample.Data;
 
         // Far behind — startup's burst overshot (a frame queued behind more than a frame of its own), or the path slowed
         // down (round trips tripled, beyond what the bytes ahead of them and the path's jitter explain — a small frame
@@ -337,7 +349,7 @@ internal sealed class FlowControl
         }
 
         if (newest.DeliveredAtSend >= _roundStart)
-            EndRound(now, rate, newest.Data); // a frame sent after the round began came back: a round trip
+            EndRound(now, rate, _roundData); // a frame sent after the round began came back: a round trip
     }
 
     /// <summary>
@@ -353,11 +365,14 @@ internal sealed class FlowControl
         Volatile.Write(ref _holdToken, true);
     }
 
-    /// <param name="rate">The delivery rate measured by the frame that ended the round, sent after it began.</param>
-    /// <param name="data">That frame carried data, not a heartbeat alone.</param>
+    /// <param name="rate">
+    ///     The delivery rate the ack that ended the round measured (a frame sent after the round began came back): from the
+    ///     newest data frame it released, else its newest frame.
+    /// </param>
+    /// <param name="data">The round measured data: a rate sampled from a data frame, not from heartbeats alone.</param>
     private void EndRound(long now, long rate, bool data)
     {
-        // A round a heartbeat ended — nothing to send — measured nothing of the path: it doesn't push a round that did out
+        // A round of heartbeats alone — nothing to send — measured nothing of the path: it doesn't push a round that did out
         // of the window, or seconds of heartbeats alone would leave the next burst an estimate of the heartbeats.
         if (data) _bandwidth[_round % BandwidthRounds] = _roundRate;
         var bandwidth = Bandwidth();
@@ -535,6 +550,7 @@ internal sealed class FlowControl
         _roundMinRttBytes = 0;
         _roundRate = 0;
         _roundMaxFrame = 0;
+        _roundData = false;
         Volatile.Write(ref _limited, false);
     }
 

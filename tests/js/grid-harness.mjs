@@ -16,16 +16,19 @@ const ROWS = Number(q.get('rows') ?? 5_000_000), LATENCY = Number(q.get('latency
 const ARRIVE = Number(q.get('arrive') ?? 700), CHANGE = Number(q.get('change') ?? 400);
 const KEY = 8, ROW = 64;
 
+// The columns as LiveGrid sends them, and the room each has for its text, as its style gives it (--tg-w<i>: in ch, as
+// wide as its format writes a wide value; "auto" here, the client's, measured from the first rows answered).
+const quantity = '#,###.####;-#,###.####;–';
 const columns = [
-    { name: 'placed', label: 'Placed', kind: 'time', offset: 0, frozen: true },
-    { name: 'id', label: 'Order', kind: 'int', offset: 8, frozen: true },
-    { name: 'client', label: 'Client', kind: 'text', offset: 42, size: 22 },
-    { name: 'side', label: 'Side', kind: 'enum', offset: 40, size: 1, dictionary: ['Buy', 'Sell'] },
-    { name: 'qty', label: 'Qty', kind: 'fixed', offset: 16, scale: 4, decimals: 4 },
-    { name: 'filled', label: 'Filled', kind: 'fixed', offset: 24, scale: 4, decimals: 4 },
-    { name: 'fill', label: 'Fill %', kind: 'percent', of: 'filled', over: 'qty', decimals: 1 },
-    { name: 'price', label: 'Price', kind: 'fixed', offset: 32, scale: 8, figures: 6 },
-    { name: 'status', label: 'Status', kind: 'enum', offset: 41, size: 1, dictionary: ['New', 'Partial', 'Filled', 'Cancelled'] }
+    { name: 'placed', label: 'Placed', kind: 'time', offset: 0, frozen: true, format: "'… 'HH:mm:ss", room: '10ch' },
+    { name: 'id', label: 'Order', kind: 'int', offset: 8, frozen: true, room: '9ch' },
+    { name: 'client', label: 'Client', kind: 'text', offset: 42, size: 22, auto: true, room: '21ch' },
+    { name: 'side', label: 'Side', kind: 'enum', offset: 40, size: 1, dictionary: ['Buy', 'Sell'], room: '6ch' },
+    { name: 'qty', label: 'Qty', kind: 'fixed', offset: 16, scale: 4, format: quantity, room: '15ch' },
+    { name: 'filled', label: 'Filled', kind: 'fixed', offset: 24, scale: 4, format: quantity, room: '15ch' },
+    { name: 'fill', label: 'Fill %', kind: 'percent', of: 'filled', over: 'qty', format: '#,###.#%;-#,###.#%;–', room: '8ch' },
+    { name: 'price', label: 'Price', kind: 'fixed', offset: 32, scale: 8, format: 'G6', room: '12ch' },
+    { name: 'status', label: 'Status', kind: 'enum', offset: 41, size: 1, dictionary: ['New', 'Partial', 'Filled', 'Cancelled'], room: '9ch' }
 ];
 
 const hash = id => {
@@ -151,18 +154,19 @@ const tapline = {
 
 const root = document.getElementById('grid'), host = document.getElementById('host'), head = document.getElementById('headings');
 columns.forEach((c, i) => {
+    document.getElementById('frame').style.setProperty(`--tg-w${i}`, c.room);
     const h = document.createElement('div');
-    h.className = 'tg-heading' + (c.frozen ? ' tg-frozen' : '') + (['int', 'fixed', 'percent'].includes(c.kind) ? ' tg-right' : '');
+    h.className = 'tg-heading' + (c.frozen ? ' tg-frozen' : '') + (['int', 'fixed', 'float', 'percent'].includes(c.kind) ? ' tg-end' : ' tg-start');
     h.setAttribute('role', 'columnheader');
     h.textContent = c.label;
-    h.style.width = `var(--tg-w${i}, 120px)`;
-    if (c.frozen) h.style.left = `var(--tg-left${i}, 0px)`;
+    h.style.width = i === 0 ? 'var(--tg-x1)' : `calc(var(--tg-x${i + 1}) - var(--tg-x${i}))`;
+    if (c.frozen) h.style.left = i === 0 ? '0' : `var(--tg-x${i})`;
     head.firstElementChild.append(h);
 });
 const status = document.getElementById('status'), events = [];
 const body = new GridBody(root, {
-    columns, rowHeight: 28, tapline, binding: { tapId: 1 }, request, maxRows: 1000, host, head, headerRows: 1,
-    selection: 'multiple',
+    columns, rowHeight: 28, tapline, binding: { tapId: 1 }, request, maxRows: 1000, host, head, headerRows: 1, statusless: true,
+    selection: 'multiple', clickable: true, activatable: true,
     rowClick: e => events.push({ click: e }), rowActivate: e => events.push({ activate: e }), rowSelect: e => events.push({ select: e }),
     visible: shown => console.log(`grid: ${shown ? 'shown' : 'hidden'}`),
     status: s => {

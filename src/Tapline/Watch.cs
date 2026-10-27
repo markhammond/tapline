@@ -115,7 +115,7 @@ public abstract class WatchMember
 
         internal override int Measure(MemberState state)
         {
-            return prefix.Length == 0 ? table.Measure(state.Cursor) : table.MeasureRange(state.Cursor, prefix);
+            return prefix.Length == 0 ? table.Measure(state.Cursor) : table.MeasureRange(state.Cursor, prefix, state.Range!);
         }
 
         internal override int Write(int index, MemberState state, Span<byte> dst)

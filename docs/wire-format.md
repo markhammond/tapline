@@ -12,7 +12,9 @@ RouterChange u8 0x0D | u8 state(0 serving, 1 degraded, 2 draining) | u8[16] corr
                                                                   u32 graceMs (left)
 Value      u8 0x03 | u32 tapId | u16 len | payload
 Table      u8 0x04 | u32 tapId | u8 flags(bit0 reset, bit1 degraded) | i64 fromSeq | i64 toSeq | u32 checksum | u32 n
-           | u16 keySize | u16 rowSize | n × ( u8 op(0 upsert, 1 delete) | key | row )
+           | u16 keySize | u16 rowSize | u32 deletes | n × ( u8 op(0 upsert, 1 delete) | key | row (an upsert's) )
+                                                                  a delete is its key alone: the record is n × (1 +
+                                                                  keySize) + (n − deletes) × rowSize after its header
 Error      u8 0x05 | u32 tapId | u16 code | i64 lastGoodVersion | u16 len | payload       terminal for the tap
 Group      u8 0x06 | u32 tapId | u8 flags | u16 count | u32 bodyLen | member records (Table/Value; tapId = member index)
 OobRef     u8 0x07 | u32 tapId | u8 inner | u8 mode(0 transparent, 1 reference; | 0x80 content-

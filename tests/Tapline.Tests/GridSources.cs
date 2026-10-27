@@ -36,7 +36,15 @@ internal sealed class ComputedGrid(int seed, long rows) : IGridSource<long, Grid
     private long _version;
     public int Reads;
 
+    /// <summary>Says its own order is by id, greatest first (as it is): the grid's live top then goes without keys.</summary>
+    public bool ByKey { get; init; }
+
     public long Version => Volatile.Read(ref _version);
+
+    public bool NewestFirstByKey(GridView view)
+    {
+        return ByKey && view.Sort.Count == 0;
+    }
 
     public ValueTask<GridAnswer> ReadAsync(GridView view, GridRead<long, GridOrderRow> read,
         GridPage<long, GridOrderRow> page, CancellationToken cancellationToken)

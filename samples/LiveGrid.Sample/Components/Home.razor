@@ -1,99 +1,178 @@
 @page "/"
 @rendermode InteractiveServer
+
 @inject Orders Source
+@inject House House
 
 @*
-    The orders, newest first, live: a LiveGrid over the sample's computed source. Sort by a heading (shift-click adds
-    it to the sort), filter by side or status in their headings, choose columns below the rows, select (⌘ or Ctrl
-    adds), and open an order by its number (a link) or by Enter.
+    The ChalkQL blotter's client orders tab on LiveGrid: its columns, formats and presentation, over the same market
+    (the house's 200 changes a second, bursts and all), newest first. Sort by a heading — descending, ascending, then
+    back to the newest first; shift-click within a sort by several — and filter by the funnels, up to a million orders;
+    choose columns below the rows; select (⌘ or Ctrl adds); open an order by its id or by Enter.
 *@
 
-<div class="bar">
-    <b>Orders</b>
-    <form @onsubmit="RevealAsync">
-        <label>Order <input type="number" min="0" @bind="_reveal" style="width: 9em"/></label>
-        <button type="submit">Show it</button>
-        @if (_revealed is { } said)
-        {
-            <span>@said</span>
-        }
-    </form>
-    <span>@_selected.Count selected</span>
+<PageTitle>Client orders · LiveGrid</PageTitle>
+<main>
+    <div class="bar">
+        <h1>Client orders</h1>
+        <Chips Grid="_grid"/>
+        <span class="spacer"></span>
+        <button @onclick="() => House.Send(3000)" title="The house takes and works 3,000 orders at once">Simulate burst</button>
+        <button @onclick="() => House.Paused = !House.Paused" aria-pressed="@House.Paused"
+                title="Outage: the house takes and works no orders, so nothing new arrives">Outage: @(House.Paused ? "on" : "off")</button>
+    </div>
     @if (_opened is { } opened)
     {
-        <span>Opened order @opened.ToString("N0")</span>
+        <div class="opened">
+            Order <span class="mono">@opened.OrderId</span>: @Describe(opened)
+            <button class="close" @onclick="() => _opened = null" aria-label="Close">✕</button>
+        </div>
     }
-</div>
-
-<LiveGrid TKey="long" TRow="OrderRow" @ref="_grid" Source="Source" Class="orders" RowHeight="28" AriaLabel="Orders"
-          @bind-Sort="_sort" Filter="_filter" Selection="GridSelection.Multiple" @bind-Selected="_selected"
-          ArrivedAt="placed" OnRowActivate="Open">
-    <Columns>
-        <LiveColumn Name="placed" Label="Placed" Kind="CellKind.Time" Frozen/>
-        <LiveColumn Name="number" Label="Order" Frozen Link/>
-        <LiveColumn Name="client" Label="Client" Width="200"/>
-        <LiveColumn Name="side" Label="Side" Filterable/>
-        <LiveColumn Name="qty" Label="Qty" Scale="4" Decimals="4"/>
-        <LiveColumn Name="filled" Label="Filled" Scale="4" Decimals="4"/>
-        <LiveColumn Name="fill" Label="Fill %" Kind="CellKind.Percent" Of="Filled" Over="Qty" Decimals="1"/>
-        <LiveColumn Name="price" Label="Price" Scale="8" Figures="6"/>
-        <LiveColumn Name="status" Label="Status" Filterable/>
-    </Columns>
-    <HeadingTemplate Context="h">
-        @if (h.Name == "side")
-        {
-            <select aria-label="Side shown" @onchange="e => _filter = _filter with { Side = Parse<OrderSide>(e.Value) }">
-                <option value="">all</option>
-                @foreach (var side in Enum.GetValues<OrderSide>())
+    @if (_filter is { } filter)
+    {
+        <div class="toolbar">
+            @foreach (var column in filter.Columns)
+            {
+                var f = column;
+                <span class="pill filter-pill" @onclick="() => _editing = (f.Column, f.Label)">
+                    @f.Describe()
+                    <button type="button" aria-label="Remove the filter on @f.Label" @onclick="() => Remove(f.Column)"
+                            @onclick:stopPropagation>×</button>
+                </span>
+            }
+            <button type="button" class="link-button" @onclick="() => _filter = null">Clear all</button>
+        </div>
+    }
+    @if (_editing is var (name, label))
+    {
+        <FilterEditor Column="@name" Label="@label" Current="_filter?.For(name)" Within="PeriodOfInterest()" OnApply="Apply"
+                      OnClose="() => _editing = null"/>
+    }
+    @if (!_sorts)
+    {
+        <div class="muted">This sample sorts and filters up to @Orders.MostSorted.ToString("N0") orders (<code>--orders 1m</code> or fewer); it has more, so it shows them newest first.</div>
+    }
+    <div class="frame">
+        <LiveGrid TKey="Guid" TRow="OrderRow" @ref="_grid" Source="Source" Class="orders" RowHeight="30" AriaLabel="Client orders"
+                  @bind-Sort="_sort" Filter="_filter" Selection="GridSelection.Multiple" @bind-Selected="_selected"
+                  ArrivedFromKey ChangedAt="EventTime" SortDescendingFirst NaturalSort="Newest" OnRowActivate="Open" RowName="order" NewAbove>
+            <Columns>
+                <LiveColumn Name="order_time" Field="OrderTime" Label="Time" Kind="CellKind.Time" Format="@Clock" Frozen Sortable="_sorts" Filterable="_sorts"/>
+                <LiveColumn Name="order_id" Field="OrderId" Label="Order" Width="@IdWidth" Frozen Link Sortable="_sorts" Filterable="_sorts"/>
+                <LiveColumn Name="version" Field="Version" Label="Ver" Visible="false" Sortable="_sorts" Filterable="_sorts"/>
+                <LiveColumn Name="cl_ord_id" Field="ClOrdId" Label="ClOrdId" Width="15ch" Sortable="_sorts" Filterable="_sorts"/>
+                <LiveColumn Name="client" Field="Client" Label="Client" Dictionary="Reference.ClientNames" Sortable="_sorts" Filterable="_sorts"/>
+                <LiveColumn Name="region" Field="Region" Label="Region" Dictionary="Reference.RegionNames" Visible="false" Sortable="_sorts" Filterable="_sorts"/>
+                <LiveColumn Name="channel" Field="Channel" Label="Channel" Dictionary="Reference.ChannelNames" Visible="false" Sortable="_sorts" Filterable="_sorts"/>
+                <LiveColumn Name="instrument" Field="Instrument" Label="Instrument" Dictionary="Reference.InstrumentNames" Sortable="_sorts" Filterable="_sorts"/>
+                <LiveColumn Name="side" Field="Side" Label="Side" MarkValues Sortable="_sorts" Filterable="_sorts"/>
+                <LiveColumn Name="qty" Field="Qty" Label="Qty" Format="@Figured" Figures="6" MostDigits="8" Width="6ch" Sortable="_sorts" Filterable="_sorts"/>
+                <LiveColumn Name="filled_qty" Field="FilledQty" Label="Filled" Format="@Figured" Figures="6" MostDigits="8" Width="6ch" Visible="false" Sortable="_sorts" Filterable="_sorts"/>
+                <LiveColumn Name="filled_pct" Label="Fill%" Kind="CellKind.Percent" Of="FilledQty" Over="Qty" Format="@Share"/>
+                <LiveColumn Name="avg_price" Field="AvgPrice" Label="@("Avg px")" Format="@Figured" Figures="6" MostDigits="8" Width="11ch" Sortable="_sorts" Filterable="_sorts"/>
+                <LiveColumn Name="filled_amt" Field="FilledAmt" Label="@("Filled amt")" Format="@Amount" Sortable="_sorts" Filterable="_sorts"/>
+                <LiveColumn Name="markup_bps" Field="MarkupBps" Label="Markup" Format="@Bps" Width="8ch" Sortable="_sorts" Filterable="_sorts"/>
+                <LiveColumn Name="status" Field="Status" Label="Status" MarkValues Sortable="_sorts" Filterable="_sorts"/>
+                <LiveColumn Name="event_time" Field="EventTime" Label="Updated" Kind="CellKind.Time" Format="@Clock" Sortable="_sorts" Filterable="_sorts"/>
+            </Columns>
+            <HeadingTemplate Context="h">
+                @if (h.Filterable)
                 {
-                    <option value="@side" selected="@(_filter.Side == side)">@side</option>
+                    <button type="button" class="funnel @(_filter?.For(h.Name) is null ? "" : "on") @(_editing?.Name == h.Name ? "open" : "")"
+                            title="Filter @h.Label" aria-label="Filter @h.Label" @onclick="EditClick(h)">
+                        <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><path d="M1.5 2h13l-5 6.2V14l-3-1.6V8.2z"/></svg>
+                    </button>
                 }
-            </select>
-        }
-        else if (h.Name == "status")
-        {
-            <select aria-label="Status shown" @onchange="e => _filter = _filter with { Status = Parse<OrderStatus>(e.Value) }">
-                <option value="">all</option>
-                @foreach (var status in Enum.GetValues<OrderStatus>())
-                {
-                    <option value="@status" selected="@(_filter.Status == status)">@status</option>
-                }
-            </select>
-        }
-    </HeadingTemplate>
-    <StatusTemplate Context="s">
-        @s.Total.ToString("N0") orders ·
-        @(s.Live ? "live" : s.Above > 0 ? $"held, {s.Above:N0} new above" : "held") ·
-        @(s.Freshness switch { GridFreshness.Fresh => "up to date", GridFreshness.Behind => "catching up", _ => "…" })
-        @if (s.Refusal is { } why)
-        {
-            <span> · <b>@why</b></span>
-        }
-    </StatusTemplate>
-</LiveGrid>
+            </HeadingTemplate>
+        </LiveGrid>
+    </div>
+</main>
 
 @code {
-    private LiveGrid<long, OrderRow>? _grid;
-    private IReadOnlyList<Tapline.Grid.SortKey> _sort = [];
-    private OrderFilter _filter = new();
-    private IReadOnlyCollection<long> _selected = [];
-    private long _reveal;
-    private string? _revealed;
-    private long? _opened;
+    private static readonly SortKey Newest = new("order_time", true);
 
-    private static T? Parse<T>(object? value) where T : struct, Enum
+    // The blotter's figures, as finance writes them (.NET formats, the page writing them as the server would): grouped
+    // in thousands, no nought before a fraction's point, none after its last digit that counts, a dash for nought; a
+    // time of day after an ellipsis, its date on hover.
+    private const string Amount = "#,###.##;-#,###.##;–";
+    private const string Bps = "#,###.#;-#,###.#;–";
+    private const string Share = "#,###.#%;-#,###.#%;–";
+    private const string Clock = "'… 'HH:mm:ss";
+
+    // A quantity or a price to six significant figures, in scientific notation past eight digits (Figures, MostDigits):
+    // the format's eight places the figures' room. Its tooltip, and a copy, the value whole.
+    private const string Figured = "#,###.########;-#,###.########;–";
+
+    // An id's room: its 36 characters, and its arrow (orders.css: shown on hover, its place kept).
+    private const string IdWidth = "calc(36ch + 1.25em)";
+
+    private LiveGrid<Guid, OrderRow>? _grid;
+    private IReadOnlyList<SortKey> _sort = [];
+    private OrderFilter? _filter;
+    private IReadOnlyCollection<Guid> _selected = [];
+    private (string Name, string Label)? _editing; // the column whose filter is open
+    private readonly Dictionary<string, Action> _editClicks = new();
+    private OrderRow? _opened;
+    private bool _sorts;
+
+    protected override void OnInitialized()
     {
-        return Enum.TryParse<T>(value as string, out var parsed) ? parsed : null;
+        _sorts = Source.Sorts;
     }
 
-    private async Task RevealAsync()
+    protected override void OnAfterRender(bool firstRender)
     {
-        _revealed = _grid is not null && await _grid.RevealAsync(_reveal) ? null : $"Order {_reveal:N0} isn't in this view.";
+        if (firstRender && _grid is not null) StateHasChanged(); // (the chips and the pill get the grid, now it's there)
     }
 
-    private void Open(LiveGridRowEvent<long> e)
+    /// <summary>A funnel's click: its column's filter opened, or closed if it was.</summary>
+    private void Edit(string name, string label)
     {
-        _opened = e.Key;
+        _editing = _editing?.Name == name ? null : (name, label);
+    }
+
+    /// <summary>
+    ///     A funnel's click handler, one a column and kept: the page rendered again unchanged sends nothing for it (a new
+    ///     lambda each render is a new event handler for every funnel, sent to the browser).
+    /// </summary>
+    private Action EditClick(LiveHeading heading)
+    {
+        var (name, label) = (heading.Name, heading.Label);
+        return _editClicks.TryGetValue(name, out var click) ? click : _editClicks[name] = () => Edit(name, label);
+    }
+
+    /// <summary>A column's filter applied (empty: removed): the grid reads the new view from its top.</summary>
+    private void Apply(ColumnFilter filter)
+    {
+        _filter = _filter is null ? OrderFilter.Of([filter]) : _filter.With(filter);
+        _editing = null;
+    }
+
+    private void Remove(string column)
+    {
+        _filter = _filter?.Without(column);
+    }
+
+    /// <summary>The period the chooser offers values from, as the blotter's: the time filter's, or the last day.</summary>
+    private (DateTime From, DateTime To) PeriodOfInterest()
+    {
+        var time = _filter?.For("order_time");
+        var to = time?.To ?? DateTime.UtcNow.AddMinutes(1);
+        return (time?.From ?? to.AddDays(-1), to);
+    }
+
+    private void Open(LiveGridRowEvent<Guid> e)
+    {
+        var n = House.NumberOf(e.Key);
+        _opened = n >= 0 ? House.RowOf(n) : null;
+    }
+
+    /// <summary>An order in a line, as the blotter describes one.</summary>
+    private static string Describe(OrderRow o)
+    {
+        return string.Create(System.Globalization.CultureInfo.InvariantCulture,
+            $"{Reference.ClientNames[(long)o.Client]} {o.Side} {o.Qty:#,0.####} {Reference.InstrumentNames[(long)o.Instrument]} · {o.Status}, " +
+            $"{o.FilledQty:#,0.####} filled at {o.AvgPrice:#,0.######} (version {o.Version})");
     }
 
 }

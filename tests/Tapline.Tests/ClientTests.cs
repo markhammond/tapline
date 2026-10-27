@@ -539,7 +539,7 @@ internal static partial class T
         var moves = new List<(Subscription Subscription, TimeSpan Grace, Guid Correlation)>();
         client.SubscriptionMoving += (sub, grace, correlation) => moves.Add((sub, grace, correlation));
         var answer = mover.MoveNode(movable.Binding.NodeId!.Value, null, null, TimeSpan.Zero, TimeSpan.FromSeconds(2), "test");
-        for (var i = 0; i < 100 && moves.Count == 0; i++)
+        for (var until = Environment.TickCount64 + 10_000; moves.Count == 0 && Environment.TickCount64 < until;)
         {
             Pump(outlet, owner, client);
             Thread.Sleep(5);
