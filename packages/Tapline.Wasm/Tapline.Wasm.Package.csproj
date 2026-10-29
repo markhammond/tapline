@@ -1,8 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk.Razor">
     <PropertyGroup>
         <PackageId>Tapline.Wasm</PackageId>
-        <!-- (Tapline.Wasm's folds Elastic-2.0; Tapline.Authentication.Opaque, Apache-2.0) -->
-        <PackageLicenseExpression>Elastic-2.0 AND Apache-2.0</PackageLicenseExpression>
+        <!-- (Tapline.Wasm's folds under the Elastic License 2.0; Tapline.Authentication.Opaque, Apache-2.0: both in LICENSE.txt) -->
+        <PackageLicenseFile>LICENSE.txt</PackageLicenseFile>
+        <TaplineApacheParts>true</TaplineApacheParts>
         <PackageTags>$(PackageTags);webassembly;wasm;wasmtime;sandbox;authentication;opaque;rfc9807;password;pake</PackageTags>
         <Description>Tapline's WebAssembly, run by Wasmtime: a data provider's folds, finalizers and stale-data functions as sandboxed modules, fuel- and memory-bounded on the router; and password sign-in by OPAQUE (RFC 9807), a module of Tapline's authentication in which the password never leaves the client — on the server, and in the browser (opaque.mjs, tapline-opaque.mjs).</Description>
     </PropertyGroup>

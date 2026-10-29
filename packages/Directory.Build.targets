@@ -4,22 +4,52 @@
         <TargetsForTfmSpecificDebugSymbolsInPackage>$(TargetsForTfmSpecificDebugSymbolsInPackage);TaplineBundleSymbols</TargetsForTfmSpecificDebugSymbolsInPackage>
     </PropertyGroup>
 
-    <!-- The licence's text: the Elastic License 2.0's (LICENSE), and Apache-2.0's where the package has any
-         (Tapline.Authentication.Opaque's): LICENSE alone, or beside the Elastic License's, LICENSE-APACHE. -->
+    <!-- The licence, as a file: nuget.org takes a licence expression only of licences the OSI or the FSF approve, so a
+         package under the Elastic License 2.0 names a file instead (PackageLicenseFile LICENSE.txt), as ChalkQL's do,
+         written from LICENSE as it's packed. One with parts under Apache-2.0 too (TaplineApacheParts:
+         Tapline.Authentication.Opaque's) has a line first saying which is which, and Apache-2.0's text after the Elastic
+         License's. A package under Apache-2.0 alone declares that expression, and packs its text as LICENSE. -->
     <PropertyGroup>
-        <_TaplineElastic>$(PackageLicenseExpression.Contains('Elastic-2.0'))</_TaplineElastic>
-        <_TaplineApache>$(PackageLicenseExpression.Contains('Apache-2.0'))</_TaplineApache>
+        <_TaplineElastic>false</_TaplineElastic>
+        <_TaplineElastic Condition="'$(PackageLicenseFile)' == 'LICENSE.txt'">true</_TaplineElastic>
+        <_TaplineElasticText>$(MSBuildThisFileDirectory)../LICENSE</_TaplineElasticText>
         <_TaplineApacheText>$(MSBuildThisFileDirectory)../src/Tapline.Authentication.Opaque/LICENSE</_TaplineApacheText>
-        <_TaplineApacheBeside>$(BaseIntermediateOutputPath)LICENSE-APACHE</_TaplineApacheBeside>
+        <_TaplineLicenceFile>$(BaseIntermediateOutputPath)LICENSE.txt</_TaplineLicenceFile>
     </PropertyGroup>
     <ItemGroup>
-        <None Include="$(MSBuildThisFileDirectory)../LICENSE" Pack="true" PackagePath="/" Visible="false" Condition="$(_TaplineElastic)"/>
-        <None Include="$(_TaplineApacheText)" Pack="true" PackagePath="/" Visible="false" Condition="$(_TaplineApache) and !$(_TaplineElastic)"/>
-        <None Include="$(_TaplineApacheBeside)" Pack="true" PackagePath="/" Visible="false" Condition="$(_TaplineApache) and $(_TaplineElastic)"/>
+        <None Include="$(_TaplineLicenceFile)" Pack="true" PackagePath="/" Visible="false" Condition="$(_TaplineElastic)"/>
+        <None Include="$(_TaplineApacheText)" Pack="true" PackagePath="/" Visible="false" Condition="'$(PackageLicenseExpression)' == 'Apache-2.0'"/>
     </ItemGroup>
-    <Target Name="TaplineApacheBeside" BeforeTargets="GenerateNuspec" Condition="$(_TaplineApache) and $(_TaplineElastic)">
-        <Copy SourceFiles="$(_TaplineApacheText)" DestinationFiles="$(_TaplineApacheBeside)" SkipUnchangedFiles="true"/>
+    <Target Name="TaplineLicenceFile" BeforeTargets="GenerateNuspec" Condition="$(_TaplineElastic)">
+        <ItemGroup>
+            <_TaplineLicenceText Include="$(_TaplineElasticText)"/>
+            <_TaplineLicenceText Include="$(_TaplineApacheText)" Condition="'$(TaplineApacheParts)' == 'true'"/>
+        </ItemGroup>
+        <PropertyGroup>
+            <_TaplineLicencePreamble Condition="'$(TaplineApacheParts)' == 'true'">$(PackageId) is licensed under the Elastic License 2.0 (first below), except password sign-in by OPAQUE (Tapline.Authentication.Opaque), which is licensed under the Apache License 2.0 (second below).</_TaplineLicencePreamble>
+        </PropertyGroup>
+        <TaplineWriteLicence Texts="@(_TaplineLicenceText)" Preamble="$(_TaplineLicencePreamble)" Output="$(_TaplineLicenceFile)"/>
     </Target>
+
+    <!-- The licence file's text: each text whole, a rule between them, after the preamble if there is one; written only
+         when it changes. -->
+    <UsingTask TaskName="TaplineWriteLicence" TaskFactory="RoslynCodeTaskFactory" AssemblyFile="$(MSBuildToolsPath)/Microsoft.Build.Tasks.Core.dll">
+        <ParameterGroup>
+            <Texts ParameterType="Microsoft.Build.Framework.ITaskItem[]" Required="true"/>
+            <Preamble ParameterType="System.String"/>
+            <Output ParameterType="System.String" Required="true"/>
+        </ParameterGroup>
+        <Task>
+            <Code Type="Fragment" Language="cs"><![CDATA[
+                var rule = "\n" + new string('-', 80) + "\n\n";
+                var parts = new System.Collections.Generic.List<string>();
+                if (!string.IsNullOrWhiteSpace(Preamble)) parts.Add(Preamble.Trim() + "\n");
+                foreach (var text in Texts) parts.Add(System.IO.File.ReadAllText(text.ItemSpec).TrimEnd() + "\n");
+                var body = string.Join(rule, parts);
+                if (!System.IO.File.Exists(Output) || System.IO.File.ReadAllText(Output) != body) System.IO.File.WriteAllText(Output, body);
+            ]]></Code>
+        </Task>
+    </UsingTask>
 
     <!-- A package's browser files are its own static web assets (Content linked into wwwroot), at the paths the projects
          they come from serve them; the projects' own copies, referenced, aren't taken as well (the same paths twice). -->

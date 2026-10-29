@@ -22,8 +22,8 @@ service.Modules.Add(new OpaqueRegistrationModule(opaque, store));
 
 ## License
 
-- The folds: Elastic License 2.0 ([ELv2](https://www.elastic.co/licensing/elastic-license)), included as `LICENSE`.
-- Password sign-in: Apache-2.0, included as `LICENSE-APACHE`, provided "AS IS", without warranties or conditions of any kind.
+- The folds: Elastic License 2.0 ([ELv2](https://www.elastic.co/licensing/elastic-license)), included in `LICENSE.txt`.
+- Password sign-in: Apache-2.0, included in `LICENSE.txt` after it, provided "AS IS", without warranties or conditions of any kind.
 - The crates built into the module are listed in `THIRD-PARTY-NOTICES.md`.
 
 The source code is available at [github.com/markhammond/tapline](https://github.com/markhammond/tapline).

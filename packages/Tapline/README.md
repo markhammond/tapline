@@ -29,5 +29,5 @@ WebAssembly folds and password sign-in are [Tapline.Wasm](https://www.nuget.org/
 
 ## License
 
-Elastic License 2.0 ([ELv2](https://www.elastic.co/licensing/elastic-license)), included as `LICENSE`.
+Elastic License 2.0 ([ELv2](https://www.elastic.co/licensing/elastic-license)), included as `LICENSE.txt`.
 The source code is available under the same license at [github.com/markhammond/tapline](https://github.com/markhammond/tapline).

@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
         <PackageId>Tapline.Client</PackageId>
-        <PackageLicenseExpression>Elastic-2.0</PackageLicenseExpression>
+        <PackageLicenseFile>LICENSE.txt</PackageLicenseFile>
         <PackageTags>$(PackageTags);client;grpc;magiconion</PackageTags>
         <Description>Tapline's core and its .NET client: shared state fanned out to many clients, prioritised, conflated and ack-clocked, with ordered messaging beside it; the client's replicas of what it subscribed to, acknowledged frame by frame, resynced and resumed; and MagicOnion (gRPC) to carry it.</Description>
     </PropertyGroup>
