@@ -41,7 +41,7 @@ internal sealed class Ledger : IHouseLog, IGridStream<OrderRow>, IAsyncDisposabl
     private long _stalledUntil; // (timestamp ticks) the stall the page asked for: the database writes nothing till then
     private long _sent, _sentLate, _sentAfterDatabase;
     private volatile bool _stalled;
-    private GridBatch<OrderRow>? _batch;
+    private GridBatch<OrderRow>[] _batches = []; // (each subscription's: the grid's source, and the alerts')
     private Task _ingesting = Task.CompletedTask;
     private Landing? _land;
 
@@ -51,7 +51,7 @@ internal sealed class Ledger : IHouseLog, IGridStream<OrderRow>, IAsyncDisposabl
     /// <summary>
     ///     Whether the streams are out of order: of the rows each sends, 2 % sent late, after rows that happened after them
     ///     (log-normal about 400 ms, at most 10 s), the database writing them as usual; and 1 % the database writes first, at
-    ///     once, the stream sending them after (about 200 ms). The alerts hear each as the house writes it, as ever.
+    ///     once, the stream sending them after (about 200 ms). The alerts hear what the streams send, as the grids do.
     /// </summary>
     public bool Disordered
     {
@@ -112,7 +112,7 @@ internal sealed class Ledger : IHouseLog, IGridStream<OrderRow>, IAsyncDisposabl
 
     public IDisposable Subscribe(GridBatch<OrderRow> batch)
     {
-        _batch = batch;
+        lock (_gate) _batches = [.. _batches, batch];
         return new Ended(this, batch);
     }
 
@@ -126,24 +126,12 @@ internal sealed class Ledger : IHouseLog, IGridStream<OrderRow>, IAsyncDisposabl
     public IGridStream<FillRow> Fills => _fillStream;
 
     /// <summary>
-    ///     Each batch as the house writes it, versions and fills, on its thread (under its lock: what's told must be quick) —
-    ///     for the alerts' evaluator, beside the grids' streams.
-    /// </summary>
-    public Action<ReadOnlySpan<OrderRow>, ReadOnlySpan<(OrderRow Order, Fill Fill)>>? Heard { get; set; }
-
-    /// <summary>
-    ///     Each batch the database took, as it landed: the versions and the fills (the alerts' waits end with it). Writes land
-    ///     out of order, each after its own lag: a batch is all those due at once.
-    /// </summary>
-    public Action<OrderRow[], (OrderRow Order, Fill Fill)[]>? Landed { get; set; }
-
-    /// <summary>
     ///     A batch the house wrote: streamed at once, in order (on the house's thread, under its lock) — out of order, some of
     ///     it later (<see cref="Disordered" />) — and queued to land.
     /// </summary>
     public void Wrote(ReadOnlySpan<OrderRow> versions, ReadOnlySpan<(OrderRow Order, Fill Fill)> fills)
     {
-        var streamed = fills.Length > 0 && _fillStream.Batch is not null;
+        var streamed = fills.Length > 0 && _fillStream.Batches.Length > 0;
         if (streamed)
         {
             if (_fillRows.Length < fills.Length) _fillRows = new FillRow[Math.Max(fills.Length, 2 * _fillRows.Length)];
@@ -157,10 +145,9 @@ internal sealed class Ledger : IHouseLog, IGridStream<OrderRow>, IAsyncDisposabl
         }
         else
         {
-            _batch?.Invoke(versions);
-            if (streamed) _fillStream.Batch?.Invoke(_fillRows.AsSpan(0, fills.Length));
+            Send(versions);
+            if (streamed) _fillStream.Send(_fillRows.AsSpan(0, fills.Length));
             Interlocked.Add(ref _sent, versions.Length + fills.Length);
-            Heard?.Invoke(versions, fills); // (told before it's queued to land: a landing never comes before its batch is heard)
             lock (_gate)
             {
                 foreach (ref readonly var version in versions) _orders.Add((now + Lag(), version));
@@ -183,10 +170,9 @@ internal sealed class Ledger : IHouseLog, IGridStream<OrderRow>, IAsyncDisposabl
         for (var i = 0; i < fills.Length; i++)
             if ((_plans[versions.Length + i] = Plan(now)).Send == now && streamed)
                 _fillRows[made++] = _fillRows[i]; // (those sent at once to the front: the late made again below)
-        _batch?.Invoke(_sendOrders.AsSpan(0, orders));
-        if (streamed) _fillStream.Batch?.Invoke(_fillRows.AsSpan(0, made));
+        Send(_sendOrders.AsSpan(0, orders));
+        if (streamed) _fillStream.Send(_fillRows.AsSpan(0, made));
         Interlocked.Add(ref _sent, orders + made);
-        Heard?.Invoke(versions, fills); // (told before it's queued to land: a landing never comes before its batch is heard)
         lock (_gate)
         {
             for (var i = 0; i < versions.Length; i++)
@@ -236,8 +222,8 @@ internal sealed class Ledger : IHouseLog, IGridStream<OrderRow>, IAsyncDisposabl
         }
 
         if (orders.Count + fills.Count == 0) return;
-        if (orders.Count > 0) _batch?.Invoke(CollectionsMarshal.AsSpan(orders));
-        if (fills.Count > 0) _fillStream.Batch?.Invoke(CollectionsMarshal.AsSpan(fills));
+        if (orders.Count > 0) Send(CollectionsMarshal.AsSpan(orders));
+        if (fills.Count > 0) _fillStream.Send(CollectionsMarshal.AsSpan(fills));
         Interlocked.Add(ref _sent, orders.Count + fills.Count);
         Interlocked.Add(ref _sentLate, orders.Count + fills.Count - first);
         Interlocked.Add(ref _sentAfterDatabase, first);
@@ -300,10 +286,15 @@ internal sealed class Ledger : IHouseLog, IGridStream<OrderRow>, IAsyncDisposabl
             }
 
             foreach (var (id, order) in newest) _landed[id] = order.Version;
-            Landed?.Invoke([.. orders], [.. fills]);
             orders.Clear();
             fills.Clear();
         }
+    }
+
+    /// <summary>Versions sent, to every subscription, on the house's thread.</summary>
+    private void Send(ReadOnlySpan<OrderRow> versions)
+    {
+        foreach (var batch in Volatile.Read(ref _batches)) batch(versions);
     }
 
     /// <summary>Those due by <paramref name="now" />, out of the queue, in the order written.</summary>
@@ -352,26 +343,32 @@ internal sealed class Ledger : IHouseLog, IGridStream<OrderRow>, IAsyncDisposabl
     {
         public void Dispose()
         {
-            if (ledger._batch == batch) ledger._batch = null;
+            lock (ledger._gate) ledger._batches = [.. ledger._batches.Where(b => !ReferenceEquals(b, batch))];
         }
     }
 
-    /// <summary>The fills' stream: one subscriber, the fills' source.</summary>
+    /// <summary>The fills' stream: its subscriptions, the fills' source and the alerts'.</summary>
     private sealed class FillStream : IGridStream<FillRow>
     {
-        public GridBatch<FillRow>? Batch;
+        private readonly Lock _gate = new();
+        public GridBatch<FillRow>[] Batches = [];
 
         public IDisposable Subscribe(GridBatch<FillRow> batch)
         {
-            Batch = batch;
+            lock (_gate) Batches = [.. Batches, batch];
             return new Ended(this, batch);
+        }
+
+        public void Send(ReadOnlySpan<FillRow> fills)
+        {
+            foreach (var batch in Volatile.Read(ref Batches)) batch(fills);
         }
 
         private sealed class Ended(FillStream stream, GridBatch<FillRow> batch) : IDisposable
         {
             public void Dispose()
             {
-                if (stream.Batch == batch) stream.Batch = null;
+                lock (stream._gate) stream.Batches = [.. stream.Batches.Where(b => !ReferenceEquals(b, batch))];
             }
         }
     }

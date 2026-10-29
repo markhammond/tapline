@@ -7,130 +7,144 @@ using Chalk.Client;
 using Chalk.Incremental;
 using Chalk.Sources.Poco;
 using Tapline.Alerts;
+using Tapline.Grid.Provider;
 
 using LiveGrid.Sample.Alerts;
 
 namespace LiveGrid.Sample.Domain;
 
-/// <summary>How long a row has waited for the database, as <c>live.waits</c> holds it: until it landed, or for good.</summary>
-/// <remarks>In microseconds, as the tables are: a wait with no end runs to 9999, which nanoseconds, the default, do not reach.</remarks>
-public sealed record Wait(
-    Guid Id,
-    [property: ChalkColumn(Precision = 6)] DateTime Since,
-    [property: ChalkColumn(Precision = 6)] DateTime Until);
-
-/// <summary>How many matches a counter saw in one slice of time, as <c>live.match_counts</c> holds it.</summary>
-public sealed record MatchCount(int Counter, [property: ChalkColumn(Precision = 6)] DateTime SliceStart, long Matched);
+/// <summary>
+///     What the alerts hear and read, tab by tab: the stream its grid hears, the database its waits are proved against, and
+///     what a row is.
+/// </summary>
+internal sealed record AlertSources(
+    IGridStream<OrderRow> Orders,
+    IGridStore<Guid, OrderRow, DateTime> OrderStore,
+    IGridRows<Guid, OrderRow, DateTime> OrderRows,
+    IGridStream<FillRow> Fills,
+    IGridStore<Guid, FillRow, DateTime> FillStore,
+    IGridRows<Guid, FillRow, DateTime> FillRows);
 
 /// <summary>
-///     ① Evaluation (virtual-grid.md §15.2) for the sample: the ChalkQL blotter's alert views, lifted out. Each distinct shape
-///     — a tab, a condition in SQL and a trigger — is a ChalkQL standing view, maintained incrementally, over tables of its
-///     own, kept from the house's batches as the ledger hears them and lands them (<see cref="Ledger.Heard" />,
-///     <see cref="Ledger.Landed" />), and only while a shape reads them: <c>live.arrived_fills</c>, every fill heard in the
-///     last <see cref="FillsFor" />; <c>live.latest_orders</c>, each order at the newest version heard, until unchanged for
-///     <see cref="OrdersFor" />; <c>live.waiting_orders</c> and <c>live.waiting_fills</c> beside <c>live.waits</c>, the rows
-///     the database hasn't landed and since when they've waited; <c>live.match_counts</c>, what each view a count reads
-///     matched, by slice of time. A row entering a view fires its shapes — once, keyed; an order again only after it has
-///     stopped passing.
+///     ① Evaluation (virtual-grid.md §15.2) for the sample: the ChalkQL blotter's alert views, lifted out, hearing the grids'
+///     streams as the grids do — a subscription of its own to each — and reading the database itself for its waits
+///     (grid-waits.md). Each distinct condition on a tab is a ChalkQL standing view, maintained incrementally, over tables of
+///     its own, kept from what the streams send and only while a shape reads them: <c>live.latest_orders</c>, each order at
+///     the newest version heard, until unchanged for <see cref="OrdersFor" />; <c>live.arrived_fills</c>, each fill heard,
+///     for <see cref="FillsFor" /> and the longest wait on fills. A row entering a view fires the shapes that fire on
+///     arrival: once, keyed; an order again only after it has stopped passing.
 /// </summary>
 /// <remarks>
-///     An engine of its own, on the sample's planner, its clock (<c>@now</c>) moved by every refresh — four a second while a
-///     view is open. As the blotter's tail has it, an order waits from the time of the oldest version heard that the database
-///     hasn't landed (a fill, from its own) until the database lands its newest, or till now. The ledger lands writes out of
-///     order: a newer version landing ends an older's wait, and an older landing alone moves the wait on to the next. A wait
-///     fires once a row that passes has waited longer than its rule allows: by the clock, or, once landed, by when it did — a
-///     landed row keeps its wait <see cref="LandedFor" />, so the views see how long it took. A count fires as the matches in
-///     its window come to be enough, or none (judged only once a whole window has passed since counting began), and again
-///     only after that has stopped. A fill's condition reads its order along a path, <c>order.status = 'Partial'</c>: a fill
-///     whose order hasn't arrived yet enters its view when it does.
+///     <para>
+///         Nothing ticks. The tables are refreshed as rows are heard, no oftener than <see cref="RefreshEvery" /> (what's heard
+///         meanwhile taken together); between, only deadlines run.
+///     </para>
+///     <para>
+///         A wait is the database's: one <see cref="GridWaits{TKey,TRow,TStamp}" /> a tab, watching each distinct threshold,
+///         proof and anchor its rules ask for. An order waits from the anchor of its oldest version heard that the database
+///         hasn't been seen to hold until it holds the newest (a fill, from its own); told past a threshold, proved as its rule
+///         asks, it fires the rules whose condition its newest version passes, once a wait: then, or as it comes to pass while
+///         it still waits.
+///     </para>
+///     <para>
+///         A count is kept here, in steps of a sixtieth of its window (a second at least) falling at whole multiples of the
+///         step since the Unix epoch, a step counting while it ends within the window: the matches its condition's view sees,
+///         as heard. At least so many fires as the match that makes them is heard; none, once the window holds no match,
+///         judged only once a whole window has passed since counting began; each again only after it has stopped. A count's
+///         one deadline — its oldest step leaving the window, or the window emptying — is all that runs between matches.
+///     </para>
+///     <para>
+///         A fill's condition reads its order along a path, <c>order.status = 'Partial'</c>: a fill whose order hasn't
+///         arrived yet enters its view when it does.
+///     </para>
 /// </remarks>
 internal sealed class StandingAlerts : IAlertEvaluator
 {
-    /// <summary>How long a fill stays in <c>live.arrived_fills</c>: long enough for its order to arrive.</summary>
+    /// <summary>How long a fill stays in <c>live.arrived_fills</c>: long enough for its order to arrive (and, past it, for the longest wait on fills).</summary>
     public static readonly TimeSpan FillsFor = TimeSpan.FromSeconds(10);
 
     /// <summary>How long an order that has not changed stays in <c>live.latest_orders</c>.</summary>
     public static readonly TimeSpan OrdersFor = TimeSpan.FromMinutes(10);
 
-    /// <summary>How long a row the database has landed keeps its wait: as long as the blotter's tail keeps one.</summary>
-    public static readonly TimeSpan LandedFor = TimeSpan.FromSeconds(5);
+    /// <summary>The tables are refreshed as rows are heard, no oftener than this: what's heard meanwhile, taken together.</summary>
+    public static readonly TimeSpan RefreshEvery = TimeSpan.FromMilliseconds(50);
 
-    /// <summary>How often the tables are refreshed and the views brought to them, while a view is open.</summary>
-    private static readonly TimeSpan Every = TimeSpan.FromMilliseconds(250);
-
-    // Until it lands, a wait has no end.
-    private static readonly DateTime Never = new(9999, 12, 31, 0, 0, 0, DateTimeKind.Unspecified);
     private const long StateBudget = 64L << 20; // (a view's: the alerts' own, apart from a grid session's)
 
-    private readonly PocoTable<FillRecord> _arrivedFills, _waitingFills;
-    private readonly Dictionary<(string Matcher, TimeSpan Slice), Counter> _counters = [];
-    private readonly Dictionary<string, CountView> _counts = new(StringComparer.Ordinal);
-    private readonly List<MatchCount> _countsGone = [];
+    // The waits' proofs: a lookup's memory at the database (1,024 keys' rows at most), the rest as GridWaits has it.
+    private static readonly GridWaitsOptions WaitOptions = new() { MaxReadBytes = 8u << 20 };
+
+    // The times a wait on orders may run from besides a version's own (Tabs.Orders' WaitsFrom), as the waits read them.
+    private static readonly GridWaitAnchor<OrderRow, DateTime> OrderTime = (in OrderRow row) => row.OrderTime;
+
+    private readonly PocoTable<FillRecord> _arrivedFills;
+    private readonly List<CountShape> _counts = [];
     private readonly ChalkEngine _engine;
     private readonly Dictionary<Guid, FillRecord> _fills = [];
     private readonly Queue<(DateTime At, List<FillRecord> Fills)> _fillsKept = new();
-    private readonly Dictionary<Guid, FillWait> _fillWaits = [];
-    private readonly SemaphoreSlim _gate = new(1, 1); // (the loop, and a change of watches: one at a time)
-    private readonly ConcurrentQueue<(OrderRow[] Versions, (OrderRow Order, Fill Fill)[] Fills)> _heard = new();
-    private readonly ConcurrentQueue<(OrderRow[] Versions, (OrderRow Order, Fill Fill)[] Fills, DateTime At)> _landed = new();
-    private readonly PocoTable<OrderRecord> _latestOrders, _waitingOrders;
-    private readonly Ledger _ledger;
+    private readonly TabWaits<FillRow> _fillWaits;
+    private readonly SemaphoreSlim _gate = new(1, 1); // (a turn of the loop, and a change of watches: one at a time)
+    private readonly ConcurrentQueue<FillRow[]> _heardFills = new();
+    private readonly ConcurrentQueue<OrderRow[]> _heardOrders = new();
+    private readonly IDisposable _hearingFills, _hearingOrders;
+    private readonly Dictionary<AlertWatch, List<AlertHit>> _hits = []; // (a turn's, by shape: each told once)
+    private readonly PocoTable<OrderRecord> _latestOrders;
     private readonly Task _loop;
-    private readonly PocoTable<MatchCount> _matchCounts;
     private readonly Dictionary<Guid, (OrderRecord Order, DateTime At)> _orders = [];
     private readonly Queue<(DateTime At, Guid Id)> _ordersKept = new();
-    private readonly Dictionary<Guid, OrderWait> _orderWaits = [];
+    private readonly TabWaits<OrderRow> _orderWaits;
+    private readonly SemaphoreSlim _signal = new(0, 1);
     private readonly CancellationTokenSource _stop = new();
     private readonly TimeProvider _time;
+    private readonly ITimer _timer;
+    private readonly ConcurrentQueue<Told> _told = new();
     private readonly Dictionary<string, AlertView> _views = new(StringComparer.Ordinal);
-    private readonly PocoTable<Wait> _waits;
-    private DateTimeOffset _clock = DateTimeOffset.MinValue;
-    private Dictionary<string, AlertWatch[]> _fires = new(StringComparer.Ordinal); // a view's name → the shapes its entries fire
-    private int _lastCounter;
-    private int _disposed;
+    private int _disposed, _signaled;
+    private int _failing; // refreshes failed in a row: said as it starts, each minute it goes on, and as it ends
+    private DateTimeOffset _failingSaid;
+    private Dictionary<string, AlertWatch[]> _enters = new(StringComparer.Ordinal); // a view's name → the shapes its entries fire
+    private DateTime _refreshed = DateTime.MinValue;
     private IAlertSink? _sink;
-    private volatile bool _watching, _waiting; // (a view open; one that waits: read on the house's thread and the ledger's)
+    private volatile bool _watching; // (a view open: read on the streams' threads)
 
-    private StandingAlerts(ChalkEngine engine, PocoTable<FillRecord> arrivedFills, PocoTable<OrderRecord> latestOrders,
-        PocoTable<OrderRecord> waitingOrders, PocoTable<FillRecord> waitingFills, PocoTable<Wait> waits, PocoTable<MatchCount> matchCounts,
-        Ledger ledger, TimeProvider time)
+    private StandingAlerts(ChalkEngine engine, PocoTable<OrderRecord> latestOrders, PocoTable<FillRecord> arrivedFills, AlertSources sources,
+        TimeProvider time)
     {
-        (_engine, _arrivedFills, _latestOrders, _waitingOrders, _waitingFills, _waits, _matchCounts, _ledger, _time) =
-            (engine, arrivedFills, latestOrders, waitingOrders, waitingFills, waits, matchCounts, ledger, time);
-        ledger.Heard = Heard;
-        ledger.Landed = Landed;
+        (_engine, _latestOrders, _arrivedFills, _time) = (engine, latestOrders, arrivedFills, time);
+        _orderWaits = new TabWaits<OrderRow>(this, sources.OrderStore, sources.OrderRows, from => from == "order_time" ? OrderTime : null,
+            row => Order(OrderRecord.Of(row)), time);
+        _fillWaits = new TabWaits<FillRow>(this, sources.FillStore, sources.FillRows, _ => null, row => Fill(FillRecord.Of(row)), time);
+        _timer = time.CreateTimer(static state => ((StandingAlerts)state!).Wake(), this, Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
         _loop = Task.Run(() => LoopAsync(_stop.Token));
+        _hearingOrders = sources.Orders.Subscribe(HeardOrders);
+        _hearingFills = sources.Fills.Subscribe(HeardFills);
     }
 
-    /// <summary>The views open, count views among them.</summary>
-    public int Views => _views.Count + _counts.Count;
+    /// <summary>The views open.</summary>
+    public int Views => _views.Count;
 
-    /// <summary>The evaluator, on an engine of its own over its tables, on <paramref name="planner" />; told by <paramref name="ledger" />.</summary>
-    public static async Task<StandingAlerts> StartAsync(PlannerProcess planner, Ledger ledger, TimeProvider? time = null)
+    /// <summary>The evaluator, on an engine of its own over its tables, on <paramref name="planner" />; hearing and reading <paramref name="sources" />.</summary>
+    public static async Task<StandingAlerts> StartAsync(PlannerProcess planner, AlertSources sources, TimeProvider? time = null)
     {
         var live = new PocoSourceBuilder("live", "live")
             .NamingPolicy(PocoNamingPolicy.SnakeCase)
             .AddTable("arrived_fills", (IReadOnlyList<FillRecord>)[], out var arrivedFills, t => t.Keyed(f => f.FillId))
             .AddTable("latest_orders", (IReadOnlyList<OrderRecord>)[], out var latestOrders, t => t.Keyed(o => o.OrderId))
-            .AddTable("waiting_orders", (IReadOnlyList<OrderRecord>)[], out var waitingOrders, t => t.Keyed(o => o.OrderId))
-            .AddTable("waiting_fills", (IReadOnlyList<FillRecord>)[], out var waitingFills, t => t.Keyed(f => f.FillId))
-            .AddTable("waits", (IReadOnlyList<Wait>)[], out var waits, t => t.Keyed(w => w.Id))
-            .AddTable("match_counts", (IReadOnlyList<MatchCount>)[], out var matchCounts, t => t.Keyed(c => c.Counter, c => c.SliceStart))
             .Build();
         var engine = await ChalkEngine.CreateAsync(new ChalkEngineOptions
         {
-            ContextId = "livegrid-alerts", Sources = [live], Planner = planner.CreatePlanner(),
-            Clock = "now" // (a wait's view, and a count's, read the time as @now: the clock every refresh moves)
+            ContextId = "livegrid-alerts", Sources = [live], Planner = planner.CreatePlanner() // (no clock: no view reads the time)
         });
-        return new StandingAlerts(engine, arrivedFills, latestOrders, waitingOrders, waitingFills, waits, matchCounts, ledger,
-            time ?? TimeProvider.System);
+        return new StandingAlerts(engine, latestOrders, arrivedFills, sources, time ?? TimeProvider.System);
     }
 
     public async ValueTask DisposeAsync()
     {
         if (Interlocked.Exchange(ref _disposed, 1) == 1) return;
-        (_ledger.Heard, _ledger.Landed) = (null, null);
+        _hearingOrders.Dispose();
+        _hearingFills.Dispose();
         await _stop.CancelAsync();
+        await _timer.DisposeAsync();
         try
         {
             await _loop;
@@ -139,17 +153,17 @@ internal sealed class StandingAlerts : IAlertEvaluator
         {
         }
 
+        await _orderWaits.DisposeAsync();
+        await _fillWaits.DisposeAsync();
         await _gate.WaitAsync();
-        foreach (var view in _counts.Values) await view.DisposeAsync();
         foreach (var view in _views.Values) await view.DisposeAsync();
-        _counts.Clear();
         _views.Clear();
         await _engine.DisposeAsync();
     }
 
     /// <summary>
-    ///     Null if the shape can be evaluated: its tab known, its condition one (names it knows, no statement), and a view of
-    ///     it one ChalkQL makes. Else why not, without the planner's correlation id.
+    ///     Null if the shape can be evaluated: its tab known, its condition one (names it knows, no statement), a wait's anchor
+    ///     and proof ones its tab offers, and a view of it one ChalkQL makes. Else why not, without the planner's correlation id.
     /// </summary>
     public async ValueTask<string?> CheckAsync(AlertWatch watch, CancellationToken cancellationToken)
     {
@@ -166,16 +180,15 @@ internal sealed class StandingAlerts : IAlertEvaluator
     }
 
     /// <summary>
-    ///     The shapes to evaluate, from now: a view opened for each new (a count's beside the view whose matches it counts),
-    ///     those no shape has closed; a counter for each width of slice a count reads, which begins counting now.
+    ///     The shapes to evaluate, from now: a view opened for each condition new, those no shape reads closed; each tab's waits
+    ///     told the distinct watches its wait shapes ask for; a count begun now for each new, those kept as they were.
     /// </summary>
     public async ValueTask<IReadOnlyDictionary<AlertWatch, string>> WatchAsync(IReadOnlyCollection<AlertWatch> watches, IAlertSink sink,
         CancellationToken cancellationToken)
     {
         var refused = new Dictionary<AlertWatch, string>();
         var specs = new Dictionary<string, AlertViewSpec>(StringComparer.Ordinal);
-        var windows = new Dictionary<string, (AlertWindowSpec Spec, AlertWatch Watch)>(StringComparer.Ordinal);
-        var fires = new Dictionary<string, List<AlertWatch>>(StringComparer.Ordinal);
+        var shapes = new List<(AlertWatch Watch, AlertViewSpec Spec)>();
         foreach (var watch in watches)
         {
             if (Spec(watch, out var why) is not { } spec)
@@ -185,41 +198,18 @@ internal sealed class StandingAlerts : IAlertEvaluator
             }
 
             specs.TryAdd(spec.Name, spec);
-            if (watch.Trigger is AlertTrigger.Counting counting)
-            {
-                var window = new AlertWindowSpec(spec, counting);
-                windows[window.Name] = (window, watch);
-            }
-            else
-            {
-                (fires.TryGetValue(spec.Name, out var list) ? list : fires[spec.Name] = []).Add(watch);
-            }
+            shapes.Add((watch, spec));
         }
 
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
             _sink = sink;
-            // The clock where it is now: a view that reads it (a wait's, a count's) can't be made till it's set, and starts from it.
             var now = _time.GetUtcNow().UtcDateTime;
-            await _engine.RefreshAsync(refresh => refresh.AdvanceClock(Tick(now)), cancellationToken).ConfigureAwait(false);
-            foreach (var name in _counts.Keys.Where(n => !windows.ContainsKey(n)).ToList())
-            {
-                await _counts[name].DisposeAsync().ConfigureAwait(false);
-                _counts.Remove(name);
-            }
-
             foreach (var name in _views.Keys.Where(n => !specs.ContainsKey(n)).ToList())
             {
                 await _views[name].DisposeAsync().ConfigureAwait(false);
                 _views.Remove(name);
-            }
-
-            // Counters no window reads go, their slices with them; each kept is kept for its longest window.
-            foreach (var (key, counter) in _counters.Where(c => !windows.Values.Any(w => (w.Spec.Matcher.Name, w.Spec.Slice) == c.Key)).ToList())
-            {
-                _counters.Remove(key);
-                _countsGone.AddRange(counter.Slices.Select(s => new MatchCount(counter.Id, s.Key, s.Value)));
             }
 
             foreach (var (name, spec) in specs.Where(s => !_views.ContainsKey(s.Key)))
@@ -229,35 +219,35 @@ internal sealed class StandingAlerts : IAlertEvaluator
                 }
                 catch (Exception failure) when (failure is not OperationCanceledException)
                 {
-                    foreach (var watch in watches.Where(w => Spec(w, out _)?.Name == name)) refused[watch] = Readable(failure.Message);
+                    foreach (var (watch, _) in shapes.Where(s => s.Spec.Name == name)) refused[watch] = Readable(failure.Message);
                 }
 
-            foreach (var (name, (window, watch)) in windows)
-            {
-                if (!_views.ContainsKey(window.Matcher.Name))
+            // The shapes whose views were made, by trigger: those firing as rows enter, the waits a tab's, the counts.
+            var enters = new Dictionary<string, List<AlertWatch>>(StringComparer.Ordinal);
+            List<(AlertWatch, string)> orderWaits = [], fillWaits = [];
+            var counts = new List<CountShape>();
+            foreach (var (watch, spec) in shapes.Where(s => !refused.ContainsKey(s.Watch)))
+                switch (watch.Trigger)
                 {
-                    refused.TryAdd(watch, "the view whose matches it counts couldn't be made");
-                    continue;
+                    case AlertTrigger.Waiting:
+                        (spec.Tab.Overrides ? orderWaits : fillWaits).Add((watch, spec.Name));
+                        break;
+                    case AlertTrigger.Counting counting:
+                        counts.Add(_counts.Find(c => c.Watch == watch) ?? new CountShape(watch, counting, spec.Name, now));
+                        break;
+                    default:
+                        (enters.TryGetValue(spec.Name, out var list) ? list : enters[spec.Name] = []).Add(watch);
+                        break;
                 }
 
-                if (!_counters.TryGetValue((window.Matcher.Name, window.Slice), out var counter))
-                    _counters[(window.Matcher.Name, window.Slice)] = counter = new Counter(++_lastCounter, window.Matcher.Name, window.Slice, now);
-                counter.KeepFor = windows.Values.Where(w => (w.Spec.Matcher.Name, w.Spec.Slice) == (counter.Matcher, counter.Slice))
-                    .Max(w => w.Spec.Count.Window) + counter.Slice;
-                if (_counts.ContainsKey(name)) continue;
-                try
-                {
-                    _counts[name] = await CountView.CreateAsync(_engine, window, watch, counter.Id, Micros(counter.Began + window.Count.Window),
-                        StateBudget, cancellationToken).ConfigureAwait(false);
-                }
-                catch (Exception failure) when (failure is not OperationCanceledException)
-                {
-                    refused[watch] = Readable(failure.Message);
-                }
-            }
-
-            _fires = fires.ToDictionary(f => f.Key, f => f.Value.ToArray(), StringComparer.Ordinal);
-            Watched();
+            _enters = enters.ToDictionary(e => e.Key, e => e.Value.ToArray(), StringComparer.Ordinal);
+            _counts.Clear();
+            _counts.AddRange(counts);
+            _orderWaits.Watch(orderWaits);
+            _fillWaits.Watch(fillWaits);
+            _watching = _views.Count > 0;
+            if (!_watching) await ForgetAsync(cancellationToken).ConfigureAwait(false);
+            Arm(now);
             return refused;
         }
         finally
@@ -266,48 +256,47 @@ internal sealed class StandingAlerts : IAlertEvaluator
         }
     }
 
-    /// <summary>The ledger's batch, heard: noted, for the next refresh (on the house's thread, under its lock: a copy, and no more).</summary>
-    private void Heard(ReadOnlySpan<OrderRow> versions, ReadOnlySpan<(OrderRow Order, Fill Fill)> fills)
+    /// <summary>
+    ///     Versions the orders' stream sent, on its thread (what's done must be quick): the waits told at once — each waits
+    ///     from its own anchor, however long till the tables are refreshed — and a copy kept for the next refresh.
+    /// </summary>
+    private void HeardOrders(ReadOnlySpan<OrderRow> versions)
     {
-        if (_watching) _heard.Enqueue((versions.ToArray(), fills.ToArray()));
+        if (!_watching || versions.IsEmpty) return;
+        _orderWaits.Waits.Heard(versions);
+        _heardOrders.Enqueue(versions.ToArray());
+        Wake();
     }
 
-    /// <summary>The ledger's batch, landed: the waits it ends, for the next refresh.</summary>
-    private void Landed(OrderRow[] versions, (OrderRow Order, Fill Fill)[] fills)
+    /// <summary>Fills the fills' stream sent: as the orders' versions are.</summary>
+    private void HeardFills(ReadOnlySpan<FillRow> fills)
     {
-        if (_waiting) _landed.Enqueue((versions, fills, _time.GetUtcNow().UtcDateTime));
+        if (!_watching || fills.IsEmpty) return;
+        _fillWaits.Waits.Heard(fills);
+        _heardFills.Enqueue(fills.ToArray());
+        Wake();
     }
 
-    /// <summary>Which tables the views open read: any view, the arrivals; a wait's, the waits.</summary>
-    private void Watched()
+    /// <summary>A turn of the loop asked for: once, until it begins.</summary>
+    private void Wake()
     {
-        _watching = _views.Count > 0 || _counts.Count > 0;
-        _waiting = _views.Values.Any(v => v.Spec.LagOver is not null);
+        if (Interlocked.Exchange(ref _signaled, 1) == 0) _signal.Release();
     }
 
     private async Task LoopAsync(CancellationToken ct)
     {
-        using var timer = new PeriodicTimer(Every, _time);
-        while (await timer.WaitForNextTickAsync(ct).ConfigureAwait(false))
+        while (true)
         {
+            await _signal.WaitAsync(ct).ConfigureAwait(false);
+            Volatile.Write(ref _signaled, 0);
             await _gate.WaitAsync(ct).ConfigureAwait(false);
             try
             {
-                var now = _time.GetUtcNow().UtcDateTime;
-                var changes = Collect(now);
-                // Nothing new, and no view reads the clock: nothing to refresh.
-                if (changes.Count == 0 && _counts.Count == 0 && !_waiting) continue;
-                var clock = Tick(now);
-                await _engine.RefreshAsync(refresh =>
-                {
-                    foreach (var change in changes) change(refresh);
-                    refresh.AdvanceClock(clock);
-                }, ct).ConfigureAwait(false);
-                await UpdateAsync(now, ct).ConfigureAwait(false);
+                await TurnAsync(ct).ConfigureAwait(false);
             }
-            catch (Exception failure) when (failure is not OperationCanceledException)
+            catch (Exception failure) when (!ct.IsCancellationRequested) // (a cancellation of ChalkQL's own, a timeout: a failure)
             {
-                Console.Error.WriteLine($"The alerts' refresh failed, to be tried again: {failure.Message}");
+                Failed(failure);
             }
             finally
             {
@@ -316,54 +305,130 @@ internal sealed class StandingAlerts : IAlertEvaluator
         }
     }
 
-    /// <summary>The engine's clock moved to <paramref name="now" />: forward only, by a tick at least, however the wall clock steps.</summary>
-    private DateTimeOffset Tick(DateTime now)
+    /// <summary>
+    ///     One turn: what the waits told, fired where the conditions pass; the tables refreshed with what was heard, if a
+    ///     refresh is due, and the views brought to them; the counts judged; the timer set for what comes next.
+    /// </summary>
+    private async Task TurnAsync(CancellationToken ct)
     {
-        var clock = new DateTimeOffset(now, TimeSpan.Zero); // (UTC, said so: an unmarked time is taken at the machine's offset)
-        return _clock = clock > _clock ? clock : _clock.AddTicks(1);
+        var now = _time.GetUtcNow().UtcDateTime;
+        try
+        {
+            TakeTold(now);
+            if (Heard() && now - _refreshed >= RefreshEvery)
+            {
+                _refreshed = now;
+                var changes = Collect(now);
+                if (changes.Count > 0)
+                    await _engine.RefreshAsync(refresh =>
+                    {
+                        foreach (var change in changes) change(refresh);
+                    }, ct).ConfigureAwait(false);
+                await UpdateAsync(now, ct).ConfigureAwait(false);
+                Recovered();
+            }
+
+            foreach (var count in _counts)
+                if (count.Judge(now) is { } line)
+                    Hit(count.Watch, new AlertHit("", line));
+        }
+        finally
+        {
+            Tell();
+            Arm(now);
+        }
     }
 
     /// <summary>
-    ///     What the tables gain and lose since the last refresh: what was heard, what landed, what's old enough to go, the counts —
-    ///     or, while no view reads them, all they kept.
+    ///     A refresh failed, to be tried again with the next rows heard: said the first time, then once a minute while they
+    ///     go on failing (a planner gone fails every one).
+    /// </summary>
+    private void Failed(Exception failure)
+    {
+        var now = _time.GetUtcNow();
+        if (_failing++ > 0 && now - _failingSaid < TimeSpan.FromMinutes(1)) return;
+        _failingSaid = now;
+        Console.Error.WriteLine(_failing == 1
+            ? $"The alerts' refresh failed, to be tried again: {failure.Message}"
+            : $"The alerts' refreshes are still failing, {_failing:N0} in a row: {failure.Message}");
+    }
+
+    /// <summary>A refresh done: if those before it failed, said how many.</summary>
+    private void Recovered()
+    {
+        if (_failing == 0) return;
+        Console.Error.WriteLine($"The alerts' refreshes are working again, after {_failing:N0} failed.");
+        _failing = 0;
+    }
+
+    private bool Heard()
+    {
+        return !_heardOrders.IsEmpty || !_heardFills.IsEmpty;
+    }
+
+    /// <summary>The timer set for the next refresh, if rows were heard, or the soonest count's deadline: whichever comes first.</summary>
+    private void Arm(DateTime now)
+    {
+        DateTime? next = Heard() ? _refreshed + RefreshEvery : null;
+        foreach (var count in _counts)
+            if (count.Deadline(now) is { } due && (next is null || due < next))
+                next = due;
+        if (next is not { } at)
+        {
+            _timer.Change(Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
+            return;
+        }
+
+        var wait = at - now;
+        _timer.Change(wait > TimeSpan.Zero ? wait : TimeSpan.Zero, Timeout.InfiniteTimeSpan);
+    }
+
+    /// <summary>What the waits told: each wait past a threshold noted on its watch's shapes, fired where its condition passes now; each ended, forgotten.</summary>
+    private void TakeTold(DateTime now)
+    {
+        while (_told.TryDequeue(out var told))
+            foreach (var shape in told.Waits.Shapes)
+            {
+                if (told.Line is null)
+                {
+                    shape.Overdue.Remove(told.Key);
+                    shape.Fired.Remove(told.Key);
+                }
+                else if (shape.Grid.Equals(told.Watch))
+                {
+                    shape.Overdue[told.Key] = (told.Waited, now, told.Line);
+                    if (_views.TryGetValue(shape.View, out var view) && view.Holds(told.Key) && shape.Fired.Add(told.Key))
+                        Hit(shape.Watch, new AlertHit(told.Key.ToString(), Waited(told.Line, told.Waited)));
+                }
+            }
+    }
+
+    /// <summary>
+    ///     What the tables gain and lose since the last refresh: what was heard, and what's old enough to go — a fill once its
+    ///     order could have arrived and the longest wait on fills has passed, an order unchanged a while.
     /// </summary>
     private List<Action<RefreshBuilder>> Collect(DateTime now)
     {
-        // The landings first, then what was heard: a batch is heard before it can land, so every landing taken has its batch heard.
-        List<(OrderRow[] Versions, (OrderRow Order, Fill Fill)[] Fills, DateTime At)> landings = [];
-        while (_landed.TryDequeue(out var landing)) landings.Add(landing);
-        List<(OrderRow[] Versions, (OrderRow Order, Fill Fill)[] Fills)> heard = [];
-        while (_heard.TryDequeue(out var batch)) heard.Add(batch);
-        var (watching, waiting) = (_watching, _waiting);
-        if (!watching) heard.Clear(); // (told as the last view closed: not kept)
-        if (!waiting) landings.Clear();
-
-        List<FillRecord> newFills = [], goneFills = [], fillsWaiting = [], fillsDone = [];
+        List<OrderRow[]> orders = [];
+        while (_heardOrders.TryDequeue(out var batch)) orders.Add(batch);
+        List<FillRow[]> fills = [];
+        while (_heardFills.TryDequeue(out var batch)) fills.Add(batch);
+        if (!_watching) return []; // (heard as the last view closed, the tables emptied: not kept)
         Dictionary<Guid, OrderRecord> newest = [];
-        List<OrderRecord> goneOrders = [], ordersWaiting = [], ordersDone = [];
-        List<Wait> waitsSet = [], waitsGone = [];
-        HashSet<OrderWait> ordersTold = [];
-        HashSet<FillWait> fillsTold = [];
-        foreach (var (versions, fills) in heard)
-        {
-            foreach (var version in versions)
+        List<FillRecord> newFills = [], goneFills = [];
+        List<OrderRecord> goneOrders = [];
+        foreach (var batch in orders)
+        foreach (var version in batch)
+            if ((!newest.TryGetValue(version.OrderId, out var was) || was.Version < version.Version) &&
+                (!_orders.TryGetValue(version.OrderId, out var kept) || kept.Order.Version < version.Version))
+                newest[version.OrderId] = OrderRecord.Of(version);
+        foreach (var batch in fills)
+        foreach (var fill in batch)
+            if (!_fills.ContainsKey(fill.FillId) && FillRecord.Of(fill) is var record)
             {
-                var record = OrderRecord.Of(version);
-                if ((!newest.TryGetValue(record.OrderId, out var was) || was.Version < record.Version) &&
-                    (!_orders.TryGetValue(record.OrderId, out var kept) || kept.Order.Version < record.Version))
-                    newest[record.OrderId] = record;
-                if (!waiting) continue;
-                if (!_orderWaits.TryGetValue(record.OrderId, out var wait)) _orderWaits[record.OrderId] = wait = new OrderWait(record);
-                if (wait.Heard(record)) ordersTold.Add(wait);
+                _fills[record.FillId] = record;
+                newFills.Add(record);
             }
-
-            foreach (var (order, fill) in fills)
-            {
-                var record = FillRecord.Of(order, fill, order.ClOrdId.ToString());
-                if (_fills.TryAdd(record.FillId, record)) newFills.Add(record);
-                if (waiting && !_fillWaits.ContainsKey(record.FillId)) fillsTold.Add(_fillWaits[record.FillId] = new FillWait(record));
-            }
-        }
 
         if (newFills.Count > 0) _fillsKept.Enqueue((now, newFills));
         foreach (var record in newest.Values)
@@ -372,70 +437,14 @@ internal sealed class StandingAlerts : IAlertEvaluator
             _ordersKept.Enqueue((now, record.OrderId));
         }
 
-        // The waits: those heard and landed, settled; those landed a while, gone.
-        foreach (var (versions, fills, at) in landings)
-        {
-            foreach (var version in versions)
-                if (_orderWaits.TryGetValue(version.OrderId, out var wait) && wait.Landed(version.Version, at))
-                    ordersTold.Add(wait);
-            foreach (var (_, fill) in fills)
-                if (_fillWaits.TryGetValue(fill.Id, out var wait) && wait.Landed(at))
-                    fillsTold.Add(wait);
-        }
-
-        foreach (var wait in ordersTold)
-        {
-            if (wait.Settle(now) is { } shown) waitsSet.Add(shown);
-            if (!wait.Newer) continue;
-            ordersWaiting.Add(wait.Order);
-            wait.Newer = false;
-        }
-
-        foreach (var wait in fillsTold)
-        {
-            if (wait.Settle(now) is { } shown) waitsSet.Add(shown);
-            if (wait.Told) continue;
-            fillsWaiting.Add(wait.Fill);
-            wait.Told = true;
-        }
-
-        foreach (var (id, wait) in _orderWaits.Where(w => !waiting || w.Value.GoesAt <= now).ToList())
-        {
-            _orderWaits.Remove(id);
-            ordersDone.Add(wait.Order);
-            if (wait.Shown is { } shown) waitsGone.Add(shown);
-        }
-
-        foreach (var (id, wait) in _fillWaits.Where(w => !waiting || w.Value.GoesAt <= now).ToList())
-        {
-            _fillWaits.Remove(id);
-            fillsDone.Add(wait.Fill);
-            if (wait.Shown is { } shown) waitsGone.Add(shown);
-        }
-
-        // The arrivals: fills heard a while ago, orders unchanged a while, gone — or all, while no view reads them.
-        while (_fillsKept.TryPeek(out var oldest) && (!watching || oldest.At < now - FillsFor))
+        var fillsFor = FillsFor + _fillWaits.Longest;
+        while (_fillsKept.TryPeek(out var oldest) && oldest.At < now - fillsFor)
             foreach (var fill in _fillsKept.Dequeue().Fills.Where(f => _fills.Remove(f.FillId)))
                 goneFills.Add(fill);
-        while (_ordersKept.TryPeek(out var oldest) && (!watching || oldest.At < now - OrdersFor))
+        while (_ordersKept.TryPeek(out var oldest) && oldest.At < now - OrdersFor)
         {
             _ordersKept.Dequeue();
-            if (_orders.TryGetValue(oldest.Id, out var kept) && (!watching || kept.At == oldest.At) && _orders.Remove(oldest.Id))
-                goneOrders.Add(kept.Order);
-        }
-
-        // The counts: what the views counted since the last refresh, and the slices no window reads any more.
-        List<MatchCount> countsSet = [], countsGone = [.. _countsGone];
-        _countsGone.Clear();
-        foreach (var counter in _counters.Values)
-        {
-            countsSet.AddRange(counter.Changed.Select(slice => new MatchCount(counter.Id, slice, counter.Slices[slice])));
-            counter.Changed.Clear();
-            foreach (var slice in counter.Slices.Keys.Where(slice => slice < Micros(now - counter.KeepFor)).ToList())
-            {
-                countsGone.Add(new MatchCount(counter.Id, slice, counter.Slices[slice]));
-                counter.Slices.Remove(slice);
-            }
+            if (_orders.TryGetValue(oldest.Id, out var kept) && kept.At == oldest.At && _orders.Remove(oldest.Id)) goneOrders.Add(kept.Order);
         }
 
         List<Action<RefreshBuilder>> changes = [];
@@ -443,18 +452,32 @@ internal sealed class StandingAlerts : IAlertEvaluator
         if (newFills.Count > 0) changes.Add(r => r.Upsert(_arrivedFills, newFills));
         if (goneOrders.Count > 0) changes.Add(r => r.Delete(_latestOrders, goneOrders));
         if (newest.Count > 0) changes.Add(r => r.Upsert(_latestOrders, [.. newest.Values]));
-        if (ordersDone.Count > 0) changes.Add(r => r.Delete(_waitingOrders, ordersDone));
-        if (ordersWaiting.Count > 0) changes.Add(r => r.Upsert(_waitingOrders, ordersWaiting));
-        if (fillsDone.Count > 0) changes.Add(r => r.Delete(_waitingFills, fillsDone));
-        if (fillsWaiting.Count > 0) changes.Add(r => r.Upsert(_waitingFills, fillsWaiting));
-        if (waitsGone.Count > 0) changes.Add(r => r.Delete(_waits, waitsGone));
-        if (waitsSet.Count > 0) changes.Add(r => r.Upsert(_waits, waitsSet));
-        if (countsGone.Count > 0) changes.Add(r => r.Delete(_matchCounts, countsGone));
-        if (countsSet.Count > 0) changes.Add(r => r.Upsert(_matchCounts, countsSet));
         return changes;
     }
 
-    /// <summary>Every view brought to the refresh: what entered each, fired; the matches counted, for the next; each count's row entering, fired.</summary>
+    /// <summary>The tables emptied, no view reading them: what was heard, and all they kept.</summary>
+    private async Task ForgetAsync(CancellationToken ct)
+    {
+        _heardOrders.Clear();
+        _heardFills.Clear();
+        List<OrderRecord> orders = [.. _orders.Values.Select(o => o.Order)];
+        List<FillRecord> fills = [.. _fills.Values];
+        _orders.Clear();
+        _fills.Clear();
+        _ordersKept.Clear();
+        _fillsKept.Clear();
+        if (orders.Count > 0 || fills.Count > 0)
+            await _engine.RefreshAsync(refresh =>
+            {
+                if (orders.Count > 0) refresh.Delete(_latestOrders, orders);
+                if (fills.Count > 0) refresh.Delete(_arrivedFills, fills);
+            }, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    ///     Every view brought to the refresh: what entered each, fired, by the shapes firing on arrival and by the waits told
+    ///     past their thresholds that it now passes; its matches counted by the counts that read it.
+    /// </summary>
     private async Task UpdateAsync(DateTime now, CancellationToken ct)
     {
         foreach (var view in _views.Values.ToList())
@@ -469,76 +492,67 @@ internal sealed class StandingAlerts : IAlertEvaluator
                 Console.Error.WriteLine($"An alert view failed, and was closed: {failure.Message}");
                 _views.Remove(view.Spec.Name);
                 await view.DisposeAsync().ConfigureAwait(false);
-                Watched();
                 continue;
             }
 
             if (update.Matches > 0)
-                foreach (var counter in _counters.Values.Where(c => c.Matcher == view.Spec.Name))
-                    counter.Add(now, update.Matches);
-            if (update.Entered.Count == 0 || !_fires.TryGetValue(view.Spec.Name, out var watches)) continue;
-            var hits = new List<AlertHit>(update.Entered.Count);
-            foreach (var key in update.Entered)
-                if (Describe(view.Spec, key, now) is { } summary)
-                    hits.Add(new AlertHit(key.Id.ToString(), summary));
-            if (hits.Count == 0) continue;
-            foreach (var watch in watches) _sink?.Fired(watch, CollectionsMarshal.AsSpan(hits));
-        }
-
-        foreach (var view in _counts.Values.ToList())
-        {
-            long? matches;
-            try
-            {
-                matches = await view.UpdateAsync(ct).ConfigureAwait(false);
-            }
-            catch (Exception failure) when (failure is not OperationCanceledException)
-            {
-                Console.Error.WriteLine($"A count view failed, and was closed: {failure.Message}");
-                _counts.Remove(view.Spec.Name);
-                await view.DisposeAsync().ConfigureAwait(false);
-                Watched();
-                continue;
-            }
-
-            if (matches is not { } inWindow) continue;
-            var count = view.Spec.Count;
-            var line = count.Kind == AlertCountKind.AtLeast
-                ? string.Create(CultureInfo.InvariantCulture, $"{inWindow:N0} in the last {AlertChoices.Span(count.Window)}")
-                : $"none in the last {AlertChoices.Span(count.Window)}";
-            _sink?.Fired(view.Watch, [new AlertHit("", line)]);
+                foreach (var count in _counts)
+                    if (count.View == view.Spec.Name)
+                        count.Add(now, update.Matches);
+            if (update.Entered.Count == 0) continue;
+            if (_enters.TryGetValue(view.Spec.Name, out var watches))
+                foreach (var id in update.Entered)
+                    if (Describe(view.Spec, id) is { } summary)
+                        foreach (var watch in watches)
+                            Hit(watch, new AlertHit(id.ToString(), summary));
+            foreach (var shape in (view.Spec.Tab.Overrides ? _orderWaits : (TabWaits)_fillWaits).Shapes)
+                if (shape.View == view.Spec.Name)
+                    foreach (var id in update.Entered)
+                        if (shape.Overdue.TryGetValue(id, out var told) && shape.Fired.Add(id))
+                            Hit(shape.Watch, new AlertHit(id.ToString(), Waited(told.Line, told.Waited + (now - told.At))));
         }
     }
 
-    /// <summary>A row that entered a view, in a line, as the blotter describes one: and, a wait's, how long it waited.</summary>
-    private string? Describe(AlertViewSpec spec, AlertKey key, DateTime now)
+    private void Hit(AlertWatch watch, AlertHit hit)
     {
-        if (spec.LagOver is null)
-            return spec.Tab.Overrides
-                ? _orders.TryGetValue(key.Id, out var kept) ? Order(kept.Order) : null
-                : _fills.TryGetValue(key.Id, out var fill) ? Fill(fill) : null;
-        var (line, shown) = spec.Tab.Overrides
-            ? _orderWaits.TryGetValue(key.Id, out var order) ? (Order(order.Order), order.Shown) : (null, null)
-            : _fillWaits.TryGetValue(key.Id, out var waiting) ? (Fill(waiting.Fill), waiting.Shown) : (null, null);
-        if (line is null || shown is null) return line;
-        var landed = shown.Until != Never;
-        var waited = ((landed ? shown.Until : Micros(now)) - key.Since).TotalSeconds;
-        return landed
-            ? string.Create(CultureInfo.InvariantCulture, $"{line} · landed after {waited:0.0} s")
-            : string.Create(CultureInfo.InvariantCulture, $"{line} · {waited:0.0} s waiting for the database");
+        if (!_hits.TryGetValue(watch, out var hits)) _hits[watch] = hits = [];
+        hits.Add(hit);
+    }
 
-        static string Order(OrderRecord o)
+    /// <summary>What the turn fired, told: each shape's rows at once.</summary>
+    private void Tell()
+    {
+        foreach (var (watch, hits) in _hits)
         {
-            return string.Create(CultureInfo.InvariantCulture, $"{o.Client} {o.Side} {o.Qty:#,0.####} {o.Instrument} · {o.Status}");
-        }
-
-        static string Fill(FillRecord f)
-        {
-            return string.Create(CultureInfo.InvariantCulture, $"{f.Client} {f.Side} {f.Qty:#,0.####} {f.Instrument} @ {f.Price:#,0.######}");
+            if (hits.Count > 0) _sink?.Fired(watch, CollectionsMarshal.AsSpan(hits));
+            hits.Clear();
         }
     }
 
-    /// <summary>A shape's view, or why there's none: its tab, and its condition as the tab reads it.</summary>
+    /// <summary>A row that entered a view, in a line, as the blotter describes one.</summary>
+    private string? Describe(AlertViewSpec spec, Guid id)
+    {
+        return spec.Tab.Overrides
+            ? _orders.TryGetValue(id, out var kept) ? Order(kept.Order) : null
+            : _fills.TryGetValue(id, out var fill) ? Fill(fill) : null;
+    }
+
+    private static string Order(OrderRecord o)
+    {
+        return string.Create(CultureInfo.InvariantCulture, $"{o.Client} {o.Side} {o.Qty:#,0.####} {o.Instrument} · {o.Status}");
+    }
+
+    private static string Fill(FillRecord f)
+    {
+        return string.Create(CultureInfo.InvariantCulture, $"{f.Client} {f.Side} {f.Qty:#,0.####} {f.Instrument} @ {f.Price:#,0.######}");
+    }
+
+    private static string Waited(string line, TimeSpan waited)
+    {
+        return string.Create(CultureInfo.InvariantCulture, $"{line} · {waited.TotalSeconds:0.0} s waiting for the database");
+    }
+
+    /// <summary>A shape's view, or why there's none: its tab, its condition as the tab reads it, and a wait's anchor and proof.</summary>
     private static AlertViewSpec? Spec(AlertWatch watch, out string? refusal)
     {
         refusal = null;
@@ -561,7 +575,17 @@ internal sealed class StandingAlerts : IAlertEvaluator
             return null;
         }
 
-        return new AlertViewSpec(tab, condition, watch.Trigger is AlertTrigger.Waiting waiting ? waiting.Over : null);
+        if (watch.Trigger is AlertTrigger.Waiting waiting)
+        {
+            if (tab.WaitsFrom.Count == 0) refusal = $"{tab.Title} rows aren't waited for";
+            else if (waiting.From is { } from && tab.WaitsFrom.All(a => a.Column != from))
+                refusal = $"a wait on {tab.Title} runs from {string.Join(" or ", tab.WaitsFrom.Select(a => a.Column ?? "its own time"))}, not '{from}'";
+            else if (!tab.WaitProofs.Contains(waiting.Proof))
+                refusal = $"a wait on {tab.Title} is {string.Join(" or ", tab.WaitProofs.Select(p => AlertChoices.Proof(p).Label))}, not {waiting.Proof}";
+            if (refusal is not null) return null;
+        }
+
+        return new AlertViewSpec(tab, condition);
     }
 
     /// <summary>
@@ -577,239 +601,248 @@ internal sealed class StandingAlerts : IAlertEvaluator
         return Regex.Replace(message, @" at line \d+, column \d+", "").Trim();
     }
 
-    /// <summary>A time as the tables hold it: to the microsecond, the UTC wall clock.</summary>
-    private static DateTime Micros(DateTime time)
+    /// <summary>A wait past a threshold — its watch, how long it had waited, its newest version in a line — or, with no line, one ended.</summary>
+    private readonly record struct Told(TabWaits Waits, Guid Key, object? Watch, TimeSpan Waited, string? Line);
+
+    /// <summary>
+    ///     A wait's shape: its rule's watch, its condition's view, and its watch as the waits keep it; the keys told past its
+    ///     threshold this wait (how long each had waited, when told, and its newest version in a line), and those it fired for.
+    /// </summary>
+    private sealed class WaitShape(AlertWatch watch, string view, object grid)
     {
-        return new DateTime(time.Ticks - time.Ticks % 10, DateTimeKind.Unspecified);
+        public AlertWatch Watch => watch;
+
+        public string View => view;
+
+        /// <summary>Its watch as its tab's waits keep it: a <see cref="GridWaitWatch{TRow,TStamp}" />, equal to the one told.</summary>
+        public object Grid { get; set; } = grid;
+
+        public readonly Dictionary<Guid, (TimeSpan Waited, DateTime At, string Line)> Overdue = [];
+
+        public readonly HashSet<Guid> Fired = [];
+    }
+
+    /// <summary>A tab's waits for the database, as the turns read them: the wait shapes on it, and the longest wait in force (none: zero).</summary>
+    private abstract class TabWaits
+    {
+        public WaitShape[] Shapes { get; protected set; } = [];
+
+        public TimeSpan Longest { get; protected set; }
     }
 
     /// <summary>
-    ///     An order the database hasn't landed at its newest version heard, or landed within <see cref="LandedFor" />: that
-    ///     version, the times of those it hasn't landed, and its wait as <c>live.waits</c> has it.
+    ///     A tab's waits: its <see cref="GridWaits{TKey,TRow,TStamp}" />, told the distinct watches its wait shapes ask for, and
+    ///     what it tells queued for the next turn.
     /// </summary>
-    private sealed class OrderWait(OrderRecord order)
+    private sealed class TabWaits<TRow> : TabWaits, IGridWaitSink<Guid, TRow, DateTime>, IAsyncDisposable where TRow : unmanaged
     {
-        private readonly List<(int Version, DateTime Time)> _pending = [];
-        private int _landed;
-        private DateTime _landedAt;
+        private readonly StandingAlerts _alerts;
+        private readonly Func<string?, GridWaitAnchor<TRow, DateTime>?> _anchor;
+        private readonly Func<TRow, string> _line;
 
-        /// <summary>Its newest version heard: what a condition reads.</summary>
-        public OrderRecord Order { get; private set; } = order;
-
-        /// <summary>Whether <see cref="Order" /> is newer than <c>live.waiting_orders</c> has it.</summary>
-        public bool Newer { get; set; } = true;
-
-        /// <summary>Its wait, as <c>live.waits</c> has it (none yet: null).</summary>
-        public Wait? Shown { get; private set; }
-
-        /// <summary>Landed, when it goes; null while it waits.</summary>
-        public DateTime? GoesAt { get; private set; }
-
-        /// <summary>A version heard; false if the database has a newer already.</summary>
-        public bool Heard(OrderRecord version)
+        public TabWaits(StandingAlerts alerts, IGridStore<Guid, TRow, DateTime> store, IGridRows<Guid, TRow, DateTime> rows,
+            Func<string?, GridWaitAnchor<TRow, DateTime>?> anchor, Func<TRow, string> line, TimeProvider time)
         {
-            if (version.Version <= _landed) return false;
-            if (version.Version > Order.Version)
-            {
-                Order = version;
-                Newer = true;
-            }
-
-            _pending.Add((version.Version, Micros(version.EventTime)));
-            return true;
+            (_alerts, _anchor, _line) = (alerts, anchor, line);
+            Waits = new GridWaits<Guid, TRow, DateTime>(store, rows, this, WaitOptions, time);
         }
 
-        /// <summary>The database has landed <paramref name="version" /> at <paramref name="at" />: those before it, it has too.</summary>
-        public bool Landed(int version, DateTime at)
+        public GridWaits<Guid, TRow, DateTime> Waits { get; }
+
+        public ValueTask DisposeAsync()
         {
-            if (version <= _landed) return false;
-            (_landed, _landedAt) = (version, at);
-            return true;
+            return Waits.DisposeAsync();
+        }
+
+        /// <summary>The wait shapes in force, from now: one kept keeps what it was told; the waits keep the distinct watches.</summary>
+        public void Watch(IReadOnlyList<(AlertWatch Watch, string View)> shapes)
+        {
+            var watches = new List<GridWaitWatch<TRow, DateTime>>();
+            var kept = new WaitShape[shapes.Count];
+            for (var i = 0; i < shapes.Count; i++)
+            {
+                var (watch, view) = shapes[i];
+                var waiting = (AlertTrigger.Waiting)watch.Trigger;
+                var grid = new GridWaitWatch<TRow, DateTime>(waiting.Over,
+                    waiting.Proof == AlertWaitProof.Trusted ? GridWaitProof.Trusted : GridWaitProof.Confirmed, _anchor(waiting.From));
+                if (!watches.Contains(grid)) watches.Add(grid);
+                kept[i] = Array.Find(Shapes, s => s.Watch == watch) ?? new WaitShape(watch, view, grid);
+                kept[i].Grid = grid;
+            }
+
+            Shapes = kept;
+            Longest = watches.Count == 0 ? TimeSpan.Zero : watches.Max(w => w.Over);
+            Waits.SetWatches(CollectionsMarshal.AsSpan(watches));
+        }
+
+        void IGridWaitSink<Guid, TRow, DateTime>.Overdue(ReadOnlySpan<GridOverdue<Guid, TRow, DateTime>> overdue)
+        {
+            foreach (ref readonly var told in overdue) _alerts._told.Enqueue(new Told(this, told.Key, told.Watch, told.Waited, _line(told.Newest)));
+            _alerts.Wake();
+        }
+
+        void IGridWaitSink<Guid, TRow, DateTime>.Ended(ReadOnlySpan<GridWaitEnded<Guid>> ended)
+        {
+            foreach (ref readonly var end in ended) _alerts._told.Enqueue(new Told(this, end.Key, null, default, null));
+            _alerts.Wake();
+        }
+
+        void IGridWaitSink<Guid, TRow, DateTime>.Untracked(long keys)
+        {
+            Console.Error.WriteLine($"The alerts' waits are at their cap: {keys:N0} more rows heard not waited for (GridWaitsOptions.MaxWaits).");
+        }
+    }
+
+    /// <summary>
+    ///     A count's shape: the matches its condition's view sees, as heard, by step of a sixtieth of its window (a second at
+    ///     least) falling at whole multiples of the step since the Unix epoch, a step counting while it ends within the
+    ///     window; at least so many, or none, and whether that's been fired for and still holds.
+    /// </summary>
+    private sealed class CountShape
+    {
+        private readonly long _judgedFrom; // (ticks since the epoch: none, judged a whole window after counting began)
+        private readonly long[] _matches, _steps; // a ring: each slot's matches, and its step (since the epoch; MinValue: none)
+        private readonly long _step, _window; // (ticks)
+        private bool _holds; // fired, and still so: at least, enough; none, no match since
+
+        public CountShape(AlertWatch watch, AlertTrigger.Counting count, string view, DateTime began)
+        {
+            (Watch, Count, View) = (watch, count, view);
+            _step = TimeSpan.FromSeconds(Math.Max(1, Math.Ceiling(count.Window.TotalSeconds / 60))).Ticks;
+            _window = count.Window.Ticks;
+            var slots = (int)((_window + _step - 1) / _step) + 1; // (every step that can end within the window, apart)
+            _steps = new long[slots];
+            Array.Fill(_steps, long.MinValue);
+            _matches = new long[slots];
+            _judgedFrom = Ticks(began) + _window;
+        }
+
+        public AlertWatch Watch { get; }
+
+        public AlertTrigger.Counting Count { get; }
+
+        /// <summary>The view whose matches it counts.</summary>
+        public string View { get; }
+
+        /// <summary>Matches heard: counted in the step now falls in; a count of none watching for one again.</summary>
+        public void Add(DateTime now, int matches)
+        {
+            var step = Ticks(now) / _step;
+            var slot = (int)(step % _steps.Length);
+            if (_steps[slot] != step) (_steps[slot], _matches[slot]) = (step, 0);
+            _matches[slot] += matches;
+            if (Count.Kind == AlertCountKind.None) _holds = false;
         }
 
         /// <summary>
-        ///     Its wait, if it isn't as <c>live.waits</c> has it: from the time of the oldest version not landed; all landed,
-        ///     ended as the last did, to go after <see cref="LandedFor" />.
+        ///     Its line, if it fires now: at least so many, as they come to be (and, fallen below, ready again); none, once the
+        ///     window holds no match and a whole window has passed since counting began.
         /// </summary>
-        public Wait? Settle(DateTime now)
+        public string? Judge(DateTime now)
         {
-            DateTime? since = null;
-            foreach (var (version, time) in _pending)
-                if (version > _landed && (since is null || time < since))
-                    since = time;
-            Wait wait;
-            if (since is { } waiting)
+            var at = Ticks(now);
+            var matched = 0L;
+            for (var i = 0; i < _steps.Length; i++)
+                if (Within(_steps[i], at))
+                    matched += _matches[i];
+            if (Count.Kind == AlertCountKind.AtLeast)
             {
-                _pending.RemoveAll(p => p.Version <= _landed);
-                if (Shown is { } shown && shown.Since == waiting && shown.Until == Never) return null;
-                (wait, GoesAt) = (new Wait(Order.OrderId, waiting, Never), null);
-            }
-            else
-            {
-                if (Shown is { } ended && ended.Until != Never) return null;
-                // (heard and landed between two refreshes: it waited from its oldest)
-                var began = Shown?.Since ?? (_pending.Count > 0 ? _pending.Min(p => p.Time) : Micros(_landedAt));
-                _pending.Clear();
-                (wait, GoesAt) = (new Wait(Order.OrderId, began, Micros(_landedAt)), now + LandedFor);
+                if (matched < Count.Matches)
+                {
+                    _holds = false; // (fallen below: it fires again once there are enough)
+                    return null;
+                }
+
+                if (_holds) return null;
+                _holds = true;
+                return string.Create(CultureInfo.InvariantCulture, $"{matched:N0} in the last {AlertChoices.Span(Count.Window)}");
             }
 
-            return Shown = wait;
-        }
-    }
-
-    /// <summary>A fill the database hasn't landed, or landed within <see cref="LandedFor" />: and its wait, from its own time.</summary>
-    private sealed class FillWait(FillRecord fill)
-    {
-        private DateTime? _landedAt;
-
-        public FillRecord Fill => fill;
-
-        /// <summary>Whether <c>live.waiting_fills</c> has it.</summary>
-        public bool Told { get; set; }
-
-        /// <summary>Its wait, as <c>live.waits</c> has it (none yet: null).</summary>
-        public Wait? Shown { get; private set; }
-
-        /// <summary>Landed, when it goes; null while it waits.</summary>
-        public DateTime? GoesAt { get; private set; }
-
-        public bool Landed(DateTime at)
-        {
-            if (_landedAt is not null) return false;
-            _landedAt = at;
-            return true;
+            if (matched > 0 || _holds || at < _judgedFrom) return null;
+            _holds = true;
+            return $"none in the last {AlertChoices.Span(Count.Window)}";
         }
 
-        /// <summary>Its wait, if it isn't as <c>live.waits</c> has it: till now, or ended as it landed, to go after <see cref="LandedFor" />.</summary>
-        public Wait? Settle(DateTime now)
+        /// <summary>
+        ///     When it next needs judging if nothing more is heard: at least, while it holds, the oldest step within the window
+        ///     leaving it; none, until it has fired, the newest leaving (no sooner than a whole window from its start). Null:
+        ///     only a match changes it.
+        /// </summary>
+        public DateTime? Deadline(DateTime now)
         {
-            var until = _landedAt is { } at ? Micros(at) : Never;
-            if (Shown is { } shown && shown.Until == until) return null;
-            if (_landedAt is not null) GoesAt = now + LandedFor;
-            return Shown = new Wait(fill.FillId, Micros(fill.EventTime), until);
+            var at = Ticks(now);
+            long oldest = long.MaxValue, newest = long.MinValue;
+            for (var i = 0; i < _steps.Length; i++)
+                if (Within(_steps[i], at) && _matches[i] > 0)
+                    (oldest, newest) = (Math.Min(oldest, _steps[i]), Math.Max(newest, _steps[i]));
+            long? due = Count.Kind == AlertCountKind.AtLeast
+                ? _holds && oldest != long.MaxValue ? Leaves(oldest) : null
+                : _holds ? null : Math.Max(_judgedFrom, newest == long.MinValue ? 0 : Leaves(newest));
+            return due is { } ticks ? DateTime.UnixEpoch.AddTicks(ticks) : null;
         }
-    }
 
-    /// <summary>
-    ///     The matches one alert view saw, by slice of one width, since it began: what count views of that view and width
-    ///     read, through <c>live.match_counts</c>.
-    /// </summary>
-    private sealed class Counter(int id, string matcher, TimeSpan slice, DateTime began)
-    {
-        public int Id => id;
-
-        public string Matcher => matcher;
-
-        public TimeSpan Slice => slice;
-
-        public DateTime Began => began;
-
-        /// <summary>How long a slice is kept: the longest window that reads it, and a slice more.</summary>
-        public TimeSpan KeepFor { get; set; }
-
-        /// <summary>The matches in each slice, by when it starts, in the tables' wall-clock time.</summary>
-        public Dictionary<DateTime, long> Slices { get; } = [];
-
-        /// <summary>The slices counted since the last refresh.</summary>
-        public HashSet<DateTime> Changed { get; } = [];
-
-        public void Add(DateTime at, int matches)
+        /// <summary>Whether a step counts at <paramref name="at" />: it ends within the window.</summary>
+        private bool Within(long step, long at)
         {
-            var start = Micros(new DateTime(at.Ticks - at.Ticks % slice.Ticks, DateTimeKind.Utc));
-            Slices[start] = Slices.GetValueOrDefault(start) + matches;
-            Changed.Add(start);
+            return step != long.MinValue && Leaves(step) > at;
+        }
+
+        /// <summary>When a step leaves the window: a window after it ends.</summary>
+        private long Leaves(long step)
+        {
+            return (step + 1) * _step + _window;
+        }
+
+        private static long Ticks(DateTime time)
+        {
+            return time.Ticks - DateTime.UnixEpoch.Ticks;
         }
     }
 }
 
-/// <summary>
-///     What one alert view watches: a condition on a tab's rows, and either what arrives or how long a row waits for the
-///     database. Shapes alike share one view.
-/// </summary>
-internal sealed record AlertViewSpec(Tab Tab, Condition Condition, TimeSpan? LagOver)
+/// <summary>What one alert view watches: a condition on a tab's rows, as they arrive. Shapes alike in tab and condition share one.</summary>
+internal sealed record AlertViewSpec(Tab Tab, Condition Condition)
 {
     /// <summary>What a view is shared by.</summary>
-    public string Name => Tab.Name + "\n" + Condition.Text +
-                          (LagOver is { } lag ? "\nlag " + lag.TotalSeconds.ToString(CultureInfo.InvariantCulture) : "");
+    public string Name => Tab.Name + "\n" + Condition.Text;
 
     /// <summary>
-    ///     The view's statement, over the evaluator's tables only. On arrival, a fill is read from <c>live.arrived_fills</c>,
-    ///     an order from <c>live.latest_orders</c>, each order once at the newest version sent. On the wait, a row is read
-    ///     from those waiting, beside its wait in <c>live.waits</c>, and passes once it has waited longer than the rule
-    ///     allows by the engine's clock: for good, if the database had it only after that. A path joins
-    ///     <c>live.latest_orders</c>, so a fill whose order hasn't arrived yet enters the view when it does.
+    ///     The view's statement, over the evaluator's tables only: a fill is read from <c>live.arrived_fills</c>, an order from
+    ///     <c>live.latest_orders</c>, each order once at the newest version heard. A path joins <c>live.latest_orders</c>, so a
+    ///     fill whose order hasn't arrived yet enters the view when it does.
     /// </summary>
     public string Sql()
     {
-        var table = (Tab.Overrides, LagOver is null) switch
-        {
-            (true, true) => "live.latest_orders",
-            (true, false) => "live.waiting_orders",
-            (false, true) => "live.arrived_fills",
-            (false, false) => "live.waiting_fills"
-        };
         var sql = new StringBuilder($"SELECT a.{Tab.Key.Name} AS id");
-        sql.Append(LagOver is null ? ", TIMESTAMP '2000-01-01 00:00:00' AS since" : ", w.since AS since");
         // An order's version, so that each newer version that passes is a match a count sees.
-        sql.Append(Tab.Overrides && LagOver is null ? ", a.version AS version" : ", CAST(0 AS BIGINT) AS version");
-        sql.Append($"\nFROM {table} AS a");
-        if (LagOver is not null) sql.Append($"\nJOIN live.waits AS w ON w.id = a.{Tab.Key.Name}");
+        sql.Append(Tab.Overrides ? ", a.version AS version" : ", CAST(0 AS BIGINT) AS version");
+        sql.Append($"\nFROM {(Tab.Overrides ? "live.latest_orders" : "live.arrived_fills")} AS a");
         foreach (var path in Condition.Paths)
             sql.Append($"\nLEFT JOIN live.latest_orders AS p_{path.Name} ON p_{path.Name}.{path.Target.Key.Name} = a.{path.Via}");
         sql.Append("\nWHERE (").Append(Condition.Sql(c => "a." + c.Name, (p, c) => $"p_{p.Name}.{c.Name}")).Append(')');
-        if (LagOver is { } over)
-        {
-            // Waited longer than allowed: by the clock, or, once the database had it, by when it did.
-            var interval = string.Create(CultureInfo.InvariantCulture, $"INTERVAL '{over.TotalSeconds:0}' SECOND");
-            sql.Append($"\n  AND w.since < @now - {interval} AND w.since < w.until - {interval}");
-        }
-
         return sql.ToString();
     }
 }
 
-/// <summary>A row in an alert view: its key, and, for a wait, when the wait began; and an order's version, which is no part of the key.</summary>
-internal struct AlertKey : IEquatable<AlertKey>
-{
-    public Guid Id;
-    public DateTime Since;
-    public long Version;
-
-    public readonly bool Equals(AlertKey other)
-    {
-        return Id == other.Id && Since == other.Since;
-    }
-
-    public readonly override bool Equals(object? obj)
-    {
-        return obj is AlertKey other && Equals(other);
-    }
-
-    public readonly override int GetHashCode()
-    {
-        return HashCode.Combine(Id, Since);
-    }
-}
-
 /// <summary>What an update of an alert view found: the rows that entered it, and how many matches, entries and newer versions alike.</summary>
-internal readonly record struct AlertViewUpdate(IReadOnlyList<AlertKey> Entered, int Matches);
+internal readonly record struct AlertViewUpdate(IReadOnlyList<Guid> Entered, int Matches);
 
 /// <summary>
 ///     One alert view: a ChalkQL standing view, maintained incrementally, of the rows that pass a condition now. A row that
-///     enters it fires the shapes that share it; one already in it, changing, doesn't, though a newer version of an order in
-///     it is a match for the counts; one that leaves it may fire them again when it comes back. What it held when it was
-///     made is taken as it stands: a shape starts from now.
+///     enters it fires the shapes that fire on arrival; one already in it, changing, doesn't, though a newer version of an
+///     order in it is a match for the counts; one that leaves it may fire them again when it comes back. What it held when it
+///     was made is taken as it stands: a shape starts from now.
 /// </summary>
-internal sealed class AlertView : IAsyncDisposable, IViewSink<AlertKey, AlertKey>
+internal sealed class AlertView : IAsyncDisposable, IViewSink<Guid, long>
 {
-    private readonly List<AlertKey> _entered = [];
-    private readonly Dictionary<AlertKey, long> _present = [];
-    private readonly StandingView<AlertKey, AlertKey> _view;
+    private readonly List<Guid> _entered = [];
+    private readonly Dictionary<Guid, long> _present = [];
+    private readonly StandingView<Guid, long> _view;
     private ViewCursor _cursor = ViewCursor.Start;
     private int _matches;
     private bool _started;
 
-    private AlertView(AlertViewSpec spec, StandingView<AlertKey, AlertKey> view)
+    private AlertView(AlertViewSpec spec, StandingView<Guid, long> view)
     {
         Spec = spec;
         _view = view;
@@ -822,34 +855,40 @@ internal sealed class AlertView : IAsyncDisposable, IViewSink<AlertKey, AlertKey
         return _view.DisposeAsync();
     }
 
-    void IViewSink<AlertKey, AlertKey>.Reset()
+    void IViewSink<Guid, long>.Reset()
     {
         _present.Clear();
     }
 
-    void IViewSink<AlertKey, AlertKey>.Upsert(in AlertKey key, in AlertKey row)
+    void IViewSink<Guid, long>.Upsert(in Guid key, in long version)
     {
-        var entered = _present.TryAdd(key, row.Version);
-        var newer = !entered && row.Version > _present[key];
-        if (newer) _present[key] = row.Version;
+        var entered = _present.TryAdd(key, version);
+        var newer = !entered && version > _present[key];
+        if (newer) _present[key] = version;
         if (_started && entered) _entered.Add(key);
         if (_started && (entered || newer)) _matches++;
     }
 
-    void IViewSink<AlertKey, AlertKey>.Delete(in AlertKey key)
+    void IViewSink<Guid, long>.Delete(in Guid key)
     {
         _present.Remove(key);
     }
 
-    void IViewSink<AlertKey, AlertKey>.Commit(long version, uint checksum)
+    void IViewSink<Guid, long>.Commit(long version, uint checksum)
     {
+    }
+
+    /// <summary>Whether the row passes the condition now, as the view last had it.</summary>
+    public bool Holds(Guid id)
+    {
+        return _present.ContainsKey(id);
     }
 
     public static async Task<AlertView> CreateAsync(ChalkEngine engine, AlertViewSpec spec, long budget, CancellationToken ct)
     {
-        var view = await engine.MaterializeAsync(spec.Sql(), new ViewOptions<AlertKey, AlertKey>
+        var view = await engine.MaterializeAsync(spec.Sql(), new ViewOptions<Guid, long>
         {
-            Key = ["id", "since"],
+            Key = ["id"],
             LocalJoinMaxRows = StandingViews.DefaultLocalJoinMaxRows,
             Map = Map,
             StateBudget = budget,
@@ -875,128 +914,9 @@ internal sealed class AlertView : IAsyncDisposable, IViewSink<AlertKey, AlertKey
         return new AlertViewUpdate([.. _entered], _matches);
     }
 
-    private static void Map(in ViewRow row, out AlertKey key, out AlertKey value)
+    private static void Map(in ViewRow row, out Guid key, out long version)
     {
-        key = new AlertKey { Id = (Guid)row.GetValue(0)!, Since = (DateTime)row.GetValue(1)! };
-        value = key with { Version = Convert.ToInt64(row.GetValue(2), CultureInfo.InvariantCulture) };
-    }
-}
-
-/// <summary>
-///     What one count view watches: the matches of an alert view in a sliding window, at least so many or none. Shapes alike
-///     share one view.
-/// </summary>
-internal sealed record AlertWindowSpec(AlertViewSpec Matcher, AlertTrigger.Counting Count)
-{
-    /// <summary>What a view is shared by.</summary>
-    public string Name => Matcher.Name + "\n" + (Count.Kind == AlertCountKind.AtLeast ? $"at least {Count.Matches}" : "none") + " in " +
-                          AlertChoices.Span(Count.Window);
-
-    /// <summary>
-    ///     How finely matches are counted: a sixtieth of the window, to the second at least. The window slides a slice at a
-    ///     time, so a match is counted in it up to a slice longer than the window.
-    /// </summary>
-    public TimeSpan Slice => TimeSpan.FromSeconds(Math.Max(1, Math.Ceiling(Count.Window.TotalSeconds / 60)));
-
-    /// <summary>
-    ///     The view's statement: the matches the counter has counted in the slices that started within the window, by the
-    ///     engine's clock, held as a single row while they're enough, or none. No count of none is judged before
-    ///     <paramref name="judgedFrom" />: one window after the counter began.
-    /// </summary>
-    public string Sql(int counter, DateTime judgedFrom)
-    {
-        var window = string.Create(CultureInfo.InvariantCulture, $"INTERVAL '{Count.Window.TotalSeconds:0}' SECOND");
-        var sql = new StringBuilder("SELECT 1 AS id, COALESCE(SUM(c.matched), 0) AS matched");
-        sql.Append("\nFROM live.match_counts AS c");
-        sql.Append(CultureInfo.InvariantCulture, $"\nWHERE c.counter = {counter} AND c.slice_start > @now - {window}");
-        sql.Append(Count.Kind == AlertCountKind.AtLeast
-            ? string.Create(CultureInfo.InvariantCulture, $"\nHAVING COALESCE(SUM(c.matched), 0) >= {Count.Matches}")
-            : string.Create(CultureInfo.InvariantCulture,
-                $"\nHAVING COALESCE(SUM(c.matched), 0) = 0 AND @now >= TIMESTAMP '{judgedFrom:yyyy-MM-dd HH:mm:ss.ffffff}'"));
-        return sql.ToString();
-    }
-}
-
-/// <summary>
-///     One count view: a ChalkQL standing view, maintained incrementally, that holds its one row while the matches in its
-///     window are enough, or none. Its row entering fires its shape; again only after it has left. As the clock moves, the
-///     window slides with it.
-/// </summary>
-internal sealed class CountView : IAsyncDisposable, IViewSink<int, long>
-{
-    private readonly StandingView<int, long> _view;
-    private ViewCursor _cursor = ViewCursor.Start;
-    private long? _entered;
-    private bool _present;
-
-    private CountView(AlertWindowSpec spec, AlertWatch watch, StandingView<int, long> view)
-    {
-        (Spec, Watch, _view) = (spec, watch, view);
-    }
-
-    public AlertWindowSpec Spec { get; }
-
-    /// <summary>The shape it fires.</summary>
-    public AlertWatch Watch { get; }
-
-    public ValueTask DisposeAsync()
-    {
-        return _view.DisposeAsync();
-    }
-
-    void IViewSink<int, long>.Reset()
-    {
-        _present = false;
-    }
-
-    void IViewSink<int, long>.Upsert(in int key, in long matches)
-    {
-        if (_present) return;
-        _present = true;
-        _entered = matches;
-    }
-
-    void IViewSink<int, long>.Delete(in int key)
-    {
-        _present = false;
-    }
-
-    void IViewSink<int, long>.Commit(long version, uint checksum)
-    {
-    }
-
-    public static async Task<CountView> CreateAsync(ChalkEngine engine, AlertWindowSpec spec, AlertWatch watch, int counter, DateTime judgedFrom,
-        long budget, CancellationToken ct)
-    {
-        var view = await engine.MaterializeAsync(spec.Sql(counter, judgedFrom), new ViewOptions<int, long>
-        {
-            Key = ["id"],
-            LocalJoinMaxRows = StandingViews.DefaultLocalJoinMaxRows,
-            Map = Map,
-            StateBudget = budget,
-            Maintenance = ViewMaintenance.Incremental,
-            ResetWhen = double.PositiveInfinity
-        }, ct).ConfigureAwait(false);
-        var made = new CountView(spec, watch, view);
-        await made.UpdateAsync(ct).ConfigureAwait(false);
-        return made;
-    }
-
-    /// <summary>Brings the view to the engine's latest epoch: the matches in the window, if its row entered it.</summary>
-    public async Task<long?> UpdateAsync(CancellationToken ct)
-    {
-        _entered = null;
-        await _view.UpdateAsync(ct).ConfigureAwait(false);
-        while (_view.Drain(ref _cursor, this, 1024) == DrainOutcome.Partial)
-        {
-        }
-
-        return _entered;
-    }
-
-    private static void Map(in ViewRow row, out int key, out long matches)
-    {
-        key = Convert.ToInt32(row.GetValue(0), CultureInfo.InvariantCulture);
-        matches = Convert.ToInt64(row.GetValue(1), CultureInfo.InvariantCulture);
+        key = (Guid)row.GetValue(0)!;
+        version = Convert.ToInt64(row.GetValue(1), CultureInfo.InvariantCulture);
     }
 }

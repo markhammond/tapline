@@ -51,7 +51,7 @@
                         }
                     </td>
                     <td class="alerts-settings">
-                        <AlertWhen Trigger="r.Trigger" Changed="t => SaveTriggerAsync(r, t)"/>
+                        <AlertWhen Trigger="r.Trigger" Tab="Catalog.Of(r.Source)" Changed="t => SaveTriggerAsync(r, t)"/>
                         <select value="@r.Sound" aria-label="Sound" @onchange="e => SaveAsync(r with { Sound = (string)e.Value! })">
                             @foreach (var (id, label) in AlertSounds.All)
                             {
@@ -82,8 +82,8 @@
     @* An alert's condition is SQL: an example, before the editor that writes one. *@
     <p class="alerts-how muted">
         An alert fires on the rows that pass its condition, as they arrive, once the database is too far behind them, or on
-        how many pass within a sliding window: at least so many, or none. An order counts each time a newer version of it
-        passes. Write the condition in SQL over this tab's columns@(Tab.Paths.Count > 0 ? ", and along " + string.Join(", ", Tab.Paths.Select(p => p.Name + ".")) : ""),
+        how many pass within a sliding window: at least so many, or none. A wait is confirmed with the database before it
+        fires, or trusted to what was last learnt of it, sooner. An order counts each time a newer version of it passes. Write the condition in SQL over this tab's columns@(Tab.Paths.Count > 0 ? ", and along " + string.Join(", ", Tab.Paths.Select(p => p.Name + ".")) : ""),
         or set the column funnels first and start from those: for example
         <code>@(Tab.Overrides ? "client = 'CEDAR' AND side = 'Buy' AND qty >= 10" : "order.status = 'Partial' AND instrument LIKE 'BTC%'")</code>.
         ChalkQL runs it.
@@ -92,7 +92,7 @@
         <span class="muted">New alert on @Tab.Title:</span>
         <ConditionEditor Tab="Tab" @bind-Text="_condition" Placeholder="every row; ctrl-space for what may come next"/>
         <input type="text" placeholder="@DefaultName()" @bind="_name" aria-label="Name"/>
-        <AlertWhen Trigger="_trigger" Changed="t => _trigger = t"/>
+        <AlertWhen Trigger="_trigger" Tab="Tab" Changed="t => _trigger = t"/>
         <select @bind="_sound" aria-label="Sound">
             @foreach (var (id, label) in AlertSounds.All)
             {
@@ -142,6 +142,8 @@
         _from = (Tab, Filter);
         _condition = Filter?.Condition() ?? "";
         _refused = null;
+        if (_trigger is AlertTrigger.Waiting { From: { } from } waiting && Tab.WaitsFrom.All(a => a.Column != from))
+            _trigger = waiting with { From = null }; // (a time this tab doesn't offer: the version's own)
     }
 
     // The name an alert takes if none is typed, shown in its box.
@@ -151,7 +153,7 @@
         var named = text.Length == 0 ? Tab.Overrides ? "Any order" : "Any fill"
             : Filter is { } filter && text == filter.Condition() ? string.Join("; ", filter.Columns.Select(c => c.Describe()))
             : text.Length <= 40 ? text : text[..39] + "…";
-        return _trigger is AlertTrigger.Entering ? named : $"{named}, {AlertChoices.Describe(_trigger)}";
+        return _trigger is AlertTrigger.Entering ? named : $"{named}, {AlertChoices.Describe(_trigger, Tab)}";
     }
 
     /// <summary>Adds the alert, once ChalkQL has taken its condition; if not, says why, and adds nothing.</summary>

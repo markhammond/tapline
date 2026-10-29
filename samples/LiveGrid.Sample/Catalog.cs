@@ -1,3 +1,5 @@
+using Tapline.Alerts;
+
 namespace LiveGrid.Sample;
 
 /// <summary>A column's kind, as a filter edits it and a condition compares it (the ChalkQL blotter's column kinds).</summary>
@@ -46,6 +48,12 @@ public sealed record Column(string Name, string Title, ColumnKind Kind, IReadOnl
 public sealed record TabPath(string Name, Tab Target, string Via, string Description);
 
 /// <summary>
+///     A time a wait for the database may run from, as a tab offers it: a column of its rows (none: the version's own time),
+///     as the rule editor says it, and what it means.
+/// </summary>
+public sealed record WaitAnchor(string? Column, string Label, string Description);
+
+/// <summary>
 ///     A tab of the page: a source's rows, and their columns named as SQL names them — as its grid shows them, a filter and
 ///     a sort read them, an alert's condition reads them, and a link writes them. A row is versioned — its newest version
 ///     stands for it (<see cref="Overrides" />) — or never changes. The sample's two, client orders and fills, are the
@@ -66,6 +74,15 @@ public sealed class Tab(string name, string title, Column key, IReadOnlyList<Col
     public bool Overrides { get; } = overrides;
 
     public IReadOnlyList<TabPath> Paths { get; internal set; } = [];
+
+    /// <summary>
+    ///     What a wait for the database may run from, as the source offers: the version's own time first (the default), then
+    ///     the others (the orders' when placed). None: its rows aren't waited for.
+    /// </summary>
+    public IReadOnlyList<WaitAnchor> WaitsFrom { get; internal set; } = [];
+
+    /// <summary>How a wait for the database may be shown to be still waiting, as the source offers: the first, a new rule's.</summary>
+    public IReadOnlyList<AlertWaitProof> WaitProofs { get; internal set; } = [];
 
     /// <summary>The column of when each row happened: the period a filter's chooser offers values from.</summary>
     public string Time { get; } = time;

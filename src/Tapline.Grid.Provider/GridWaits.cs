@@ -7,8 +7,9 @@ namespace Tapline.Grid.Provider;
 public enum GridWaitProof : byte
 {
     /// <summary>
-    ///     At the deadline the store is asked: its newest stamp (every version a haircut behind it has landed), then the keys
-    ///     still in question looked up. A wait the store is found to have ended is not reported.
+    ///     At the deadline the store is asked: its newest stamp (every version a haircut behind it has landed), if a version
+    ///     waited on is that old, then the keys still in question looked up. A wait the store is found to have ended is not
+    ///     reported.
     /// </summary>
     Confirmed = 0,
 
@@ -32,24 +33,25 @@ public readonly record struct GridWaitWatch<TRow, TStamp>(
     GridWaitAnchor<TRow, TStamp>? From = null) where TRow : unmanaged;
 
 /// <summary>
-///     A wait past a watch's threshold: the key, its newest version heard (what a condition reads), the watch (its place in
-///     the set), and how long the key has waited, from its anchor. <see cref="Newer" />: told again, a newer version heard
-///     while it waits.
+///     A wait past a watch's threshold: the key, its newest version heard (what a condition reads), the watch (as set, equal
+///     to the one in force, or one since let go), and how long the key has waited, from its anchor. <see cref="Newer" />: told
+///     again, a newer version heard while it waits.
 /// </summary>
-public readonly record struct GridOverdue<TKey, TRow>(TKey Key, TRow Newest, int Watch, TimeSpan Waited, bool Newer)
+public readonly record struct GridOverdue<TKey, TRow, TStamp>(TKey Key, TRow Newest, GridWaitWatch<TRow, TStamp> Watch, TimeSpan Waited, bool Newer)
     where TKey : unmanaged where TRow : unmanaged;
 
 /// <summary>A wait ended: the store holds the newest version heard (<see cref="Landed" />), or let go past the longest threshold.</summary>
 public readonly record struct GridWaitEnded<TKey>(TKey Key, bool Landed) where TKey : unmanaged;
 
 /// <summary>Told what <see cref="GridWaits{TKey,TRow,TStamp}" /> finds: by its passes, one call at a time.</summary>
-public interface IGridWaitSink<TKey, TRow> where TKey : unmanaged where TRow : unmanaged
+public interface IGridWaitSink<TKey, TRow, TStamp> where TKey : unmanaged where TRow : unmanaged
 {
     /// <summary>
     ///     Waits past a watch's threshold, proved as the watch asks: each key and watch once a wait, and again (as
-    ///     <see cref="GridOverdue{TKey,TRow}.Newer" />) when a newer version of a key past a threshold is heard while it waits.
+    ///     <see cref="GridOverdue{TKey,TRow,TStamp}.Newer" />) when a newer version of a key past a threshold is heard while it
+    ///     waits.
     /// </summary>
-    void Overdue(ReadOnlySpan<GridOverdue<TKey, TRow>> overdue);
+    void Overdue(ReadOnlySpan<GridOverdue<TKey, TRow, TStamp>> overdue);
 
     /// <summary>Waits ended: landed, or let go once past every threshold, nothing more to report for them.</summary>
     void Ended(ReadOnlySpan<GridWaitEnded<TKey>> ended);
@@ -86,11 +88,18 @@ public sealed record GridWaitsOptions
     /// <summary>The memory a lookup may take at the store (0: the store's own bound).</summary>
     public uint MaxReadBytes { get; init; }
 
+    /// <summary>
+    ///     Deadlines kept to whole grains of this, rounded up (never early): the keys due within a grain are proved together,
+    ///     one lookup for them all, each told up to a grain past its threshold. Zero: each at its own moment.
+    /// </summary>
+    public TimeSpan Grain { get; init; } = TimeSpan.FromMilliseconds(50);
+
     internal string? Broken()
     {
         if (MaxWaits < 1) return $"At most {MaxWaits} waits can track none (GridWaitsOptions.MaxWaits).";
         if (ProveEvery <= TimeSpan.Zero || RetryAfter <= TimeSpan.Zero)
             return "A proof's cadence must be positive (GridWaitsOptions.ProveEvery, RetryAfter).";
+        if (Grain < TimeSpan.Zero) return "A deadline's grain can't be negative (GridWaitsOptions.Grain).";
         if (LookupBatch < 1) return $"A lookup of {LookupBatch} keys asks for none (GridWaitsOptions.LookupBatch).";
         return null;
     }
@@ -111,9 +120,9 @@ public sealed record GridWaitsOptions
 ///     </para>
 ///     <para>
 ///         Deadlines, not ticks: a wait is kept as its versions (its start worked out from them, never as a value that
-///         grows), and each key has one deadline, the soonest of its watches' thresholds not yet passed, in a heap that knows
-///         each key's place (moved, or taken out as the wait ends), on one timer armed for the soonest of all. Nothing runs
-///         while nothing is due. A key is tracked until it lands, or until it has passed every threshold, when it is let go: a
+///         grows), and each key has one deadline, the soonest of its watches' thresholds not yet passed, kept to a grain
+///         (<see cref="GridWaitsOptions.Grain" />) in a heap that knows each key's place (moved, or taken out as the wait ends),
+///         on one timer armed for the soonest of all. Nothing runs while nothing is due. A key is tracked until it lands, or until it has passed every threshold, when it is let go: a
 ///         newer version of it heard after starts a wait of its own. With no watch, nothing is kept.
 ///     </para>
 ///     <para>
@@ -136,16 +145,17 @@ public sealed class GridWaits<TKey, TRow, TStamp> : IAsyncDisposable
     private readonly TKey[] _lookupKeys;
     private readonly List<int> _newer = [];
     private readonly GridWaitsOptions _options;
-    private readonly List<GridOverdue<TKey, TRow>> _overdue = []; // the passes'
+    private readonly List<GridOverdue<TKey, TRow, TStamp>> _overdue = []; // the passes'
     private readonly GridPage<TKey, TRow> _page;
     private readonly List<(int Entry, int Serial)> _question = []; // the passes': keys a proof looks up
     private readonly IGridRows<TKey, TRow, TStamp> _rows;
     private readonly Runner _runner;
-    private readonly IGridWaitSink<TKey, TRow> _sink;
+    private readonly IGridWaitSink<TKey, TRow, TStamp> _sink;
     private readonly CancellationTokenSource _stop = new();
     private readonly IGridStore<TKey, TRow, TStamp> _store;
     private readonly TimeProvider _time;
     private readonly ITimer _timer;
+    private readonly long _grain; // (timestamps)
     private long _armedFor = long.MaxValue; // when the timer is set to fire (a timestamp; MaxValue: not set)
     private bool _disposed;
     private Entry[] _entries = new Entry[16];
@@ -164,13 +174,14 @@ public sealed class GridWaits<TKey, TRow, TStamp> : IAsyncDisposable
     /// <param name="store">The store waited for: its newest stamp and its rows by key, and its haircut.</param>
     /// <param name="rows">What a row is: its key, version and stamp, and how stamps and spans relate.</param>
     /// <param name="sink">Told what is found, by the passes.</param>
-    public GridWaits(IGridStore<TKey, TRow, TStamp> store, IGridRows<TKey, TRow, TStamp> rows, IGridWaitSink<TKey, TRow> sink,
+    public GridWaits(IGridStore<TKey, TRow, TStamp> store, IGridRows<TKey, TRow, TStamp> rows, IGridWaitSink<TKey, TRow, TStamp> sink,
         GridWaitsOptions? options = null, TimeProvider? time = null)
     {
         _options = options ?? GridWaitsOptions.Default;
         if (_options.Broken() is { } broken) throw new ArgumentException(broken, nameof(options));
         (_store, _rows, _sink, _time) = (store, rows, sink, time ?? TimeProvider.System);
         _haircut = store.Policy.Haircut;
+        _grain = Timestamps(_options.Grain);
         _lookupKeys = new TKey[_options.LookupBatch];
         _below = new long[_options.LookupBatch];
         Array.Fill(_below, long.MaxValue); // (each key's newest the store holds)
@@ -390,7 +401,7 @@ public sealed class GridWaits<TKey, TRow, TStamp> : IAsyncDisposable
     private async Task PassAsync(CancellationToken ct)
     {
         long untracked;
-        bool proveAll, lookAll;
+        bool proveAll, lookAll, askNewest;
         lock (_gate)
         {
             _armedFor = long.MaxValue; // (set again as the pass ends)
@@ -413,21 +424,26 @@ public sealed class GridWaits<TKey, TRow, TStamp> : IAsyncDisposable
                 _candidates.Add((at, _entries[at].Serial));
             }
 
-            // Trusted watches due: told at once, on what the last proof found. Confirmed ones wait for the proof.
-            _question.Clear();
-            foreach (var (at, serial) in _candidates)
-            {
-                if (Due(at, nowStamp, GridWaitProof.Trusted) is var trusted and not 0) Mark(at, trusted, nowStamp);
-                if (Due(at, nowStamp, GridWaitProof.Confirmed) != 0) _question.Add((at, serial));
-            }
-
             proveAll = _live > 0 && _nextProof != 0 && _nextProof <= nowTs;
             lookAll = proveAll && _trusted;
             if (proveAll) _nextProof = nowTs + Timestamps(_options.ProveEvery);
+
+            // Trusted watches due: told at once, on what the last proof found. Confirmed ones wait for the proof: the store's
+            // newest stamp asked only if a version in question is a haircut old (none is newer than now), else lookups alone.
+            _question.Clear();
+            askNewest = proveAll;
+            var settled = _rows.Back(nowStamp, _haircut);
+            foreach (var (at, serial) in _candidates)
+            {
+                if (Due(at, nowStamp, GridWaitProof.Trusted) is var trusted and not 0) Mark(at, trusted, nowStamp);
+                if (Due(at, nowStamp, GridWaitProof.Confirmed) == 0) continue;
+                _question.Add((at, serial));
+                askNewest |= Start(at, null).CompareTo(settled) <= 0;
+            }
         }
 
         var proved = true;
-        if (_question.Count > 0 || proveAll) proved = await ProveAsync(proveAll, lookAll, ct).ConfigureAwait(false);
+        if (_question.Count > 0 || proveAll) proved = await ProveAsync(proveAll, lookAll, askNewest, ct).ConfigureAwait(false);
 
         bool wake;
         lock (_gate)
@@ -445,7 +461,7 @@ public sealed class GridWaits<TKey, TRow, TStamp> : IAsyncDisposable
                 }
                 else if (!proved && Due(at, nowStamp, GridWaitProof.Confirmed) != 0)
                 {
-                    SetDue(at, nowTs + Timestamps(_options.RetryAfter)); // (unproved: deferred, tried again, never told so)
+                    SetDue(at, Grained(nowTs + Timestamps(_options.RetryAfter))); // (unproved: deferred, tried again, never told so)
                 }
                 else
                 {
@@ -474,22 +490,23 @@ public sealed class GridWaits<TKey, TRow, TStamp> : IAsyncDisposable
     }
 
     /// <summary>
-    ///     The store asked: its newest stamp, the versions of the keys in question (<paramref name="proveAll" />: of every
-    ///     tracked key) a haircut behind it landed; then the keys still in question (<paramref name="lookAll" />: every key)
-    ///     looked up. False if the store failed.
+    ///     The store asked: its newest stamp (<paramref name="askNewest" />), the versions of the keys in question
+    ///     (<paramref name="proveAll" />: of every tracked key) a haircut behind it landed; then the keys still in question
+    ///     (<paramref name="lookAll" />: every key) looked up. False if the store failed.
     /// </summary>
-    private async Task<bool> ProveAsync(bool proveAll, bool lookAll, CancellationToken ct)
+    private async Task<bool> ProveAsync(bool proveAll, bool lookAll, bool askNewest, CancellationToken ct)
     {
-        TStamp? newest;
-        try
-        {
-            newest = await _store.NewestStampAsync(ct).ConfigureAwait(false);
-        }
-        catch (Exception failure) when (failure is not OperationCanceledException || !ct.IsCancellationRequested)
-        {
-            Fault = failure;
-            return false;
-        }
+        TStamp? newest = null;
+        if (askNewest)
+            try
+            {
+                newest = await _store.NewestStampAsync(ct).ConfigureAwait(false);
+            }
+            catch (Exception failure) when (failure is not OperationCanceledException || !ct.IsCancellationRequested)
+            {
+                Fault = failure;
+                return false;
+            }
 
         lock (_gate)
         {
@@ -627,7 +644,7 @@ public sealed class GridWaits<TKey, TRow, TStamp> : IAsyncDisposable
         ref readonly var newest = ref NewestOf(e);
         for (var w = 0; w < _watches.Length; w++)
             if ((watches & (1UL << w)) != 0)
-                _overdue.Add(new GridOverdue<TKey, TRow>(e.Key, newest, w, _rows.Between(Start(at, _watches[w].From), nowStamp), newer));
+                _overdue.Add(new GridOverdue<TKey, TRow, TStamp>(e.Key, newest, _watches[w], _rows.Between(Start(at, _watches[w].From), nowStamp), newer));
     }
 
     /// <summary>The newest version heard of the key, one of those it waits on (the wait ends as it lands): first, heard in order.</summary>
@@ -653,8 +670,16 @@ public sealed class GridWaits<TKey, TRow, TStamp> : IAsyncDisposable
             due = Math.Min(due, nowTs + Timestamps(left));
         }
 
-        if (due == long.MaxValue) due = nowTs;
+        due = due == long.MaxValue ? nowTs : Grained(due);
         if (due < e.Due) SetDue(at, due);
+    }
+
+    /// <summary>A deadline rounded up to a whole grain: never early.</summary>
+    private long Grained(long due)
+    {
+        if (_grain <= 1) return due;
+        var over = due % _grain;
+        return over == 0 ? due : over > 0 ? due - over + _grain : due - over;
     }
 
     /// <summary>The key's deadline set, sooner or later, its place in the heap found.</summary>

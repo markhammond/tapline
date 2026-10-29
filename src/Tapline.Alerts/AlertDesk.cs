@@ -337,6 +337,9 @@ public sealed class AlertDesk : IAlertSink, IAsyncDisposable
         {
             AlertTrigger.Waiting { Over: var over } when over <= TimeSpan.Zero || over > TimeSpan.FromHours(1) =>
                 "A wait is more than nothing and at most an hour.",
+            AlertTrigger.Waiting { Proof: not (AlertWaitProof.Confirmed or AlertWaitProof.Trusted) } => "A wait is confirmed or trusted.",
+            AlertTrigger.Waiting { From: { } from } when string.IsNullOrWhiteSpace(from) =>
+                "A wait runs from a timestamp named, or from the row's own.",
             AlertTrigger.Counting { Window: var window } when window < TimeSpan.FromSeconds(1) || window > TimeSpan.FromHours(24) =>
                 "A count's window is from a second to a day.",
             AlertTrigger.Counting { Kind: AlertCountKind.AtLeast, Matches: < 1 } => "A count of at least so many is of at least one.",

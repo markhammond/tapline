@@ -130,6 +130,8 @@ internal static partial class T
         refused = await desk.SetRulesAsync("browser-d", [Rule("D", "qty > 1", TimeSpan.Zero)]);
         Assert(refused.Values.Single().Contains("MaxAudiences"), "a fourth audience: refused");
         Assert(RowOf(desk, "browser-a", lately).Presented == 0 && desk.Shapes == 4, "refused once watched: kept, saying so");
+        Assert(await desk.CheckAsync(Rule("Unnamed", "qty > 1", TimeSpan.Zero, new AlertTrigger.Waiting(TimeSpan.FromSeconds(2), From: " "))) is { } blank &&
+               blank.Contains("timestamp named"), "a wait from a timestamp left blank: refused before the evaluator is asked");
 
         // Kept, unattended, for the keep-for time, rules evaluated; then let go, and the shapes only it had with it.
         pageB.Dispose();

@@ -121,30 +121,30 @@ internal sealed class WaitStore(TimeSpan haircut) : IGridStore<long, WaitRow, lo
 }
 
 /// <summary>What the waits told, as told.</summary>
-internal sealed class WaitSink : IGridWaitSink<long, WaitRow>
+internal sealed class WaitSink : IGridWaitSink<long, WaitRow, long>
 {
     private readonly Lock _gate = new();
-    public readonly List<GridOverdue<long, WaitRow>> Overdue = [];
+    public readonly List<GridOverdue<long, WaitRow, long>> Overdue = [];
     public readonly List<GridWaitEnded<long>> Ended = [];
     public long Untracked;
 
-    void IGridWaitSink<long, WaitRow>.Overdue(ReadOnlySpan<GridOverdue<long, WaitRow>> overdue)
+    void IGridWaitSink<long, WaitRow, long>.Overdue(ReadOnlySpan<GridOverdue<long, WaitRow, long>> overdue)
     {
         lock (_gate) Overdue.AddRange(overdue);
     }
 
-    void IGridWaitSink<long, WaitRow>.Ended(ReadOnlySpan<GridWaitEnded<long>> ended)
+    void IGridWaitSink<long, WaitRow, long>.Ended(ReadOnlySpan<GridWaitEnded<long>> ended)
     {
         lock (_gate) Ended.AddRange(ended);
     }
 
-    void IGridWaitSink<long, WaitRow>.Untracked(long keys)
+    void IGridWaitSink<long, WaitRow, long>.Untracked(long keys)
     {
         Interlocked.Add(ref Untracked, keys);
     }
 
     /// <summary>What was told since last taken.</summary>
-    public (GridOverdue<long, WaitRow>[] Overdue, GridWaitEnded<long>[] Ended) Take()
+    public (GridOverdue<long, WaitRow, long>[] Overdue, GridWaitEnded<long>[] Ended) Take()
     {
         lock (_gate)
         {
@@ -157,21 +157,21 @@ internal sealed class WaitSink : IGridWaitSink<long, WaitRow>
 }
 
 /// <summary>What the waits told, counted and not kept: a sink that allocates nothing.</summary>
-internal sealed class WaitCounts : IGridWaitSink<long, WaitRow>
+internal sealed class WaitCounts : IGridWaitSink<long, WaitRow, long>
 {
     public long Overdue, Ended, Untracked;
 
-    void IGridWaitSink<long, WaitRow>.Overdue(ReadOnlySpan<GridOverdue<long, WaitRow>> overdue)
+    void IGridWaitSink<long, WaitRow, long>.Overdue(ReadOnlySpan<GridOverdue<long, WaitRow, long>> overdue)
     {
         Overdue += overdue.Length;
     }
 
-    void IGridWaitSink<long, WaitRow>.Ended(ReadOnlySpan<GridWaitEnded<long>> ended)
+    void IGridWaitSink<long, WaitRow, long>.Ended(ReadOnlySpan<GridWaitEnded<long>> ended)
     {
         Ended += ended.Length;
     }
 
-    void IGridWaitSink<long, WaitRow>.Untracked(long keys)
+    void IGridWaitSink<long, WaitRow, long>.Untracked(long keys)
     {
         Untracked += keys;
     }
@@ -208,7 +208,7 @@ internal static partial class T
             $"a microsecond before its threshold: nothing told, the store asked nothing ({overdue.Length}, {store.NewestAsks}, {store.Lookups})");
         await Advance(clock, waits, TimeSpan.FromMicroseconds(1));
         (overdue, ended) = sink.Take();
-        Assert(overdue is [{ Key: 1, Watch: 0, Newer: false } at] && at.Waited == TimeSpan.FromSeconds(2) && at.Newest.Version == 1,
+        Assert(overdue is [{ Key: 1, Watch.Over.Seconds: 2, Newer: false } at] && at.Waited == TimeSpan.FromSeconds(2) && at.Newest.Version == 1,
             $"at its threshold: told once, waited 2 s ({string.Join(", ", overdue)})");
         Assert(store.NewestAsks == 1 && store.Lookups == 1 && ended.Length == 0,
             $"proved first: the store's newest stamp, then the key ({store.NewestAsks}, {store.Lookups}); still waiting");
@@ -217,14 +217,14 @@ internal static partial class T
         waits.Heard([new WaitRow { Id = 1, Version = 2, Stamp = t0 + 2_500_000 }]);
         await waits.IdleAsync();
         (overdue, _) = sink.Take();
-        Assert(overdue is [{ Key: 1, Watch: 0, Newer: true } again] && again.Newest.Version == 2 && again.Waited == TimeSpan.FromMilliseconds(2_500),
+        Assert(overdue is [{ Key: 1, Watch.Over.Seconds: 2, Newer: true } again] && again.Newest.Version == 2 && again.Waited == TimeSpan.FromMilliseconds(2_500),
             $"a newer version heard past a threshold: told again with it, the wait from the oldest ({string.Join(", ", overdue)})");
 
         await Advance(clock, waits, TimeSpan.FromMilliseconds(2_500) - TimeSpan.FromMicroseconds(1));
         Assert(sink.Take().Overdue.Length == 0, "a microsecond before the second threshold: nothing");
         await Advance(clock, waits, TimeSpan.FromMicroseconds(1));
         (overdue, ended) = sink.Take();
-        Assert(overdue is [{ Key: 1, Watch: 1 } last] && last.Waited == TimeSpan.FromSeconds(5), $"at 5 s, the second ({string.Join(", ", overdue)})");
+        Assert(overdue is [{ Key: 1, Watch.Over.Seconds: 5 } last] && last.Waited == TimeSpan.FromSeconds(5), $"at 5 s, the second ({string.Join(", ", overdue)})");
         Assert(ended is [{ Key: 1, Landed: false }] && waits.Count == 0, $"past every threshold, let go ({string.Join(", ", ended)}, {waits.Count})");
 
         // A newer version of a key let go: a wait of its own, from its own stamp.
@@ -232,7 +232,7 @@ internal static partial class T
         waits.Heard([new WaitRow { Id = 1, Version = 3, Stamp = t1 }]);
         await Advance(clock, waits, TimeSpan.FromSeconds(2));
         (overdue, _) = sink.Take();
-        Assert(overdue is [{ Key: 1, Watch: 0 } own] && own.Waited == TimeSpan.FromSeconds(2) && own.Newest.Version == 3,
+        Assert(overdue is [{ Key: 1, Watch.Over.Seconds: 2 } own] && own.Waited == TimeSpan.FromSeconds(2) && own.Newest.Version == 3,
             $"heard again after being let go: its own wait ({string.Join(", ", overdue)})");
     }
 
@@ -250,11 +250,11 @@ internal static partial class T
         waits.Heard([new WaitRow { Id = 7, Version = 1, Stamp = t0, Placed = t0 - 1_000_000 }]);
         await Advance(clock, waits, TimeSpan.FromSeconds(1));
         var (overdue, _) = sink.Take();
-        Assert(overdue is [{ Key: 7, Watch: 1 } placed] && placed.Waited == TimeSpan.FromSeconds(2),
+        Assert(overdue is [{ Key: 7, Watch.From: not null } placed] && placed.Waited == TimeSpan.FromSeconds(2),
             $"a second on: placed two seconds ago, told on that anchor ({string.Join(", ", overdue)})");
         await Advance(clock, waits, TimeSpan.FromSeconds(1));
         (overdue, var ended) = sink.Take();
-        Assert(overdue is [{ Key: 7, Watch: 0 } stamped] && stamped.Waited == TimeSpan.FromSeconds(2),
+        Assert(overdue is [{ Key: 7, Watch.From: null } stamped] && stamped.Waited == TimeSpan.FromSeconds(2),
             $"two seconds on: told on its stamp ({string.Join(", ", overdue)})");
         Assert(ended is [{ Key: 7, Landed: false }], "both told: let go");
 
@@ -263,11 +263,11 @@ internal static partial class T
         waits.SetWatches([new(TimeSpan.FromSeconds(2)), new(TimeSpan.FromSeconds(4))]);
         waits.Heard([new WaitRow { Id = 8, Version = 1, Stamp = StampNow(clock) }]);
         await Advance(clock, waits, TimeSpan.FromSeconds(2));
-        Assert(sink.Take().Overdue is [{ Key: 8, Watch: 0 }], "told at 2 s");
+        Assert(sink.Take().Overdue is [{ Key: 8, Watch.Over.Seconds: 2 }], "told at 2 s");
         waits.SetWatches([new(TimeSpan.FromSeconds(3)), new(TimeSpan.FromSeconds(2))]);
         await Advance(clock, waits, TimeSpan.FromSeconds(1));
         (overdue, ended) = sink.Take();
-        Assert(overdue is [{ Key: 8, Watch: 0 } three] && three.Waited == TimeSpan.FromSeconds(3) && ended is [{ Key: 8, Landed: false }],
+        Assert(overdue is [{ Key: 8, Watch.Over.Seconds: 3 } three] && three.Waited == TimeSpan.FromSeconds(3) && ended is [{ Key: 8, Landed: false }],
             $"the 2 s watch, moved to second place, not told again; the new 3 s one told, then let go ({string.Join(", ", overdue)})");
     }
 
@@ -347,7 +347,7 @@ internal static partial class T
             await Advance(clock, trusted, TimeSpan.FromSeconds(1));
             store.Land(row);
             await Advance(clock, trusted, TimeSpan.FromSeconds(1));
-            Assert(sink.Take().Overdue is [{ Key: 1, Watch: 0 }] && store.NewestAsks == 0 && store.Lookups == 0,
+            Assert(sink.Take().Overdue is [{ Key: 1, Watch.Proof: GridWaitProof.Trusted }] && store.NewestAsks == 0 && store.Lookups == 0,
                 $"trusted: told at its deadline, the store not asked ({store.NewestAsks}, {store.Lookups})");
         }
 
@@ -361,7 +361,7 @@ internal static partial class T
         store.Land(five);
         await Advance(clock, both, TimeSpan.FromMilliseconds(500));
         var (overdue, ended) = sink.Take();
-        Assert(overdue is [{ Key: 5, Watch: 0 }] && ended is [{ Key: 5, Landed: true }],
+        Assert(overdue is [{ Key: 5, Watch.Proof: GridWaitProof.Trusted }] && ended is [{ Key: 5, Landed: true }],
             $"landed since the last proof: the trusted watch told, the confirmed one proved and not ({string.Join(", ", overdue)}; {string.Join(", ", ended)})");
 
         // While a trusted watch is in force, every tracked wait proved each second: landed ones ended between deadlines.
@@ -372,6 +372,44 @@ internal static partial class T
         (overdue, ended) = sink.Take();
         Assert(overdue.Length == 0 && ended is [{ Key: 6, Landed: true }] && both.Count == 0,
             $"proved within a second, before its deadline ({string.Join(", ", ended)}, {both.Count})");
+    }
+
+    public static async Task GridWaitsGathered()
+    {
+        // Ten keys heard 3 ms apart, from a millisecond into a grain (50 ms, the default), waits of a second confirmed: none
+        // told at its own threshold, all at the grain's end, by one lookup — the store's newest stamp not asked, no version
+        // waited on a haircut (7 s) old. A grain of none: each at its own moment.
+        var clock = new ManualClock();
+        var store = new WaitStore(TimeSpan.FromSeconds(7));
+        var sink = new WaitSink();
+        await using var waits = new GridWaits<long, WaitRow, long>(store, new WaitRows(), sink,
+            new GridWaitsOptions { ProveEvery = TimeSpan.FromSeconds(30) }, clock);
+        waits.SetWatches([new(TimeSpan.FromSeconds(1))]);
+        clock.Advance(TimeSpan.FromMilliseconds(1));
+        for (var i = 0; i < 10; i++)
+        {
+            waits.Heard([new WaitRow { Id = i, Version = 1, Stamp = StampNow(clock) }]);
+            clock.Advance(TimeSpan.FromMilliseconds(3));
+        }
+
+        await Advance(clock, waits, TimeSpan.FromMilliseconds(970));
+        Assert(sink.Take().Overdue.Length == 0 && store.Lookups == 0, "at the first key's threshold: nothing yet, its grain not ended");
+        await Advance(clock, waits, TimeSpan.FromMilliseconds(49));
+        var (overdue, _) = sink.Take();
+        Assert(overdue.Length == 10 && overdue.All(o => o.Waited >= TimeSpan.FromSeconds(1)) &&
+               store is { Lookups: 1, KeysLookedUp: 10, NewestAsks: 0 },
+            $"at the grain's end, all ten, none early, one lookup and no newest stamp ({overdue.Length}, {store.Lookups}, {store.KeysLookedUp}, {store.NewestAsks})");
+
+        await using var exact = new GridWaits<long, WaitRow, long>(store, new WaitRows(), sink,
+            new GridWaitsOptions { ProveEvery = TimeSpan.FromSeconds(30), Grain = TimeSpan.Zero }, clock);
+        exact.SetWatches([new(TimeSpan.FromSeconds(1))]);
+        exact.Heard([new WaitRow { Id = 100, Version = 1, Stamp = StampNow(clock) }]);
+        clock.Advance(TimeSpan.FromMilliseconds(3));
+        exact.Heard([new WaitRow { Id = 101, Version = 1, Stamp = StampNow(clock) }]);
+        await Advance(clock, exact, TimeSpan.FromMilliseconds(997));
+        Assert(sink.Take().Overdue is [{ Key: 100 }], "no grain: the first at its own threshold");
+        await Advance(clock, exact, TimeSpan.FromMilliseconds(3));
+        Assert(sink.Take().Overdue is [{ Key: 101 }], "and the second at its own");
     }
 
     public static async Task GridWaitsBounds()
@@ -394,7 +432,7 @@ internal static partial class T
         }
 
         // The store stalled: a key heard each 10 ms for 10 s, none landing. Each let go once past the threshold, so the
-        // waits held stay at the rate times the threshold, a stall's length costing nothing more.
+        // waits held stay at the rate times the threshold and a grain, a stall's length costing nothing more.
         sink.Take();
         await using var stalled = new GridWaits<long, WaitRow, long>(store, new WaitRows(), sink,
             new GridWaitsOptions { ProveEvery = TimeSpan.FromSeconds(1) }, clock);
@@ -409,8 +447,8 @@ internal static partial class T
 
         var (overdue, ended) = sink.Take();
         Console.WriteLine($"  a stall of 10 s: at most {most} waits held, {overdue.Length} told, {ended.Length} let go; {stalled.Memory.Held:N0} B held");
-        Assert(most <= 101 && overdue.Length >= 899 && ended.Length == overdue.Length && ended.All(e => !e.Landed),
-            $"held at the rate times the threshold ({most}, {overdue.Length}, {ended.Length})");
+        Assert(most <= 105 && overdue.Length >= 899 && ended.Length == overdue.Length && ended.All(e => !e.Landed),
+            $"held at the rate times the threshold and a grain ({most}, {overdue.Length}, {ended.Length})");
     }
 
     public static async Task GridWaitsAllocation()

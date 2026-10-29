@@ -94,8 +94,8 @@ internal sealed class StoreOrders : IOrderSource, IAsyncDisposable
     public IFillSource Fills => _fills;
 
     /// <summary>
-    ///     The alerts' evaluator: the house's batches as the ledger hears them and lands them, in ChalkQL views of their own, on
-    ///     this planner. Its desk's to dispose (<see cref="AlertDesk" />), before this.
+    ///     The alerts' evaluator: the streams heard as the grids hear them, and the database read for its waits, in ChalkQL views
+    ///     of its own on this planner. Its desk's to dispose (<see cref="AlertDesk" />), before this.
     /// </summary>
     public IAlertEvaluator Alerts => _alerts;
 
@@ -463,7 +463,7 @@ internal sealed class StoreOrders : IOrderSource, IAsyncDisposable
         var fillScopes = new ChalkScopes<Guid, FillRow>(engine, fillTail, fillRows, stateBudget: FillStateBudget);
         var fills = new StoreFills(new StoreAndStream<Guid, FillRow, DateTime>(fillStore, ledger.Fills, fillRows, fillScopes), fillStore,
             FillStateBudget, FillWindowRows);
-        var alerts = await StandingAlerts.StartAsync(planner, ledger);
+        var alerts = await StandingAlerts.StartAsync(planner, new AlertSources(ledger, store, rows, ledger.Fills, fillStore, fillRows));
         return new StoreOrders(planner, engine, store, source, scopes, $"{schema}.fills", fills, alerts, house, ledger, database);
     }
 

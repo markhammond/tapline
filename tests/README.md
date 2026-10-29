@@ -2,7 +2,7 @@
 
 ## Verification
 
-`dotnet run --project tests/Tapline.Tests` (213 tests; `TAPLINE_TEST=<part of a name>` runs only those,
+`dotnet run --project tests/Tapline.Tests` (214 tests; `TAPLINE_TEST=<part of a name>` runs only those,
 `TAPLINE_TEST_REPEAT=n` each n times), then `node tests/js/test.mjs` (72 tests, using the fixtures the C# run writes).
 Nothing to install for either: the JS tests use Node's own modules, and the SignalR JS client's side of the wire —
 how it encodes every control invocation tapline.js sends over a circuit, at each integer width, and how it reads a frame
@@ -198,9 +198,11 @@ Debug reports what the writes that found the ring full allocated. Highlights:
   key waits, one kept not told again. Landed before its deadline, found by the lookup and not told; a haircut behind the
   store's newest stamp, landed with no lookup; an older version landed alone, the wait moved on to the newer; a proof
   the store refuses deferred, never told unproved, told once it answers. A trusted watch told at its deadline, the store
-  not asked, a confirmed one beside it proved; while a trusted watch is in force, every wait proved each second. Past
-  the cap, the oldest kept and the sink told how many went untracked; the store stalled for 10 s, the waits held at the
-  rate times the threshold (99). Warm, 10,000 versions heard and their passes run: 0 B (the passes optimised).
+  not asked, a confirmed one beside it proved; while a trusted watch is in force, every wait proved each second. Ten keys
+  due within a grain (50 ms) told together at its end, none early, by one lookup, the store's newest stamp not asked
+  with no version a haircut old; with no grain, each at its own moment. Past the cap, the oldest kept and the sink told
+  how many went untracked; the store stalled for 10 s, the waits held at the rate times the threshold and a grain (103).
+  Warm, 10,000 versions heard and their passes run: 0 B (the passes optimised).
 - Grid over ChalkQL (Tapline.Grid.ChalkQL), in a project of its own, as it starts ChalkQL's planner (a Java 21 sidecar):
   `dotnet run --project tests/Tapline.Grid.ChalkQL.Tests` (5 tests). The store's pages as ChalkQL statements over a
   database in process, the views' filters as standing views over the tail's tables: the stream ahead of the store and
@@ -232,7 +234,7 @@ Debug reports what the writes that found the ring full allocated. Highlights:
   rule's throttle (`Tap.MinInterval`); fired, the shape's count up by the rows, its latest row the last, a thousand
   firings one value; how far an audience presented a rule, the most any page says and never past the count; a rule
   renamed or throttled anew keeps its place, one reshaped or added starts from the count as it stands; rules refused
-  with their reasons (no name, a throttle or a trigger out of range, the evaluator's word) and past the caps (rules,
+  with their reasons (no name, a throttle or a trigger out of range, a wait from a timestamp left blank, the evaluator's word) and past the caps (rules,
   shapes, audiences); an audience unattended past the keep-for time let go, its shapes with it; a page opened at the
   desk's time; the inbox's row and a shape's value 105 and 192 bytes, their texts cut at a character's boundary and
   flagged. JS (tapline-alerts.js, in Node): both read as .NET lays them out (the fixture); an audience's alerts — each

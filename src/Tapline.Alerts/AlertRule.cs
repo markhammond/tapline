@@ -7,6 +7,16 @@ public enum AlertCountKind
     None
 }
 
+/// <summary>How a wait is shown to be still waiting before it fires: a rule's choice, of those its source offers.</summary>
+public enum AlertWaitProof
+{
+    /// <summary>The store asked as the wait passes its threshold: a row the store is found to hold doesn't fire.</summary>
+    Confirmed,
+
+    /// <summary>On what was last learnt of the store, a moment ago: sooner, the store not asked, but a row it has just taken may fire.</summary>
+    Trusted
+}
+
 /// <summary>
 ///     What fires a rule (virtual-grid.md §15.1, item 2): a row coming to pass its condition; a row that passes waiting
 ///     longer than so long (for the store, in the blotter); or the matches in a sliding window coming to be at least so
@@ -24,8 +34,12 @@ public abstract record AlertTrigger
         public static readonly Entering Instance = new();
     }
 
-    /// <summary>A row that passes the condition has waited longer than <paramref name="Over" />: once a wait.</summary>
-    public sealed record Waiting(TimeSpan Over) : AlertTrigger;
+    /// <summary>
+    ///     A row that passes the condition has waited longer than <paramref name="Over" />: once a wait. Shown to be still
+    ///     waiting as <paramref name="Proof" /> says, and waiting from <paramref name="From" />: a timestamp the row carries,
+    ///     one its source offers (none: the version's own).
+    /// </summary>
+    public sealed record Waiting(TimeSpan Over, AlertWaitProof Proof = AlertWaitProof.Confirmed, string? From = null) : AlertTrigger;
 
     /// <summary>
     ///     The matches in the last <paramref name="Window" /> come to be at least <paramref name="Matches" />, or none (a

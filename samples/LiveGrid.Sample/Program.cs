@@ -104,6 +104,9 @@ builder.Services.AddSingleton(services => new Orders(house, services.GetRequired
 
 var app = builder.Build();
 Listening.WarnWhenStarted(app); // "This sample has no authentication. Listening on …"
+// The house stops trading as the host starts stopping: nothing new written while the web server drains, and so nothing
+// for the alerts or the grids to fail at if the planner has gone already (Ctrl+C reaches it too, and it stops at once).
+app.Lifetime.ApplicationStopping.Register(() => house.Paused = true);
 app.UseAntiforgery();
 app.MapStaticAssets();
 app.MapRazorComponents<App>().AddInteractiveServerRenderMode();

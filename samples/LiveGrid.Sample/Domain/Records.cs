@@ -63,6 +63,13 @@ public sealed record FillRecord(
             MidOf(order, fill), order.MarkupBps);
     }
 
+    /// <summary>A fill as the stream sends it, its names the house's own strings.</summary>
+    internal static FillRecord Of(in FillRow row)
+    {
+        return new FillRecord(row.FillId, row.OrderId, row.EventTime, row.ClOrdId.ToString(), Names.Of(row.Client), Names.Of(row.Region),
+            Names.Of(row.Channel), Names.Of(row.Instrument), Names.Of(row.Side), row.Qty, row.Price, row.Amt, row.Mid, row.MarkupBps);
+    }
+
     /// <summary>The mid <paramref name="fill" /> was priced from: its price less the markup <paramref name="order" /> pays.</summary>
     internal static double MidOf(in OrderRow order, in Fill fill)
     {

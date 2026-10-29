@@ -60,12 +60,22 @@ public static class AlertChoices
                     : null;
     }
 
-    /// <summary>When a rule fires, in words: as a row arrives, over a wait, or a count.</summary>
-    public static string Describe(AlertTrigger trigger)
+    /// <summary>How a wait is proved, as the page says it, and what that means.</summary>
+    public static (string Label, string Title) Proof(AlertWaitProof proof)
+    {
+        return proof == AlertWaitProof.Trusted
+            ? ("trusted", "Fires at its threshold on what was last learnt of the database, a second old at most: sooner, but now and then for a row it has just landed")
+            : ("confirmed", "Fires once the database is asked at its threshold and found still without it");
+    }
+
+    /// <summary>When a rule on <paramref name="tab" /> fires, in words: as a row arrives, over a wait (from when, if not its own time; trusted, if so), or a count.</summary>
+    public static string Describe(AlertTrigger trigger, Tab? tab = null)
     {
         return trigger switch
         {
-            AlertTrigger.Waiting waiting => $"over {Span(waiting.Over)} behind",
+            AlertTrigger.Waiting waiting => $"over {Span(waiting.Over)} behind" +
+                                            (waiting.From is { } from ? " " + (tab?.WaitsFrom.FirstOrDefault(a => a.Column == from)?.Label ?? "since " + from) : "") +
+                                            (waiting.Proof == AlertWaitProof.Trusted ? ", trusted" : ""),
             AlertTrigger.Counting { Kind: AlertCountKind.AtLeast } count =>
                 $"at least {count.Matches.ToString("N0", CultureInfo.InvariantCulture)} in {Span(count.Window)}",
             AlertTrigger.Counting count => $"none in {Span(count.Window)}",
@@ -84,7 +94,8 @@ public static class AlertChoices
 
 /// <summary>
 ///     A rule as the browser keeps it, in its local settings (as the blotter keeps one): its tab and its condition in SQL,
-///     its sound and throttle, and when it fires — on a row's arrival, a wait for the database, or a count.
+///     its sound and throttle, and when it fires — on a row's arrival, a wait for the database (from when, and how it's
+///     proved), or a count.
 /// </summary>
 public sealed record SavedRule(
     string Id,
@@ -97,15 +108,17 @@ public sealed record SavedRule(
     double? LagOverSeconds = null,
     string? CountKind = null,
     int? CountMatches = null,
-    double? WindowSeconds = null)
+    double? WindowSeconds = null,
+    string? LagFrom = null,
+    string? LagProof = null)
 {
     public static SavedRule Of(AlertRule rule)
     {
         var count = rule.Trigger as AlertTrigger.Counting;
+        var waiting = rule.Trigger as AlertTrigger.Waiting;
         return new SavedRule(rule.Id.ToString(), rule.Name, rule.Source, rule.Condition, rule.Sound, rule.Throttle.TotalSeconds, rule.Muted,
-            (rule.Trigger as AlertTrigger.Waiting)?.Over.TotalSeconds,
-            count switch { null => null, { Kind: AlertCountKind.AtLeast } => "at-least", _ => "none" }, count?.Matches,
-            count?.Window.TotalSeconds);
+            waiting?.Over.TotalSeconds, count switch { null => null, { Kind: AlertCountKind.AtLeast } => "at-least", _ => "none" },
+            count?.Matches, count?.Window.TotalSeconds, waiting?.From, waiting is null ? null : AlertChoices.Proof(waiting.Proof).Label);
     }
 
     /// <summary>The rule, as a page takes it up.</summary>
@@ -122,7 +135,7 @@ public sealed record SavedRule(
         {
             (not null, not null) => throw new ArgumentException($"the alert '{Name}' both counts and waits for the database"),
             ({ } seconds, null) => AlertChoices.Lags.FirstOrDefault(l => l.TotalSeconds == seconds) is { Ticks: > 0 } lag
-                ? new AlertTrigger.Waiting(lag)
+                ? Wait(lag)
                 : throw new ArgumentException($"the alert '{Name}' waits {seconds} s for the database, which isn't one of the waits offered"),
             (null, "at-least") => new AlertTrigger.Counting(AlertCountKind.AtLeast, CountMatches ?? 0, TimeSpan.FromSeconds(WindowSeconds ?? 0)),
             (null, "none") => new AlertTrigger.Counting(AlertCountKind.None, 0, TimeSpan.FromSeconds(WindowSeconds ?? 0)),
@@ -132,5 +145,18 @@ public sealed record SavedRule(
         if (trigger is AlertTrigger.Counting counting && AlertChoices.Problem(counting) is { } problem)
             throw new ArgumentException($"the alert '{Name}': {problem}");
         return new AlertRule(id, Name, tab.Name, condition.Text, trigger, throttle, Sound, Muted);
+
+        // A wait from a time its tab offers (none: the version's own), proved as it offers (none said: the tab's first).
+        AlertTrigger.Waiting Wait(TimeSpan lag)
+        {
+            if (tab.WaitsFrom.Count == 0) throw new ArgumentException($"the alert '{Name}' waits for the database, which {tab.Title} rows aren't");
+            if (LagFrom is not null && tab.WaitsFrom.All(a => a.Column != LagFrom))
+                throw new ArgumentException($"the alert '{Name}' waits from '{LagFrom}', which isn't a time a wait on {tab.Title} runs from");
+            var proof = LagProof is null ? tab.WaitProofs.FirstOrDefault()
+                : tab.WaitProofs.FirstOrDefault(p => AlertChoices.Proof(p).Label == LagProof, (AlertWaitProof)(-1));
+            if (!tab.WaitProofs.Contains(proof))
+                throw new ArgumentException($"the alert '{Name}' proves its wait as '{LagProof}', which isn't a way a wait on {tab.Title} is proved");
+            return new AlertTrigger.Waiting(lag, proof, LagFrom);
+        }
     }
 }

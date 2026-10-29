@@ -93,11 +93,11 @@ could share one topic, streamed once from one provider to all of them.
 
 ### Under the hood
 
-|           | QuickGrid Blotter                                            | Tapline LiveGrid                                                                                   |
-|-----------|--------------------------------------------------------------|----------------------------------------------------------------------------------------------------|
-| The grid  | QuickGrid's `Virtualize`, every row rendered on the server   | `LiveGrid`, its rows drawn on the page (`tapline-grid.js`), its cells written as .NET would        |
-| The merge | the sample's own: its tail, live scopes, pages and positions | the library's (`StoreAndStream`, `Tapline.Grid.ChalkQL`), for any append-only store and its stream |
-| Alerts    | a standing view per condition, shared by every rule with it  | the same views; each shape's firings one Tapline value, conflated to each rule's throttle          |
+|           | QuickGrid Blotter                                                                                              | Tapline LiveGrid                                                                                                                                                       |
+|-----------|----------------------------------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| The grid  | QuickGrid's `Virtualize`, every row rendered on the server                                                     | `LiveGrid`, its rows drawn on the page (`tapline-grid.js`), its cells written as .NET would                                                                            |
+| The merge | the sample's own: its tail, live scopes, pages and positions                                                   | the library's (`StoreAndStream`, `Tapline.Grid.ChalkQL`), for any append-only store and its stream                                                                     |
+| Alerts    | a standing view per shape, shared by every rule with it; waits and counts by a clock moved four times a second | a standing view per condition; waits (`GridWaits`) and counts on deadlines, nothing ticking; each shape's firings one Tapline value, conflated to each rule's throttle |
 
 ## What Tapline brings to the table
 
@@ -149,6 +149,11 @@ otherwise write by hand:
 - **Alerts shared by shape, conflated by throttle.** Rules alike in any browser (the same tab, condition and trigger)
   are evaluated once, their firings one Tapline value, and each page takes it no oftener than its rule's throttle
   (`Tap.MinInterval`), whatever fired meanwhile counted in (`Tapline.Alerts`).
+- **Waits for the database, on deadlines.** `GridWaits` (`Tapline.Grid.Provider`) times each row's wait for the store
+  from its own stamp, or another time the row carries, and tells it as it passes a threshold, proved first: by the
+  store's newest stamp where that settles it (a version a haircut behind it has landed), or by a lookup by key, one
+  statement for the keys due within 50 ms. Nothing runs between deadlines, and a key is let go once past its last
+  threshold, so a stall of any length costs no more than the longest threshold's rows.
 
 To try a slow link, throttle the page's network in the browser's developer tools: the rows conflate, the overscan
 shrinks to what the link carries, and the grid keeps its place.
@@ -214,8 +219,9 @@ below is taken as it comes. The sample simulates each of them, as [The domain mo
 - **Drift**: for the keys the stream has sent, continuous reconciliation learns the database's row about once a second
   while grids read. A version written to the database directly shows wherever a read reaches the database, and in a kept
   window at its next refresh.
-- **The sample's alerts** don't depend on the streams' order: they hear each row as the house writes it, and a wait for
-  the database runs from the oldest version not yet landed.
+- **The sample's alerts** hear the streams as the grids do, and read the database themselves: a wait runs from the
+  oldest version the database hasn't been seen to hold, whenever the stream sent it. A row sent late waits from its own
+  time; one the database wrote first is found there before its wait can fire.
 
 What it can't tolerate is what the assumptions above rule out: a version landing more than a haircut out of order, one
 changed in place, a deletion, a key used again, or a stream that loses rows.
@@ -242,8 +248,7 @@ Each version and fill is **streamed** at once, and **landed** in the database 15
 at a time, as ingestion jobs would, stalling for 3 s every 45 s; so the stream runs ahead of the database by varying
 amounts, and versions land out of their order. **Out of order** (the page's toggle): of the rows each stream sends, 2 %
 go late, after rows made after them, by a log-normal delay of about 400 ms, at most 10 s; and 1 % are written to the
-database first, the stream sending them about 200 ms after. The alerts hear each row as the house writes it, either
-way.
+database first, the stream sending them about 200 ms after. The alerts hear what the streams send, as the grids do.
 
 ## The database
 
@@ -336,10 +341,19 @@ before the keys and indexes are built.
 - **Three triggers**, as the Blotter's: a row coming to pass the condition; a passing row waiting longer than so long
   for the database; or the rows passing it in a sliding window coming to be enough, or none. Stall the database to hear
   a wait, and turn on Outage to hear a count of none.
-- **Each shape evaluated once.** `StandingAlerts` keeps each distinct condition as ChalkQL standing views over what the
-  ledger hears and lands. The alert desk (`Tapline.Alerts`) publishes each shape's firings as one value, shared by every
-  page with a rule of that shape, each page taking it no oftener than its rule's throttle and counting in what fired
-  meanwhile.
+- **Waits proved, from the time you choose.** A wait fires once a row has waited over 1, 2, 5, 10 or 30 s for the
+  database, once a wait: an order from its oldest version the database hasn't been seen to hold, a fill from its own
+  time, or an order from when it was placed. It's confirmed with the database at its threshold before it fires, or
+  trusted to what was last learnt of it, a second old at most: sooner, but now and then for a row just landed. Only the
+  firing reaches the page, never the lag.
+- **Counts, as heard.** A window is the last 5 s to 60 minutes, moving in steps of a sixtieth of it, a second at least.
+  At least so many fires as the match that makes them is heard; none, once the window holds no match, judged only once
+  a whole window has passed since counting began. Each fires again only after it has stopped.
+- **Each shape evaluated once.** `StandingAlerts` hears the streams as the grids do, and keeps each distinct condition
+  as a ChalkQL standing view over what they send, refreshed as rows arrive (no oftener than every 50 ms). Its waits are
+  Tapline's `GridWaits`, and its counts its own, each on a deadline, so nothing ticks ([The alerts](#the-alerts),
+  below). The alert desk (`Tapline.Alerts`) publishes each shape's firings as one value, shared by every page with a
+  rule of that shape, each page taking it no oftener than its rule's throttle and counting in what fired meanwhile.
 - **None missed.** What fired while none of this browser's pages was open is said in a line on the next one opened,
   within 10 minutes.
 - **Sound, and unseen alerts.** Browsers allow sound only after a click, so with alerts set to sound the page opens
@@ -352,7 +366,7 @@ before the keys and indexes are built.
 |--------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `Domain`     | all that knows orders and fills: the rows (`OrderRow`, `FillRow`) and the database's records, the reference data, the history, the house and its ledger, the sources (`StoreOrders`, `StoreFills`, `PgOrders`; `Orders`, computed), the tabs (`Tabs`), the alerts' evaluator (`StandingAlerts`) and each tab's grid (`TabGrid.razor`) |
 | (the root)   | what any tab needs, knowing the rows only by the catalog: `Catalog` (tabs, columns, paths), `Filters`, `ViewLink` and `LinkShroud`, `InlineText`, `Times`, `Figures`, `Listening` and `Sources`                                                                                                                                       |
-| `Alerts`     | alert conditions in SQL over a tab's columns and paths, and their completion                                                                                                                                                                                                                                                          |
+| `Alerts`     | alert conditions in SQL over a tab's columns and paths, and their completion; the choices a rule offers (sounds, throttles, waits, counts) and a rule as the browser keeps it                                                                                                                                                         |
 | `Components` | the page (`Home`), its chips, filter editor, alerts and vital statistics                                                                                                                                                                                                                                                              |
 | `Postgres`   | the sample's own PostgreSQL server (`PgServer`)                                                                                                                                                                                                                                                                                       |
 | `wwwroot`    | the page's script and styles, the alerts' glue, the condition editor's bundle and the sounds                                                                                                                                                                                                                                          |
@@ -362,13 +376,13 @@ Outside `Domain`, the page knows the rows only by the catalog; `Program.cs` alon
 
 The library's projects, in the `Tapline` package but the last:
 
-| Project                 |                                                                                                                                                                                                                                                  |
-|-------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `Tapline.Grid.Provider` | the source's contract (`IGridSource`, `GridView`, `GridPage`, `GridAnswer`), and an append-only store merged with a stream (`StoreAndStream`: `IGridStore`, `IGridStream`, `IGridRows`, `IGridScopes`, `AppendOnlyStorePolicy`); no ASP.NET Core |
-| `Tapline.Grid`          | the session: a grid's window for one client (`GridSession`, `GridWindow`), its order and status, its bounds and cadences (`GridOptions`); no ASP.NET Core                                                                                        |
-| `Tapline.Grid.Blazor`   | the component (`LiveGrid`, `LiveColumn`, `LiveColumnChooser`), its formats, and the page's module and styles (`tapline-grid.js`, `tapline-grid.css`)                                                                                             |
-| `Tapline.Alerts`        | alerts over any source, knowing nothing of grids: rules, shapes, the desk and each audience's inbox (`AlertDesk`), and the page's `tapline-alerts.js`                                                                                            |
-| `Tapline.Grid.ChalkQL`  | a package of its own: the store's pages as ChalkQL statements (`ChalkStore`), filters as standing views over the tail (`ChalkScopes`), the tail's tables (`ChalkTail`), and arenas for the reads' budgets (`ChalkArenas`)                        |
+| Project                 |                                                                                                                                                                                                                                                                                     |
+|-------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `Tapline.Grid.Provider` | the source's contract (`IGridSource`, `GridView`, `GridPage`, `GridAnswer`), an append-only store merged with a stream (`StoreAndStream`: `IGridStore`, `IGridStream`, `IGridRows`, `IGridScopes`, `AppendOnlyStorePolicy`), and waits for the store (`GridWaits`); no ASP.NET Core |
+| `Tapline.Grid`          | the session: a grid's window for one client (`GridSession`, `GridWindow`), its order and status, its bounds and cadences (`GridOptions`); no ASP.NET Core                                                                                                                           |
+| `Tapline.Grid.Blazor`   | the component (`LiveGrid`, `LiveColumn`, `LiveColumnChooser`), its formats, and the page's module and styles (`tapline-grid.js`, `tapline-grid.css`)                                                                                                                                |
+| `Tapline.Alerts`        | alerts over any source, knowing nothing of grids: rules, shapes, the desk and each audience's inbox (`AlertDesk`), and the page's `tapline-alerts.js`                                                                                                                               |
+| `Tapline.Grid.ChalkQL`  | a package of its own: the store's pages as ChalkQL statements (`ChalkStore`), filters as standing views over the tail (`ChalkScopes`), the tail's tables (`ChalkTail`), and arenas for the reads' budgets (`ChalkArenas`)                                                           |
 
 **Another database.** ChalkQL's ADO.NET source reads any database with an ADO.NET provider (this sample picks Npgsql),
 and `PgOrders` is where PostgreSQL is spoken directly: its tables, loading, landing and estimates. A store without
@@ -467,6 +481,89 @@ waits for what was sent before it.
 grows back while the reader rests; a hold's first answer, the view and a view below, goes before the rest; and the
 circuit pings every 3 s (`startBlazor`), so a link full of rows isn't taken for a lost one.
 
+### The alerts
+
+The alerts hear the streams beside the grids, and read the database themselves. Each distinct condition is a standing
+view over the rows heard; each tab's waits are one `GridWaits`, a deadline a row; each count is a ring of steps with one
+deadline. What fires goes to the alert desk, and from it to every page with a rule of that shape, each at its rule's
+throttle.
+
+```mermaid
+flowchart LR
+    Streams["The streams<br/>orders, fills"]
+    PG[("PostgreSQL")]
+
+    subgraph Evaluator["StandingAlerts"]
+        direction TB
+        Tables["Live tables<br/>latest orders, recent fills"]
+        Views["Standing views<br/>one a condition"]
+        Waits["GridWaits, a tab's<br/>a deadline a row"]
+        Counts["Counts<br/>a ring of steps a shape"]
+        Tables --> Views
+        Views -->|"matches"| Counts
+    end
+
+    Desk["AlertDesk<br/>one Tapline value a shape"]
+    Pages["The pages<br/>each rule at its throttle"]
+
+    Streams -->|"as rows arrive,<br/>every 50 ms at most"| Tables
+    Streams -->|"every version"| Waits
+    Waits -->|"newest stamp,<br/>lookups by key"| PG
+    Views -->|"rows entering"| Desk
+    Waits -->|"past a threshold, proved,<br/>its condition passing"| Desk
+    Counts -->|"enough, or none"| Desk
+    Desk -->|"Tapline"| Pages
+```
+
+A wait, for a rule of 2 s, confirmed:
+
+```mermaid
+sequenceDiagram
+    participant Stream as Orders' stream
+    participant Waits as GridWaits
+    participant PG as PostgreSQL
+    participant Alerts as StandingAlerts
+    participant Desk as AlertDesk
+    Stream->>Waits: an order's version, stamped 12:00:00.000
+    Note over Waits: due at 12:00:02.000, kept to a 50 ms grain
+    Waits->>PG: at 12:00:02, one lookup for every key then due
+    alt the database holds that version
+        PG-->>Waits: that version, or a newer one
+        Waits-->>Alerts: ended, landed: nothing fires
+    else it doesn't
+        PG-->>Waits: an older version, or none
+        Waits-->>Alerts: waited 2.0 s, with its newest version
+        Alerts->>Alerts: does its condition's view hold the order?
+        Alerts->>Desk: fired: … · 2.0 s waiting for the database
+    end
+    Note over Waits,PG: trusted: told at 12:00:02 on what the last proof learnt, a second old at most
+```
+
+A count, as it fires and is ready again:
+
+```mermaid
+stateDiagram-v2
+    direction LR
+    state "At least N in the window" as AtLeast {
+        [*] --> Fewer
+        Fewer --> Enough: the Nth match heard, fires
+        Enough --> Fewer: a step leaves the window, fewer than N
+    }
+    state "None in the window" as None {
+        [*] --> Counting
+        Counting --> Empty: a whole window with no match, fires
+        Counting --> Matching: a match heard
+        Matching --> Empty: a window after the last match's step, fires
+        Empty --> Matching: a match heard
+    }
+```
+
+**Nothing ticks.** Between the rows heard, only deadlines run: each wait's next threshold, rounded up to 50 ms so the
+keys due together are looked up in one statement; a proof of every tracked wait at most once a second, by the store's
+newest stamp (and, while a trusted rule watches, a lookup of every key); and each count's oldest step leaving its
+window. A row's wait ends as the database is seen to hold its newest version, or once it has passed the longest
+threshold any rule asks for.
+
 ## What correct means here
 
 Each order shows once, at the newest version the provider knows of, sent by the stream since subscription or read from
@@ -483,6 +580,9 @@ the database. No order is missing or shown twice, and rows are in order.
   with the filters as SQL, and every refusal saying why.
 - **The page's module** (`tests/js`, in Node): scrolling scaled past the browser's height cap, requests, the order
   value, and cells as .NET writes them, held to .NET's own output.
+- **The alerts** (`tests/Tapline.Tests`): the desk (shapes shared, throttles, audiences, refusals), and the waits
+  (`GridWaits`) on a manual clock, each told at its threshold and never before, proved first, ended by a landing seen,
+  moved on by an older landing alone, and bounded in a stall and past its cap.
 
 ```bash
 dotnet run --project tests/Tapline.Tests
@@ -513,3 +613,6 @@ dotnet run --project tests/Tapline.Grid.ChalkQL.Tests
 - **Exact places with every order open.** Then the window counts only the runs it has read, so the scroll bar settles
   as the reader goes.
 - **Free-text search.**
+- **Priming.** An alert rule starts from what's heard after it: a count's first window holds only the matches since 
+  then, and a wait rule on a tab no other was watching starts late on rows already in flight, or misses them. A sentinel
+  wait rule kept on the tab would keep its waits primed; replaying the window before a rule would prime both.

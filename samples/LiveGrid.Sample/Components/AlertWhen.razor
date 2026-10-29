@@ -1,6 +1,7 @@
-@* When an alert fires, as the blotter's do: as a row arrives, once one has waited too long for the database, or on how
-   many rows match in a sliding window, at least so many or none. A count out of range is shown as it's written, and said
-   what's wrong with it; the panel keeps the rule it had. *@
+@* When an alert fires, as the blotter's do: as a row arrives, once one has waited too long for the database — from the
+   time its tab offers that the rule chooses, proved as it chooses — or on how many rows match in a sliding window, at
+   least so many or none. A count out of range is shown as it's written, and said what's wrong with it; the panel keeps
+   the rule it had. *@
 @using System.Globalization
 @using LiveGrid.Sample.Alerts
 @using Tapline.Alerts
@@ -15,6 +16,29 @@
         <option value="at-least" title="Once at least so many rows match within a sliding window">at least … in …</option>
         <option value="none" title="Once no row has matched within a sliding window">none in …</option>
     </select>
+    @if (Trigger is AlertTrigger.Waiting waiting && Tab is { } tab)
+    {
+        @if (tab.WaitsFrom.Count > 1)
+        {
+            <select value="@(waiting.From ?? "")" aria-label="Waiting from" @onchange="e => ChangeAsync(waiting with { From = Column((string?)e.Value) })">
+                @foreach (var anchor in tab.WaitsFrom)
+                {
+                    <option value="@(anchor.Column ?? "")" title="@anchor.Description">@anchor.Label</option>
+                }
+            </select>
+        }
+
+        @if (tab.WaitProofs.Count > 1)
+        {
+            <select value="@waiting.Proof" aria-label="Proved" @onchange="e => ChangeAsync(waiting with { Proof = Enum.Parse<AlertWaitProof>((string)e.Value!) })">
+                @foreach (var proof in tab.WaitProofs)
+                {
+                    var (label, title) = AlertChoices.Proof(proof);
+                    <option value="@proof" title="@title">@label</option>
+                }
+            </select>
+        }
+    }
     @if (Trigger is AlertTrigger.Counting count)
     {
         @if (count.Kind == AlertCountKind.AtLeast)
@@ -41,6 +65,10 @@
 @code {
     [Parameter] public AlertTrigger Trigger { get; set; } = AlertTrigger.Entering.Instance;
 
+    /// <summary>The rule's tab: what a wait may run from, and how it may be proved.</summary>
+    [Parameter]
+    public Tab? Tab { get; set; }
+
     /// <summary>The trigger chosen.</summary>
     [Parameter]
     public EventCallback<AlertTrigger> Changed { get; set; }
@@ -65,13 +93,23 @@
             "at-least" => Changed.InvokeAsync(new AlertTrigger.Counting(AlertCountKind.AtLeast, count?.Matches is > 0 and var n ? n : 5,
                 count?.Window ?? TimeSpan.FromMinutes(1))),
             "none" => Changed.InvokeAsync(new AlertTrigger.Counting(AlertCountKind.None, 0, count?.Window ?? TimeSpan.FromMinutes(1))),
-            var seconds => Changed.InvokeAsync(new AlertTrigger.Waiting(TimeSpan.FromSeconds(double.Parse(seconds, CultureInfo.InvariantCulture))))
+            // (a wait kept from where it ran and as it was proved; a new one from the version's own time, proved as the tab first offers)
+            var seconds => Changed.InvokeAsync(Trigger is AlertTrigger.Waiting was
+                ? was with { Over = TimeSpan.FromSeconds(double.Parse(seconds, CultureInfo.InvariantCulture)) }
+                : new AlertTrigger.Waiting(TimeSpan.FromSeconds(double.Parse(seconds, CultureInfo.InvariantCulture)),
+                    Tab?.WaitProofs.FirstOrDefault() ?? AlertWaitProof.Confirmed))
         };
     }
 
-    private Task ChangeAsync(AlertTrigger.Counting count)
+    private Task ChangeAsync(AlertTrigger trigger)
     {
-        return Changed.InvokeAsync(count);
+        return Changed.InvokeAsync(trigger);
+    }
+
+    // The version's own time, the first a tab offers, is none.
+    private static string? Column(string? value)
+    {
+        return string.IsNullOrEmpty(value) ? null : value;
     }
 
     private static string Seconds(TimeSpan lag)
