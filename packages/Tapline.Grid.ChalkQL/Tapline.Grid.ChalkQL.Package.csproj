@@ -3,7 +3,7 @@
         <PackageId>Tapline.Grid.ChalkQL</PackageId>
         <PackageLicenseFile>LICENSE.txt</PackageLicenseFile>
         <PackageTags>$(PackageTags);grid;livegrid;chalkql;sql;postgresql;incremental-view-maintenance</PackageTags>
-        <Description>LiveGrid bolted onto a database and its stream through ChalkQL: the store's pages pushed down as SQL, and each view's filter, stated once, kept as ChalkQL standing views over the rows the stream sent that the database hasn't reached, so a row passes as the database would pass it.</Description>
+        <Description>LiveGrid over a database and its change stream, through ChalkQL: the store's pages pushed down as SQL, and each view's filter, stated once, kept as ChalkQL standing views over the rows the stream sent that the database hasn't reached, so a row passes as the database would pass it.</Description>
     </PropertyGroup>
     <ItemGroup>
         <ProjectReference Include="../../src/Tapline.Grid.ChalkQL/Tapline.Grid.ChalkQL.csproj" PrivateAssets="all"/>

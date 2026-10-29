@@ -252,7 +252,7 @@ public sealed class GridStoreRefusedException(string reason, Exception? innerExc
 public delegate void GridBatch<TRow>(ReadOnlySpan<TRow> rows) where TRow : unmanaged;
 
 /// <summary>
-///     The notifications a <see cref="StoreAndStream{TKey,TRow,TStamp}" /> merges with its store: every version written after
+///     The change stream a <see cref="StoreAndStream{TKey,TRow,TStamp}" /> merges with its store: every version written after
 ///     <see cref="Subscribe" /> returns, in batches, on the stream's thread — reliable from then on, and in the end in
 ///     agreement with the store, though it may run ahead of it, or behind.
 /// </summary>

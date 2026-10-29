@@ -7,7 +7,7 @@ using System.Runtime.InteropServices;
 namespace Tapline.Grid.Provider;
 
 /// <summary>
-///     A grid's source bolted onto a database and its stream: the store's pages laid over with what the stream sent that
+///     A grid's source over a database and its change stream: the store's pages laid over with what the stream sent that
 ///     the store hasn't reached, each key once, at the newest version either side knows (grid-sources.md §3).
 /// </summary>
 /// <remarks>

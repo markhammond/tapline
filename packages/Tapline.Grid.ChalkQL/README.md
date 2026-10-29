@@ -1,6 +1,6 @@
 # Tapline.Grid.ChalkQL
 
-[Tapline](https://github.com/markhammond/tapline/blob/main/README.md)'s LiveGrid bolted onto a database and its stream through [ChalkQL](https://www.nuget.org/packages/ChalkQL):
+[Tapline](https://github.com/markhammond/tapline/blob/main/README.md)'s LiveGrid over a database and its change stream, through [ChalkQL](https://www.nuget.org/packages/ChalkQL):
 
 - **The store's pages as SQL:** `ChalkStore` reads an append-only store's tables — each key's newest version, and every version — in any source ChalkQL has (PostgreSQL over ADO.NET, an in-process table). Each view's filter, order and limit go to the database in its own SQL, each statement prepared once a shape, its values bound, and stopped at a time limit.
 - **The filter, stated once:** `ChalkFilter` is a view's filter as a SQL condition, its values bound as parameters. The store's pages take it pushed down; `ChalkScopes` keeps the same text as ChalkQL standing views over the rows the stream sent that the database hasn't reached (`ChalkTail`), so a row passes as the database would pass it.

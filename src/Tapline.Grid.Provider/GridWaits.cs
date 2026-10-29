@@ -106,7 +106,7 @@ public sealed record GridWaitsOptions
 }
 
 /// <summary>
-///     Waits for the store, an alert evaluator's (grid-waits.md §3): for each key heard on the stream that the store hasn't
+///     Waits for the store, an alert evaluator's (grid-waits.md §3): for each key heard on the change stream that the store hasn't
 ///     been seen to hold, from the anchor of its oldest version not landed until the store holds its newest — a newer
 ///     landing ends an older version's wait, an older landing alone moves the start to the next — reported as each passes a
 ///     watch's threshold, proved first as the watch asks.

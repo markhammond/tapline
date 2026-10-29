@@ -1,4 +1,4 @@
-# Tapline — Real-time, last-mile data distribution for .NET
+# Tapline — Real-time last-mile data distribution for .NET
 
 [![NuGet](https://img.shields.io/nuget/v/Tapline.svg)](https://www.nuget.org/packages/Tapline) [![ci](https://github.com/markhammond/tapline/actions/workflows/ci.yml/badge.svg)](https://github.com/markhammond/tapline/actions/workflows/ci.yml)
 
@@ -139,18 +139,20 @@ A service of many subscribers goes through a data provider, which decides who ma
 
 ## Batteries included
 
-Four packages. A server takes `Tapline`, a .NET client `Tapline.Client`; the two that bring Wasmtime are taken only as
-needed: `Tapline.Wasm` by a server, `Tapline.Client.Opaque` by a client.
+Five packages. A server takes `Tapline`, a .NET client `Tapline.Client`; the two that bring Wasmtime are taken only as
+needed: `Tapline.Wasm` by a server, `Tapline.Client.Opaque` by a client. A server whose LiveGrid reads a database
+through ChalkQL takes `Tapline.Grid.ChalkQL` too, and with it ChalkQL's planner, a Java 21 sidecar.
 
 | Package | For |
 |---|---|
-| `Tapline` | the router hosted in ASP.NET Core, over a Blazor Server circuit's own connection or MagicOnion (gRPC); data providers in a process of their own; sign-in by modules (passkeys, passthrough, your own); the viewer and the browser client (`tapline.js`) |
+| `Tapline` | the router hosted in ASP.NET Core, over a Blazor Server circuit's own connection or MagicOnion (gRPC); data providers in a process of their own; sign-in by modules (passkeys, passthrough, your own); LiveGrid, its source's contract and `StoreAndStream`; alerts; the viewer and the browser client (`tapline.js`) |
 | `Tapline.Client` | the core (sources, message topics and mailboxes, outlets and the router, `Publisher`) and the .NET client, over MagicOnion or whatever carries its frames |
 | `Tapline.Wasm` | folds, their finalizers and stale-data functions as WebAssembly modules, sandboxed and fuel-bounded; password sign-in by OPAQUE (RFC 9807) |
 | `Tapline.Client.Opaque` | a .NET client's password sign-in by OPAQUE |
+| `Tapline.Grid.ChalkQL` | LiveGrid over a database and its change stream, through ChalkQL |
 
-`Tapline` depends on `Tapline.Client`, and `Tapline.Wasm` on `Tapline` and `Tapline.Client.Opaque`. What each
-contains: [Packages](docs/architecture.md#packages).
+`Tapline` depends on `Tapline.Client`, `Tapline.Wasm` on `Tapline` and `Tapline.Client.Opaque`, and
+`Tapline.Grid.ChalkQL` on `Tapline` and ChalkQL. What each contains: [Packages](docs/architecture.md#packages).
 
 ## Vocabulary
 

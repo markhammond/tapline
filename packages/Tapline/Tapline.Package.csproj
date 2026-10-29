@@ -3,7 +3,7 @@
         <PackageId>Tapline</PackageId>
         <PackageLicenseFile>LICENSE.txt</PackageLicenseFile>
         <PackageTags>$(PackageTags);aspnetcore;blazor;blazor-server;signalr;grpc;magiconion;authentication;passkeys;webauthn</PackageTags>
-        <Description>Tapline's router hosted in ASP.NET Core: real-time, last-mile fan-out of shared state and ordered messages, over a Blazor Server circuit or MagicOnion (gRPC); data providers in process or in their own; sign-in by modules (passkeys, passthrough, tickets, your own); LiveGrid, a virtual data grid for live data, its source a database and its stream merged; alerts by shape; the ops port, the router's viewer and the browser client (tapline.js).</Description>
+        <Description>Tapline's router hosted in ASP.NET Core: real-time, last-mile fan-out of shared state and ordered messages, over a Blazor Server circuit or MagicOnion (gRPC); data providers in process or in their own; sign-in by modules (passkeys, passthrough, tickets, your own); LiveGrid, a virtual data grid for live data, its source a database and its change stream merged; alerts by shape; the ops port, the router's viewer and the browser client (tapline.js).</Description>
     </PropertyGroup>
     <ItemGroup>
         <ProjectReference Include="../../src/Tapline.AspNetCore/Tapline.AspNetCore.csproj" PrivateAssets="all"/>
