@@ -1,0 +1,106 @@
+@* An alert's condition, in SQL, as the blotter's: CodeMirror draws it in the browser (its bundle loaded as the editor first
+   opens), and the server completes it and checks it — the names by itself, the rest by asking ChalkQL. *@
+@implements IAsyncDisposable
+@using LiveGrid.Sample.Alerts
+@using Tapline.Alerts
+@inject IJSRuntime JS
+@inject AlertDesk Desk
+@inject IColumnValues Values
+@inject ILogger<ConditionEditor> Log
+
+<div class="condition-editor" @ref="_element"></div>
+
+@code {
+    [Parameter][EditorRequired] public Tab Tab { get; set; } = default!;
+
+    /// <summary>The condition as written; set by the page, it replaces what the editor holds.</summary>
+    [Parameter]
+    public string Text { get; set; } = "";
+
+    [Parameter] public EventCallback<string> TextChanged { get; set; }
+
+    [Parameter] public string Placeholder { get; set; } = "";
+
+    private ElementReference _element;
+    private DotNetObjectReference<ConditionEditor>? _self;
+    private string _shown = "";
+    private bool _created;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            // The editor's bundle (window.blotterEditor), the first time any editor opens: the browser keeps it.
+            await using (await JS.InvokeAsync<IJSObjectReference>("import", "./" + Assets["condition-editor.js"])) { }
+
+            _self = DotNetObjectReference.Create(this);
+            _shown = Text;
+            await JS.InvokeVoidAsync("blotterEditor.create", _element, _self, Text, Placeholder);
+            _created = true;
+        }
+        else if (_created && Text != _shown)
+        {
+            _shown = Text;
+            await JS.InvokeVoidAsync("blotterEditor.set", _element, Text);
+        }
+    }
+
+    [JSInvokable]
+    public async Task OnChanged(string text)
+    {
+        _shown = text;
+        await TextChanged.InvokeAsync(text);
+    }
+
+    [JSInvokable]
+    public async Task<Suggestions> Complete(string text, int cursor)
+    {
+        return await ConditionCompletion.CompleteAsync(Tab, text, cursor, ValuesAsync, CancellationToken.None);
+    }
+
+    /// <summary>What's wrong, and where: the names the page doesn't know, then what ChalkQL makes of the rest.</summary>
+    [JSInvokable]
+    public async Task<IReadOnlyList<Problem>> Check(string text)
+    {
+        var condition = Condition.Parse(Tab, text);
+        if (!condition.Errors.IsEmpty)
+            return [.. condition.Errors.Select(e => new Problem(e.Span.From, Math.Max(e.Span.To, e.Span.From + 1), "error", e.Message))];
+        if (condition.IsEmpty) return [];
+        return await Desk.CheckAsync(new AlertWatch(Tab.Name, condition.Text, AlertTrigger.Entering.Instance)) is { } refused
+            ? [new Problem(0, text.Length, "error", refused)]
+            : [];
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            if (_created) await JS.InvokeVoidAsync("blotterEditor.dispose", _element);
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+
+        _self?.Dispose();
+    }
+
+    /// <summary>A text column's values, the most frequent of the last day first, starting with what's typed: the orders'.</summary>
+    private async Task<IReadOnlyList<string>> ValuesAsync(Column column, string typed, CancellationToken ct)
+    {
+        var to = DateTime.UtcNow.AddMinutes(1);
+        try
+        {
+            var found = await Task.Run(() => Values.ValuesOf(column.Name, to.AddDays(-1), to, typed.Length > 0 ? typed : null, 20, ct), ct);
+            return [.. found.Select(v => v.Value)];
+        }
+        catch (Exception failure) when (failure is not OperationCanceledException)
+        {
+            // Values are a help, not an answer: without them, the editor still offers the rest.
+            Log.LogWarning(failure, "the values of {Column} couldn't be read for completion", column.Name);
+            return [];
+        }
+    }
+
+    /// <summary>A diagnostic, as the editor marks it.</summary>
+    public sealed record Problem(int From, int To, string Severity, string Message);
+}

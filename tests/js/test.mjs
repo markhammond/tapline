@@ -8,10 +8,11 @@ import { TaplineClient, rowHash, FaultCode, BlobRef, StaleData } from '../../src
 import { loadOpaque } from '../../src/Tapline.Authentication.Opaque/wwwroot/opaque.mjs';
 import { signInWithPassword, registerPassword } from '../../src/Tapline.Authentication.Opaque/wwwroot/tapline-opaque.mjs';
 import { startBlazor } from '../../src/Tapline.BlazorRealtime/wwwroot/blazor-realtime.js';
-import { Scroller, Prefetch, Velocity, leadFor, racingUp, windowFor, Requests, readOrder, readStatus, statusParts, statusText, keysByKey, compareKeys, formatCell, formatInteger, formatDecimal, formatDouble, formatTime, formatGuid, figuredText, cultureOf, INVARIANT, SAFE_HEIGHT,
+import { Scroller, Prefetch, Velocity, leadFor, racingUp, windowFor, Requests, readOrder, placeRuns, readStatus, statusParts, statusText, keysByKey, compareKeys, formatCell, formatInteger, formatDecimal, formatDouble, formatTime, formatGuid, figuredText, cultureOf, INVARIANT, SAFE_HEIGHT,
   stampOf, flashDelay, cssMs, twoFigures, moved, staleAfter, keyTime, stampsTrusted, arrivedAbove,
-  lagShift, flashFrom } from '../../src/Tapline.Grid/wwwroot/tapline-grid.js';
+  lagShift, flashFrom, inPixels, columnEnds } from '../../src/Tapline.Grid.Blazor/wwwroot/tapline-grid.js';
 
+import { readRow, readShape, guidOf, ROW, SHAPE, AlertInbox } from '../../src/Tapline.Alerts/wwwroot/tapline-alerts.js';
 const fx = JSON.parse(readFileSync(new URL('./fixtures/frames.json', import.meta.url)));
 const hex = s => Uint8Array.from(Buffer.from(s, 'hex'));
 const toHex = b => Buffer.from(b).toString('hex').toUpperCase();
@@ -31,6 +32,62 @@ function newClient(sent) {
   client.connection = { send: (...a) => { sent.push(a); return Promise.resolve(); } };
   return client;
 }
+
+test('alerts read as .NET lays them out (fixtures/frames.json "alerts", by the C# tests): an inbox row — how far presented, past 2³², muted, its source, name and sound — and a shape\'s value — its count, when it fired, its latest key, a line cut and marked so — and a rule\'s key, a .NET Guid', () => {
+  const a = fx.alerts, bytes = text => new Uint8Array(Buffer.from(text, 'base64'));
+  const row = bytes(a.row), shape = bytes(a.shape);
+  assert.deepEqual([row.length, shape.length], [ROW.size, SHAPE.size], 'the sizes .NET packs them to');
+  assert.deepEqual(readRow(row), { presented: a.presented, muted: true, source: 'fills', name: a.name, sound: 'kaching' });
+  assert.deepEqual(readShape(shape), { fired: a.fired, firedAt: a.firedAt, key: a.rule, summary: a.summary });
+  assert.equal(guidOf(bytes(a.key)), a.rule);
+});
+
+test('an audience\'s alerts (AlertInbox): each rule\'s shape past what its audience presented, presented once and said back — sounded unless muted; away if its shape last fired before the page opened, gathered in one line; a rule\'s shape subscribed again only when its tap changes; another page\'s presenting honoured', async () => {
+  const guid = id => { const h = id.replace(/-/g, ''), b = i => parseInt(h.slice(2 * i, 2 * i + 2), 16);
+    return Uint8Array.from([3, 2, 1, 0, 5, 4, 7, 6, 8, 9, 10, 11, 12, 13, 14, 15].map(b)); };
+  const text = (bytes, at, value) => { const utf8 = new TextEncoder().encode(value); bytes[at] = utf8.length; bytes.set(utf8, at + 1); };
+  const row = (presented, muted, name) => { const b = new Uint8Array(ROW.size), dv = new DataView(b.buffer);
+    dv.setBigInt64(ROW.presented, BigInt(presented), true); b[ROW.muted] = muted ? 1 : 0;
+    text(b, ROW.source, 'orders'); text(b, ROW.name, name); text(b, ROW.sound, 'kaching'); return b; };
+  const shape = (fired, firedAtMs, summary = 'FERN Buy 1 BTC') => { const b = new Uint8Array(SHAPE.size), dv = new DataView(b.buffer);
+    dv.setBigInt64(SHAPE.fired, BigInt(fired), true); dv.setBigInt64(SHAPE.firedAt, BigInt(firedAtMs * 1000), true);
+    text(b, SHAPE.summary, summary); return b; };
+  const r1 = '01a18356-af60-7000-86cf-7ea6c6c82c20', r2 = '01a18356-af60-7000-86cf-7ea6c6c82c21';
+  const inbox = rows => ({ members: [{ rows: new Map(rows.map(([id, bytes], i) => [i, { key: guid(id), row: bytes }])) }] });
+  const handlers = new Map(), activated = [];
+  const tapline = { subscribe(binding, onState) { const id = binding.tapId; activated.push(id); handlers.set(id, onState); return () => handlers.delete(id); } };
+  const said = { alerts: [], played: [], presented: [], away: [] };
+  const since = 1_793_000_000_000;
+  globalThis.document = { hidden: false, addEventListener() {}, removeEventListener() {} };
+  try {
+    const box = new AlertInbox({ inbox: { tapId: 1 }, shapes: { [r1]: { tapId: 2 }, [r2]: { tapId: 3 } }, since, tapline, soundOn: true,
+      alert: a => said.alerts.push([a.name, a.count, a.away]), play: s => said.played.push(s), presented: (r, n) => said.presented.push([r, n]),
+      away: list => said.away.push(list.map(a => [a.name, a.count])) });
+    handlers.get(1)(inbox([[r1, row(10, false, 'Filled')], [r2, row(0, true, 'Quiet')]]));
+    assert.deepEqual(said.alerts, [], 'rows alone: nothing to present');
+    handlers.get(2)(shape(15, since - 1000));
+    handlers.get(3)(shape(0, 0));
+    handlers.get(2)(shape(15, since - 1000));
+    handlers.get(2)(shape(18, since + 500));
+    handlers.get(3)(shape(2, since + 600));
+    assert.deepEqual(said.alerts, [['Filled', 5, true], ['Filled', 3, false], ['Quiet', 2, false]], 'what fired past the presented: away before the page opened, once each');
+    assert.deepEqual(said.played, ['kaching', 'kaching'], 'sounded, but not the muted rule');
+    assert.deepEqual(said.presented, [[r1, 15], [r1, 18], [r2, 2]], 'each presented said back, as far as its shape\'s count');
+    await new Promise(r => setTimeout(r, 300));
+    assert.deepEqual(said.away, [[['Filled', 5]]], 'what fired while away, gathered in one line');
+    box.setShapes({ [r1]: { tapId: 2 }, [r2]: { tapId: 4 } });
+    assert.deepEqual(activated, [1, 2, 3, 4], 'the rule whose tap changed subscribed again; the other kept');
+    assert.deepEqual([...handlers.keys()].sort(), [1, 2, 4], 'the old tap let go');
+    handlers.get(1)(inbox([[r1, row(20, false, 'Filled')], [r2, row(2, true, 'Quiet')]]));
+    handlers.get(2)(shape(20, since + 900));
+    handlers.get(2)(shape(21, since + 950));
+    assert.deepEqual(said.alerts.slice(3), [['Filled', 1, false]], 'presented by another page of the audience: from there');
+    box.dispose();
+    assert.equal(handlers.size, 0, 'disposed: nothing left subscribed');
+  } finally {
+    delete globalThis.document;
+  }
+});
 
 test('table replica: every delta verifies; final rows equal the server table', () => {
   const sent = [];
@@ -1161,6 +1218,21 @@ test('grid scrolling: native and exact under the safe height; above it, scaled �
   assert.equal(big.row, 0, 'fewer rows than the view: the top');
 });
 
+test('grid columns in pixels, as WebKit zoomed needs them (it scales a ch apart from its text, and a registered length at each sum): a width\'s ch, em and rem written as pixels from the font\'s measures, the rest left to the browser; the places each column\'s end and its gutter, one given no room standing where the one before it ends', () => {
+    const units = {ch: 9.890625, em: 16, rem: 18};
+    assert.equal(inPixels('14ch', units), '138.46875px');
+    assert.equal(inPixels('calc(14ch + 2 * 1.25em)', units), 'calc(138.46875px + 2 * 20px)');
+    assert.equal(inPixels('2rem', units), '36px');
+    assert.equal(inPixels('.5em', units), '8px');
+    assert.equal(inPixels('9EM', units), '144px');
+    assert.equal(inPixels('120px', units), '120px');
+    const runs = {ch: n => n === 6 ? 44.75 : n * 7.418, em: 12};   // (a ch as so many characters run: six a hair wider than six shares)
+    assert.equal(inPixels('6ch', runs), '44.75px');
+    assert.equal(inPixels('calc(6ch + 2 * 1.25em)', runs), 'calc(44.75px + 2 * 15px)');
+    assert.deepEqual(columnEnds([100, 50, undefined, 20], 16), [116, 182, 182, 218]);
+    assert.deepEqual(columnEnds([], 16), []);
+});
+
 test('grid pre-fetch: a view ahead and two thirds behind at full size, starting at a quarter; up below 150 ms (the median of the last three), down above 500 ms, each on its boundary staying; the first answer after a step unjudged; a size left for being slow held back 30 s, doubling to 5 min', () => {
   let now = 0;
   const p = new Prefetch(() => now);
@@ -1363,7 +1435,7 @@ test('grid requests: coalesced, at most one an interval and while fewer than the
 test('grid order value: read as Tapline.Grid writes it (40 bytes, the view its rows are of among them, then keys); another format, cut short, a count that doesn\'t fit: not one', () => {
   const keys = [7n, 5n, 3n];
   const bytes = new Uint8Array(40 + 24), dv = new DataView(bytes.buffer);
-  bytes[0] = 1; bytes[1] = 2; bytes[2] = 1; bytes[3] = 8;
+  bytes[0] = 2; bytes[1] = 2; bytes[2] = 1; bytes[3] = 8;
   dv.setInt32(4, 3, true);
   dv.setBigInt64(8, 1_234_567_890_123n, true);
   dv.setBigInt64(16, 9_876_543_210n, true);
@@ -1373,9 +1445,9 @@ test('grid order value: read as Tapline.Grid writes it (40 bytes, the view its r
   keys.forEach((k, i) => dv.setBigInt64(40 + 8 * i, k, true));
   const order = readOrder(bytes);
   const latin1 = k => { const b = new Uint8Array(8); new DataView(b.buffer).setBigInt64(0, k, true); return String.fromCharCode(...b); };
-  assert.deepEqual(order, { live: false, stale: true, byKey: false, totalKind: 1, keySize: 8, count: 3, first: 1_234_567_890_123, total: 9_876_543_210,
-    letIn: 30, holds: 4, view: 2, keys: keys.map(latin1) });
-  assert.equal(readOrder(Uint8Array.of(2, ...bytes.subarray(1))), null, 'another format');
+  assert.deepEqual(order, { live: false, stale: true, byKey: false, allOpen: false, totalKind: 1, keySize: 8, count: 3, first: 1_234_567_890_123, total: 9_876_543_210,
+    letIn: 30, holds: 4, view: 2, keys: keys.map(latin1), runs: null });
+  assert.equal(readOrder(Uint8Array.of(1, ...bytes.subarray(1))), null, 'another format (the first, before runs)');
   assert.equal(readOrder(bytes.subarray(0, 63)), null, 'cut short');
   dv.setInt32(4, 4, true);
   assert.equal(readOrder(bytes), null, 'more keys than it holds');
@@ -1387,6 +1459,51 @@ test('grid order value: read as Tapline.Grid writes it (40 bytes, the view its r
   const placed = readOrder(byKey);
   assert.deepEqual([placed.live, placed.byKey, placed.count, placed.keys], [true, true, 3, null], 'by key: three rows, no keys');
   assert.equal(readOrder(Uint8Array.of(...byKey, 0, 0, 0, 0, 0, 0, 0, 0)), null, 'by key, with key bytes: not one');
+});
+
+test('grid order value with runs: each open row\'s run after the keys — its key, whether it\'s above the window, its rows\' keys and depths — read as Tapline.Grid writes it, and placed: a run above the window first, each other after its open row, an open row with none of its run in the window open still; by key, the rows held but the runs\', greatest first; cut short, or bytes left over: not one', () => {
+  const key = k => { const b = new Uint8Array(8); new DataView(b.buffer).setBigInt64(0, BigInt(k), true); return b; };
+  const latin1 = k => String.fromCharCode(...key(k));
+  const runs = [[100, 1, [101, 102], [1, 2]], [5, 0, [51, 52, 53], [1, 2, 1]], [3, 0, [], []]];   // (owner, flags, keys, depths)
+  const parts = [Uint8Array.of(2, 8 | 1, 0, 8, 3, 0, 0, 0), new Uint8Array(32), key(5), key(4), key(3), Uint8Array.of(3, 0, 0, 0)];
+  for (const [owner, flags, keys, depths] of runs)
+    parts.push(key(owner), Uint8Array.of(flags, keys.length, 0, 0, 0), ...keys.map(key), Uint8Array.from(depths));
+  const bytes = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
+  parts.reduce((o, p) => (bytes.set(p, o), o + p.length), 0);
+  const order = readOrder(bytes);
+  assert.deepEqual(order.keys, [5, 4, 3].map(latin1), 'the view\'s rows in the window, listed');
+  assert.deepEqual(order.runs.map(r => [r.owner, r.lead, r.keys, [...r.depths]]),
+    runs.map(([owner, flags, keys, depths]) => [latin1(owner), flags === 1, keys.map(latin1), depths]), 'its runs, as written');
+  const placed = placeRuns(order.keys, order.runs);
+  assert.deepEqual(placed.keys, [101, 102, 5, 51, 52, 53, 4, 3].map(latin1), 'the run above the window first, each other after its row');
+  assert.deepEqual(placed.keys.map(k => placed.depth.get(k) ?? 0), [1, 2, 0, 1, 2, 1, 0, 0], 'each run\'s row at its depth');
+  assert.deepEqual([...placed.open].sort(), [100, 5, 3].map(latin1).sort(), 'open: each run\'s row, one with none in the window too');
+  assert.equal(readOrder(bytes.subarray(0, bytes.length - 1)), null, 'cut short');
+  assert.equal(readOrder(Uint8Array.of(...bytes, 0)), null, 'a byte left over');
+  assert.deepEqual(placeRuns(['a', 'b'], null), { keys: ['a', 'b'], depth: null, open: null }, 'no runs: the rows as they are');
+});
+
+test('grid order value, every row open: the flag, and runs only for rows with rows of theirs in the window, a closed one (no rows) for each row closed in it — placed: every row of the view open but those closed; with no runs at all, every row open still', () => {
+  const key = k => { const b = new Uint8Array(8); new DataView(b.buffer).setBigInt64(0, BigInt(k), true); return b; };
+  const latin1 = k => String.fromCharCode(...key(k));
+  const runs = [[5, 0, [51, 52], [1, 1]], [4, 2, [], []]];   // (owner, flags — 2, closed — keys, depths)
+  const parts = [Uint8Array.of(2, 16 | 8 | 1, 2, 8, 3, 0, 0, 0), new Uint8Array(32), key(5), key(4), key(3), Uint8Array.of(2, 0, 0, 0)];
+  for (const [owner, flags, keys, depths] of runs)
+    parts.push(key(owner), Uint8Array.of(flags, keys.length, 0, 0, 0), ...keys.map(key), Uint8Array.from(depths));
+  const bytes = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
+  parts.reduce((o, p) => (bytes.set(p, o), o + p.length), 0);
+  const order = readOrder(bytes);
+  assert.deepEqual([order.allOpen, order.totalKind], [true, 2], 'every row open, the total at least so many');
+  assert.deepEqual(order.runs.map(r => [r.owner, r.lead, r.closed, r.keys.length]), [[latin1(5), false, false, 2], [latin1(4), false, true, 0]],
+    'an open row\'s run, and a closed row\'s, empty');
+  const placed = placeRuns(order.keys, order.runs, order.allOpen);
+  assert.deepEqual(placed.keys, [5, 51, 52, 4, 3].map(latin1), 'the run after its row; the closed row alone');
+  assert.deepEqual([...placed.open].sort(), [5, 3].map(latin1).sort(), 'open: every row of the view but the closed one — one with none of its run in the window too');
+
+  const bare = bytes.slice(0, 64);   // (every row open, no runs: none with rows in the window, none closed)
+  bare[1] = 16 | 1;
+  const none = readOrder(bare);
+  assert.deepEqual([...placeRuns(none.keys, none.runs, none.allOpen).open].sort(), [5, 4, 3].map(latin1).sort(), 'no runs: every row open still');
 });
 
 test('grid status: the value read as Tapline.Grid writes it (12 bytes: the overscan the link carries, none told null; rows arrived above; the source moved past the rows while passive; then why the last read was refused); another format, cut short: not one — and the status line from it, the order and the page: the total (estimated ≈, at least ≥) named as the grid names its rows, live or held and the rows above, freshness (asking: the last word stands), the refusal marked, the selection', () => {

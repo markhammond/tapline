@@ -1,0 +1,100 @@
+@* When an alert fires, as the blotter's do: as a row arrives, once one has waited too long for the database, or on how
+   many rows match in a sliding window, at least so many or none. A count out of range is shown as it's written, and said
+   what's wrong with it; the panel keeps the rule it had. *@
+@using System.Globalization
+@using LiveGrid.Sample.Alerts
+@using Tapline.Alerts
+
+<span class="alert-when">
+    <select value="@Kind()" aria-label="When it fires" @onchange="e => ChooseAsync((string)e.Value!)">
+        <option value="">as it arrives</option>
+        @foreach (var lag in AlertChoices.Lags)
+        {
+            <option value="@Seconds(lag)" title="Once it has waited over @AlertChoices.Span(lag) for the database to land it">over @AlertChoices.Span(lag) behind</option>
+        }
+        <option value="at-least" title="Once at least so many rows match within a sliding window">at least … in …</option>
+        <option value="none" title="Once no row has matched within a sliding window">none in …</option>
+    </select>
+    @if (Trigger is AlertTrigger.Counting count)
+    {
+        @if (count.Kind == AlertCountKind.AtLeast)
+        {
+            <input type="number" class="count-number" min="1" max="@AlertChoices.MostMatches" value="@count.Matches" aria-label="At least how many"
+                   @onchange="e => ChangeAsync(count with { Matches = Whole(e.Value) })"/>
+            <span class="muted">in</span>
+        }
+
+        var (amount, unit) = Amount(count.Window);
+        <input type="number" class="count-number" min="1" value="@amount" aria-label="Window"
+               @onchange="e => ChangeAsync(count with { Window = Window(Whole(e.Value), unit) })"/>
+        <select value="@unit" aria-label="Window in" @onchange="e => ChangeAsync(count with { Window = Window(amount, (string)e.Value!) })">
+            <option value="s">s</option>
+            <option value="min">min</option>
+        </select>
+        @if (AlertChoices.Problem(count) is { } problem)
+        {
+            <span class="alerts-refused">@problem</span>
+        }
+    }
+</span>
+
+@code {
+    [Parameter] public AlertTrigger Trigger { get; set; } = AlertTrigger.Entering.Instance;
+
+    /// <summary>The trigger chosen.</summary>
+    [Parameter]
+    public EventCallback<AlertTrigger> Changed { get; set; }
+
+    private string Kind()
+    {
+        return Trigger switch
+        {
+            AlertTrigger.Counting { Kind: AlertCountKind.AtLeast } => "at-least",
+            AlertTrigger.Counting => "none",
+            AlertTrigger.Waiting waiting => Seconds(waiting.Over),
+            _ => ""
+        };
+    }
+
+    private Task ChooseAsync(string kind)
+    {
+        var count = Trigger as AlertTrigger.Counting;
+        return kind switch
+        {
+            "" => Changed.InvokeAsync(AlertTrigger.Entering.Instance),
+            "at-least" => Changed.InvokeAsync(new AlertTrigger.Counting(AlertCountKind.AtLeast, count?.Matches is > 0 and var n ? n : 5,
+                count?.Window ?? TimeSpan.FromMinutes(1))),
+            "none" => Changed.InvokeAsync(new AlertTrigger.Counting(AlertCountKind.None, 0, count?.Window ?? TimeSpan.FromMinutes(1))),
+            var seconds => Changed.InvokeAsync(new AlertTrigger.Waiting(TimeSpan.FromSeconds(double.Parse(seconds, CultureInfo.InvariantCulture))))
+        };
+    }
+
+    private Task ChangeAsync(AlertTrigger.Counting count)
+    {
+        return Changed.InvokeAsync(count);
+    }
+
+    private static string Seconds(TimeSpan lag)
+    {
+        return lag.TotalSeconds.ToString(CultureInfo.InvariantCulture);
+    }
+
+    // A window in whole minutes is shown in minutes; any other, in seconds.
+    private static (int Amount, string Unit) Amount(TimeSpan window)
+    {
+        return window.Ticks % TimeSpan.TicksPerMinute == 0 && window >= TimeSpan.FromMinutes(1)
+            ? ((int)window.TotalMinutes, "min")
+            : ((int)window.TotalSeconds, "s");
+    }
+
+    private static TimeSpan Window(int amount, string unit)
+    {
+        return unit == "min" ? TimeSpan.FromMinutes(amount) : TimeSpan.FromSeconds(amount);
+    }
+
+    // What isn't a whole number reads as none, which the count then says is out of range.
+    private static int Whole(object? value)
+    {
+        return int.TryParse(value as string, NumberStyles.Integer, CultureInfo.InvariantCulture, out var whole) ? whole : 0;
+    }
+}

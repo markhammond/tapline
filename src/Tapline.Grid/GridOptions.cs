@@ -1,3 +1,5 @@
+using Tapline.Grid.Provider;
+
 namespace Tapline.Grid;
 
 /// <summary>
@@ -16,6 +18,23 @@ public sealed record GridOptions
 
     /// <summary>Grid sessions one client (a circuit's outlet) may hold at once: another is refused.</summary>
     public int MaxSessionsPerClient { get; init; } = 8;
+
+    /// <summary>
+    ///     The most memory the source may take answering one of the grid's reads, in bytes: carried by each read
+    ///     (<see cref="GridRead{TKey,TRow}.MaxBytes" />), so the host can budget by who the user is. Counted as the source
+    ///     takes it, never estimated; a read past it is refused, saying why. None (0): the source's own bound.
+    /// </summary>
+    public uint MaxReadBytes { get; init; }
+
+    /// <summary>
+    ///     Open rows a session remembers, their runs shown (<see cref="GridSession{TKey,TRow}.SetOpen" />): past so many,
+    ///     opening another forgets — closes — the one least recently used (opened, or held by the window), never one the
+    ///     window holds. Every row open (<see cref="GridSession{TKey,TRow}.SetAllOpen" />), the rows closed are remembered
+    ///     so, one forgotten open again; and the window counts the runs of as many rows read (at least a read's), the
+    ///     least recently read forgotten, uncounted till read again. Each costs its session a few dozen bytes, wherever it
+    ///     is; those in the window cost their reads, which the window's own bound bounds.
+    /// </summary>
+    public int MaxOpenRows { get; init; } = 4096;
 
     /// <summary>At the live top, the least time from one read to the next for the source's changes.</summary>
     public TimeSpan LiveEvery { get; init; } = TimeSpan.FromMilliseconds(100);
@@ -74,6 +93,7 @@ public sealed record GridOptions
         if (MaxWindowRows < 1) return $"A window of at most {MaxWindowRows} rows can show none (GridOptions.MaxWindowRows).";
         if (MaxSessionsPerClient < 1)
             return $"At most {MaxSessionsPerClient} grids a client: none can open (GridOptions.MaxSessionsPerClient).";
+        if (MaxOpenRows < 0) return $"At most {MaxOpenRows} rows open: a bound can't be negative (GridOptions.MaxOpenRows).";
         if (LiveEvery < TimeSpan.Zero || HeldEvery < TimeSpan.Zero || HiddenInterval < TimeSpan.Zero)
             return "A cadence can't be negative (GridOptions.LiveEvery, HeldEvery, HiddenInterval).";
         if (RevealNear < 0 || RevealAtOnce < 0)
@@ -85,8 +105,18 @@ public sealed record GridOptions
     }
 }
 
-/// <summary>A grid session refused when made: <see cref="Exception.Message" /> says why.</summary>
-public sealed class GridRefusedException(string reason) : InvalidOperationException(reason);
+/// <summary>Whether the page has all the server published for its grid (Tap.Sync), as its LiveGrid reports it.</summary>
+public enum GridFreshness : byte
+{
+    /// <summary>Not known yet; and always, for a session with no page (<see cref="GridSession{TKey,TRow}.Status" />).</summary>
+    Unknown = 0,
+
+    /// <summary>States arriving, or the router has said the page holds all it published.</summary>
+    Fresh = 1,
+
+    /// <summary>Asked, and not answered within a second: the page may be behind.</summary>
+    Behind = 2
+}
 
 /// <summary>What a grid's chrome shows, as of the session's last answer.</summary>
 public readonly record struct GridStatus
@@ -102,7 +132,7 @@ public readonly record struct GridStatus
 
     public TotalKind TotalKind { get; init; }
 
-    /// <summary>Held: rows arrived above, not let in.</summary>
+    /// <summary>Held: rows arrived above the reader hasn't seen — not let in, or let in above the first row shown since.</summary>
     public long Above { get; init; }
 
     /// <summary>Held: rows let in above so far.</summary>

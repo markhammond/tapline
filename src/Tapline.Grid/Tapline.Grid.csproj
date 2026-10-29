@@ -1,17 +1,18 @@
-<Project Sdk="Microsoft.NET.Sdk.Razor">
+<Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
         <TargetFramework>net10.0</TargetFramework>
         <Nullable>enable</Nullable>
         <ImplicitUsings>enable</ImplicitUsings>
         <LangVersion>latest</LangVersion>
         <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
-        <!-- (its wwwroot is served where its package, Tapline, serves it: packages/Tapline) -->
-        <StaticWebAssetBasePath>_content/Tapline</StaticWebAssetBasePath>
         <RootNamespace>Tapline.Grid</RootNamespace>
     </PropertyGroup>
     <ItemGroup>
-        <FrameworkReference Include="Microsoft.AspNetCore.App"/>
+        <!-- A reader's session: its window over the source, kept and published through Tapline (the order, the status), its
+             requests and holds — nothing of ASP.NET Core; Blazor's component is Tapline.Grid.Blazor's. -->
         <ProjectReference Include="../Tapline/Tapline.csproj"/>
+        <ProjectReference Include="../Tapline.Grid.Provider/Tapline.Grid.Provider.csproj"/>
+        <InternalsVisibleTo Include="Tapline.Grid.Blazor"/>
         <InternalsVisibleTo Include="Tapline.Tests"/>
     </ItemGroup>
 </Project>

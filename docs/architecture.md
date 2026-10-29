@@ -571,14 +571,15 @@ id, the reason or the drain's deadline, and how long the router has been quiet.
 
 ## Packages
 
-Four packages, each bundling assemblies of its own, versioned together:
+Five packages, each bundling assemblies of its own, versioned together:
 
 | Package | Assemblies | Depends on |
 |---|---|---|
 | `Tapline.Client` | Tapline, Tapline.Client, Tapline.MagicOnion | MagicOnion.Client, MessagePack, the health checks' abstractions |
-| `Tapline` | Tapline.AspNetCore, Tapline.BlazorRealtime, Tapline.Authentication, Tapline.MagicOnion.Server, Tapline.MagicOnion.Providers; the browser's `tapline.js` and `blazor-realtime.js` (`_content/Tapline/`) | Tapline.Client, ASP.NET Core, MagicOnion.Server |
+| `Tapline` | Tapline.AspNetCore, Tapline.BlazorRealtime, Tapline.Authentication, Tapline.MagicOnion.Server, Tapline.MagicOnion.Providers, Tapline.Grid.Provider, Tapline.Grid, Tapline.Grid.Blazor, Tapline.Alerts; the browser's `tapline.js`, `blazor-realtime.js`, `tapline-grid.js`, `tapline-grid.css` and `tapline-alerts.js` (`_content/Tapline/`) | Tapline.Client, ASP.NET Core, MagicOnion.Server |
 | `Tapline.Client.Opaque` | Tapline.Client.Opaque. Apache-2.0 | Tapline.Client, Wasmtime |
 | `Tapline.Wasm` | Tapline.Wasm, Tapline.Authentication.Opaque; the browser's `opaque.mjs`, `opaque.wasm` and `tapline-opaque.mjs` (`_content/Tapline.Wasm/`). Elastic-2.0 and Apache-2.0 | Tapline, Tapline.Client.Opaque, Wasmtime |
+| `Tapline.Grid.ChalkQL` | Tapline.Grid.ChalkQL | Tapline, ChalkQL, ChalkQL.Sources |
 
 | Assembly | Contents | Depends on |
 |---|---|---|
@@ -593,6 +594,11 @@ Four packages, each bundling assemblies of its own, versioned together:
 | `Tapline.MagicOnion.Server` | `AddTaplineMagicOnion()` (`TaplineMagicOnionOptions`), `MapTaplineMagicOnion()`: `TaplineStreamService` (each frame built just before its awaited write), `TaplineStreamSessions` (an outlet a session, held past its call; `Find` for the app's step 1) | Tapline.AspNetCore, MagicOnion.Server |
 | `Tapline.MagicOnion.Providers` | a data provider in another process: `AddTaplineProviderLink()`, `MapTaplineProviderLink()` (`ProviderLinks`: your provider served to routers in other processes — its topics run by your own router and streamed to them, its step 1s, notices, mailboxes, health, heartbeats and drains on a control stream, `ITaplineProviderLink`) and `ProvideRemote()` (`RemoteProvider`: a router's provider at an address, each topic it accepts onto mirrored into a copy here) | Tapline.MagicOnion.Server |
 | `Tapline.BlazorRealtime` | `AddBlazorRealtime()` (`BlazorRealtimeOptions`: the circuits' outlets, hub timeouts, sockets), `MapBlazorRealtime()` (`MapTapline()` and the circuit sockets), lifetime-manager decorator, protocol wrapper, circuit binding, `blazor-realtime.js` (`startBlazor`) | Tapline.AspNetCore |
+| `Tapline.Grid.Provider` | a grid's source, as its provider writes it: `IGridSource` (`GridView`, `SortKey`, `GridPage`, `GridAnswer`, `GridRefusedException`), `GridText`, and an append-only store merged with its stream, `StoreAndStream` (`IGridStore`, `IGridStream`, `IGridRows`, `IGridScopes`, `AppendOnlyStorePolicy`) | BCL only |
+| `Tapline.Grid` | `GridSession` — one grid's window for one client, kept by the server and carried by Tapline as one watch (its rows, their order, its status), asked for by the page and read again at the cadence its state allows — `GridOptions` (bounds and cadences), `GridOrder`, `GridStatusValue` | Tapline, Tapline.Grid.Provider |
+| `Tapline.Grid.Blazor` | `LiveGrid` (its rows drawn on the page by `tapline-grid.js`, their cells written as .NET formats them), `LiveColumn`, `LiveColumnChooser`, `tapline-grid.js` and `tapline-grid.css` | Tapline.Grid, ASP.NET Core |
+| `Tapline.Alerts` | `AlertDesk` — rules over any source, by shape (source, condition, trigger): each shape evaluated once and published as one value, each page taking it no oftener than its rule's throttle (`Tap.MinInterval`), an inbox per audience — `AlertRule`, `AlertRow`, `IAlertEvaluator`, and the browser's `tapline-alerts.js` | Tapline |
+| `Tapline.Grid.ChalkQL` | a store over ChalkQL: `ChalkStore` (pages, jumps, counts, the gap fill and rechecks as ChalkQL statements, each read within its memory budget), `ChalkScopes` (each view's filter as standing views over the tail), `ChalkTail`, `ChalkRows`, `ChalkFilter` | Tapline.Grid.Provider, ChalkQL, ChalkQL.Sources |
 
 ## Caveats
 

@@ -4,12 +4,12 @@
    from, to (UTC). *@
 @using System.Globalization
 @implements IDisposable
-@inject Orders Source
+@inject IColumnValues Values
 
-<div class="editor" role="dialog" aria-label="Filter @Label">
+<div class="editor" role="dialog" aria-label="Filter @Column.Title">
     <div class="editor-head">
-        <b>Filter @Label</b>
-        @if (_kind == FilterKind.Text)
+        <b>Filter @Column.Title</b>
+        @if (_kind == ColumnKind.Text)
         {
             <select @bind="_match" aria-label="How values match">
                 <option value="@TextMatch.AnyOf">is any of</option>
@@ -24,7 +24,7 @@
 
     @switch (_kind)
     {
-        case FilterKind.Text or FilterKind.Id:
+        case ColumnKind.Text or ColumnKind.Id:
             <div class="pills" @onclick="FocusAsync">
                 @foreach (var value in _values)
                 {
@@ -32,8 +32,8 @@
                     <span class="pill">@v <button type="button" aria-label="Remove @v" @onclick="() => _values.Remove(v)"
                                                   @onclick:stopPropagation>×</button></span>
                 }
-                <input @ref="_input" type="text" value="@_typed" aria-label="@(_kind == FilterKind.Id ? "Order ids" : $"{Label} values")"
-                       placeholder="@(_values.Count > 0 ? "" : _kind == FilterKind.Id ? "type or paste an id, Enter to add" : "type a value, Enter to add")"
+                <input @ref="_input" type="text" value="@_typed" aria-label="@(_kind == ColumnKind.Id ? $"{Column.Title} ids" : $"{Column.Title} values")"
+                       placeholder="@(_values.Count > 0 ? "" : _kind == ColumnKind.Id ? "type or paste an id, Enter to add" : "type a value, Enter to add")"
                        @oninput="TypedAsync" @onkeydown="KeyAsync"/>
                 @if (_values.Count > 0 || _typed.Length > 0)
                 {
@@ -41,11 +41,11 @@
                             @onclick:stopPropagation>×</button>
                 }
             </div>
-            @if (_kind == FilterKind.Text)
+            @if (_kind == ColumnKind.Text)
             {
                 <div class="chooser">
                     <div class="chooser-head">
-                        @(_typed.Length > 0 ? $"Values starting {_typed}" : "Most frequent values"), @Label of rows @TimeLabel @Period
+                        @(_typed.Length > 0 ? $"Values starting {_typed}" : "Most frequent values"), @Column.Title of rows @TimeLabel @Period
                         @if (_loading)
                         {
                             <span class="muted"> · reading…</span>
@@ -66,9 +66,9 @@
             }
             break;
 
-        case FilterKind.Choice:
+        case ColumnKind.Choice:
             <div class="statuses">
-                @foreach (var (_, name) in OrderColumns.NamesOf(Column)!)
+                @foreach (var name in Column.Choices)
                 {
                     var n = name;
                     <label><input type="checkbox" checked="@_values.Contains(n)" @onchange="e => Tick(n, e.Value is true)"/> @n</label>
@@ -76,14 +76,14 @@
             </div>
             break;
 
-        case FilterKind.Integer or FilterKind.Number:
+        case ColumnKind.Integer or ColumnKind.Number:
             <div class="range">
                 <label>at least <input type="number" step="any" @bind="_min"/></label>
                 <label>at most <input type="number" step="any" @bind="_max"/></label>
             </div>
             break;
 
-        case FilterKind.Time:
+        case ColumnKind.Time:
             <div class="range">
                 @* Empty, the browser starts a time where the page is: these are UTC, so an empty one starts at the time in UTC now,
                    set as it takes the focus (on the page, before its picker opens), as if typed. *@
@@ -102,8 +102,9 @@
 @code {
     private const int Offered = 50; // values the chooser offers, at most
 
-    [Parameter, EditorRequired] public string Column { get; set; } = "";
-    [Parameter, EditorRequired] public string Label { get; set; } = "";
+    /// <summary>The column filtered, as the catalog has it: its name, heading, kind and choices.</summary>
+    [Parameter, EditorRequired]
+    public Column Column { get; set; } = default!;
 
     /// <summary>The column's filter now, if any.</summary>
     [Parameter]
@@ -123,9 +124,9 @@
 
     private readonly List<string> _values = [];
     private List<(string Value, long Rows)> _choices = [];
-    private (string? Column, ColumnFilter? Current) _editing;
+    private (Column? Column, ColumnFilter? Current) _editing;
     private ElementReference _input;
-    private FilterKind _kind;
+    private ColumnKind _kind;
     private bool _loading;
     private TextMatch _match;
     private double? _min, _max;
@@ -144,18 +145,18 @@
     {
         if (_editing == (Column, Current)) return; // (the page renders with every change; it starts over for another column, or a filter applied)
         _editing = (Column, Current);
-        _kind = OrderColumns.KindOf(Column);
+        _kind = Column.Kind;
         _values.Clear();
         _values.AddRange(Current?.Values ?? []);
         (_match, _min, _max, _from, _to) = (Current?.Match ?? TextMatch.AnyOf, Current?.Min, Current?.Max, Current?.From, Current?.To);
         (_typed, _refusal) = ("", null);
-        if (_kind == FilterKind.Text) await ReadChoicesAsync();
+        if (_kind == ColumnKind.Text) await ReadChoicesAsync();
     }
 
     private async Task TypedAsync(ChangeEventArgs change)
     {
         _typed = (string?)change.Value ?? "";
-        if (_kind == FilterKind.Text) await ReadChoicesAsync();
+        if (_kind == ColumnKind.Text) await ReadChoicesAsync();
     }
 
     private async Task KeyAsync(KeyboardEventArgs key)
@@ -164,7 +165,7 @@
         {
             foreach (var value in _typed.Split([',', ' ', '\n'], StringSplitOptions.RemoveEmptyEntries)) Add(value); // (ids pasted several at once)
             _typed = "";
-            if (_kind == FilterKind.Text) await ReadChoicesAsync();
+            if (_kind == ColumnKind.Text) await ReadChoicesAsync();
         }
         else if (key.Key == "Backspace" && _typed.Length == 0 && _values.Count > 0)
         {
@@ -184,8 +185,8 @@
         try
         {
             await Task.Delay(200, reading.Token);
-            var (column, start, within) = (Column, _typed.Length > 0 ? _typed : null, Within);
-            var found = await Task.Run(() => Source.ValuesOf(column, within.From, within.To, start, Offered, reading.Token), reading.Token);
+            var (column, start, within) = (Column.Name, _typed.Length > 0 ? _typed : null, Within);
+            var found = await Task.Run(() => Values.ValuesOf(column, within.From, within.To, start, Offered, reading.Token), reading.Token);
             if (reading.IsCancellationRequested) return;
             _choices = found;
         }
@@ -213,7 +214,7 @@
     {
         _values.Clear();
         _typed = "";
-        if (_kind == FilterKind.Text) await ReadChoicesAsync();
+        if (_kind == ColumnKind.Text) await ReadChoicesAsync();
     }
 
     private async Task FocusAsync()
@@ -225,22 +226,22 @@
     {
         if (_typed.Trim().Length > 0)
             foreach (var value in _typed.Split([',', ' ', '\n'], StringSplitOptions.RemoveEmptyEntries)) Add(value);
-        if (_kind == FilterKind.Id && _values.FirstOrDefault(v => !Guid.TryParse(v, out _)) is { } wrong)
+        if (_kind == ColumnKind.Id && _values.FirstOrDefault(v => !Guid.TryParse(v, out _)) is { } wrong)
         {
-            _refusal = $"Not an order id: {wrong}";
+            _refusal = $"Not an id: {wrong}";
             return;
         }
 
         await OnApply.InvokeAsync(new ColumnFilter
         {
-            Column = Column, Label = Label, Values = [.. _values], Match = _kind == FilterKind.Text ? _match : TextMatch.AnyOf,
+            Column = Column.Name, Kind = Column.Kind, Label = Column.Title, Values = [.. _values], Match = _kind == ColumnKind.Text ? _match : TextMatch.AnyOf,
             Min = _min, Max = _max, From = _from, To = _to
         });
     }
 
     private Task ClearAsync()
     {
-        return OnApply.InvokeAsync(new ColumnFilter { Column = Column, Label = Label });
+        return OnApply.InvokeAsync(new ColumnFilter { Column = Column.Name, Kind = Column.Kind, Label = Column.Title });
     }
 
     public void Dispose()

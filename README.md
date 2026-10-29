@@ -133,6 +133,7 @@ A service of many subscribers goes through a data provider, which decides who ma
 - [BlazorRealtime](samples/BlazorRealtime.Sample/README.md) — animation synchronized to streaming music.
 - [BlazingOrderBooks](samples/BlazingOrderBooks.Sample/README.md) — streaming order books with delta-based conflation.
 - [PivotTable](samples/PivotTable.Sample/README.md) — a live position viewer using idiomatic SQL.
+- [LiveGrid](samples/LiveGrid.Sample/README.md) — a streaming virtual blotter with alerts, bolted onto PostgreSQL.
 - [ActivityFeed](samples/ActivityFeed.Sample/README.md) — privacy preserving feeds.
 - [SignIn](samples/SignIn.Sample/README.md) — passkeys and OPAQUE as pluggable authentication modules.
 

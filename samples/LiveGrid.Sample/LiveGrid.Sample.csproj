@@ -3,9 +3,19 @@
         <TargetFramework>net10.0</TargetFramework>
         <Nullable>enable</Nullable>
         <ImplicitUsings>enable</ImplicitUsings>
+        <!-- The condition editor's sources, bundled by hand into wwwroot (see editor/package.json). -->
+        <DefaultItemExcludes>$(DefaultItemExcludes);editor/**</DefaultItemExcludes>
+        <!-- The alerts' views kept incrementally (ViewMaintenance.Incremental) is ChalkQL's experimental CHALK003: acknowledged here. -->
+        <NoWarn>$(NoWarn);CHALK003</NoWarn>
     </PropertyGroup>
     <ItemGroup>
+        <ProjectReference Include="../../src/Tapline.Alerts/Tapline.Alerts.csproj"/>
         <ProjectReference Include="../../src/Tapline.BlazorRealtime/Tapline.BlazorRealtime.csproj"/>
-        <ProjectReference Include="../../src/Tapline.Grid/Tapline.Grid.csproj"/>
+        <ProjectReference Include="../../src/Tapline.Grid.Blazor/Tapline.Grid.Blazor.csproj"/>
+        <ProjectReference Include="../../src/Tapline.Grid.ChalkQL/Tapline.Grid.ChalkQL.csproj"/>
+    </ItemGroup>
+    <ItemGroup>
+        <!-- The database's provider (store postgres): ChalkQL's ADO.NET source takes any, and this sample picks Npgsql. -->
+        <PackageReference Include="Npgsql" Version="10.0.1"/>
     </ItemGroup>
 </Project>

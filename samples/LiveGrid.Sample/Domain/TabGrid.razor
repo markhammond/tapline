@@ -1,0 +1,181 @@
+@*
+    A tab's grid, the domain's: client orders or fills over the tab's source, newest first — the ChalkQL blotter's columns,
+    formats and presentation, each a field of the row — the page's state for the tab (TabState) bound to it. An order
+    opened, by its id or by Enter, is told the page in a line. The page holds the grid by this (its status, view, place and
+    columns), and makes it anew for each tab shown.
+*@
+@implements IDisposable
+@using LiveGrid.Sample.Components
+@inject IOrderSource Source
+@inject IServiceProvider Services
+@inject GridOptions Options
+@inject House House
+
+@if (State.Tab == Tabs.Orders)
+{
+    <LiveGrid TKey="Guid" TRow="OrderRow" @ref="_orders" Source="Source" Options="Options" Class="orders" RowHeight="30" AriaLabel="Client orders"
+              @bind-Sort="State.Sort" Filter="Source.FilterOf(State.Filter)" Selection="GridSelection.Multiple" @bind-Selected="State.Selected"
+              ArrivedFromKey ChangedAt="EventTime" SortDescendingFirst NaturalSort="Newest" OnRowActivate="Open" RowName="order" NewAbove
+              StartAt="State.HeldAt" StatusLine="false" ColumnChooser="false" HeadingTemplate="Heading">
+        <Columns>
+            <LiveColumn Name="order_time" Field="OrderTime" Label="Time" Kind="CellKind.Time" Format="@Clock" Frozen Expander Expandable="FilledQty" Visible="@State.Shows("order_time")" Sortable Filterable/>
+            <LiveColumn Name="order_id" Field="OrderId" Label="Order" Width="@IdWidth" Frozen Link ForChildren="false" Visible="@State.Shows("order_id")" Sortable Filterable/>
+            <LiveColumn Name="version" Field="Version" Label="Ver" Visible="@State.Shows("version")" Sortable Filterable/>
+            <LiveColumn Name="cl_ord_id" Field="ClOrdId" Label="ClOrdId" Width="15ch" ForChildren="false" Visible="@State.Shows("cl_ord_id")" Sortable Filterable/>
+            <LiveColumn Name="client" Field="Client" Label="Client" Width="@ClientWidth" ForChildren="false" Visible="@State.Shows("client")" Sortable Filterable/>
+            <LiveColumn Name="region" Field="Region" Label="Region" Width="@RegionWidth" Visible="@State.Shows("region")" ForChildren="false" Sortable Filterable/>
+            <LiveColumn Name="channel" Field="Channel" Label="Channel" Width="@ChannelWidth" Visible="@State.Shows("channel")" ForChildren="false" Sortable Filterable/>
+            <LiveColumn Name="instrument" Field="Instrument" Label="Instrument" Width="@InstrumentWidth" ForChildren="false" Visible="@State.Shows("instrument")" Sortable Filterable/>
+            <LiveColumn Name="side" Field="Side" Label="Side" Width="@SideWidth" MarkValues ForChildren="false" Visible="@State.Shows("side")" Sortable Filterable/>
+            <LiveColumn Name="qty" Field="Qty" Label="Qty" Format="@Figured" Figures="6" MostDigits="8" Width="6ch" Visible="@State.Shows("qty")" Sortable Filterable/>
+            <LiveColumn Name="filled_qty" Field="FilledQty" Label="Filled" Format="@Figured" Figures="6" MostDigits="8" Width="6ch" Visible="@State.Shows("filled_qty")" ForChildren="false" Sortable Filterable/>
+            <LiveColumn Name="filled_pct" Label="Fill%" Kind="CellKind.Percent" Of="FilledQty" Over="Qty" Format="@Share" ForChildren="false" Visible="@State.Shows("filled_pct")"/>
+            <LiveColumn Name="avg_price" Field="AvgPrice" Label="@("Avg px")" Format="@Figured" Figures="6" MostDigits="8" Width="11ch" Visible="@State.Shows("avg_price")" Sortable Filterable/>
+            <LiveColumn Name="filled_amt" Field="FilledAmt" Label="@("Filled amt")" Format="@Amount" Visible="@State.Shows("filled_amt")" Sortable Filterable/>
+            <LiveColumn Name="markup_bps" Field="MarkupBps" Label="Markup" Format="@Bps" Width="8ch" ForChildren="false" Visible="@State.Shows("markup_bps")" Sortable Filterable/>
+            <LiveColumn Name="status" Field="Status" Label="Status" Width="@StatusWidth" MarkValues ForChildren="false" Visible="@State.Shows("status")" Sortable Filterable/>
+            <LiveColumn Name="event_time" Field="EventTime" Label="Updated" Kind="CellKind.Time" Format="@Clock" ForChildren="false" Visible="@State.Shows("event_time")" Sortable Filterable/>
+        </Columns>
+    </LiveGrid>
+}
+else if (Fills is { } fills)
+{
+    @* A fill never changes: its time is when it happened, so the page's lag is each fill's, from it to being drawn. *@
+    <LiveGrid TKey="Guid" TRow="FillRow" @ref="_fills" Source="fills" Options="Options" Class="orders fills" RowHeight="30" AriaLabel="Fills"
+              @bind-Sort="State.Sort" Filter="fills.FilterOf(State.Filter)" Selection="GridSelection.Multiple" @bind-Selected="State.Selected"
+              ArrivedFromKey ChangedAt="EventTime" SortDescendingFirst NaturalSort="FillsNewest" RowName="fill" NewAbove StartAt="State.HeldAt"
+              StatusLine="false" ColumnChooser="false" HeadingTemplate="Heading">
+        <Columns>
+            <LiveColumn Name="event_time" Field="EventTime" Label="Time" Kind="CellKind.Time" Format="@Clock" Frozen Visible="@State.Shows("event_time")" Sortable Filterable/>
+            <LiveColumn Name="fill_id" Field="FillId" Label="Fill" Width="36ch" Frozen Visible="@State.Shows("fill_id")" Sortable Filterable/>
+            <LiveColumn Name="order_id" Field="OrderId" Label="Order" Width="36ch" Visible="@State.Shows("order_id")" Sortable Filterable/>
+            <LiveColumn Name="cl_ord_id" Field="ClOrdId" Label="ClOrdId" Width="15ch" Visible="@State.Shows("cl_ord_id")" Sortable Filterable/>
+            <LiveColumn Name="client" Field="Client" Label="Client" Width="@ClientWidth" Visible="@State.Shows("client")" Sortable Filterable/>
+            <LiveColumn Name="region" Field="Region" Label="Region" Width="@RegionWidth" Visible="@State.Shows("region")" Sortable Filterable/>
+            <LiveColumn Name="channel" Field="Channel" Label="Channel" Width="@ChannelWidth" Visible="@State.Shows("channel")" Sortable Filterable/>
+            <LiveColumn Name="instrument" Field="Instrument" Label="Instrument" Width="@InstrumentWidth" Visible="@State.Shows("instrument")" Sortable Filterable/>
+            <LiveColumn Name="side" Field="Side" Label="Side" Width="@SideWidth" MarkValues Visible="@State.Shows("side")" Sortable Filterable/>
+            <LiveColumn Name="qty" Field="Qty" Label="Qty" Format="@Figured" Figures="6" MostDigits="8" Width="6ch" Visible="@State.Shows("qty")" Sortable Filterable/>
+            <LiveColumn Name="price" Field="Price" Label="Price" Format="@Figured" Figures="6" MostDigits="8" Width="11ch" Visible="@State.Shows("price")" Sortable Filterable/>
+            <LiveColumn Name="amt" Field="Amt" Label="Amt" Format="@Amount" Visible="@State.Shows("amt")" Sortable Filterable/>
+            <LiveColumn Name="mid" Field="Mid" Label="Mid" Format="@Figured" Figures="6" MostDigits="8" Width="11ch" Visible="@State.Shows("mid")" Sortable Filterable/>
+            <LiveColumn Name="markup_bps" Field="MarkupBps" Label="Markup" Format="@Bps" Width="8ch" Visible="@State.Shows("markup_bps")" Sortable Filterable/>
+        </Columns>
+    </LiveGrid>
+}
+
+@code {
+    private static readonly SortKey Newest = new("order_time", true), FillsNewest = new("event_time", true);
+
+    // The blotter's figures, as finance writes them (.NET formats, the page writing them as the server would): grouped
+    // in thousands, no nought before a fraction's point, none after its last digit that counts, a dash for nought; a
+    // time of day after an ellipsis, its date on hover.
+    private const string Amount = "#,###.##;-#,###.##;–";
+    private const string Bps = "#,###.#;-#,###.#;–";
+    private const string Share = "#,###.#%;-#,###.#%;–";
+    private const string Clock = "'… 'HH:mm:ss";
+
+    // A quantity or a price to six significant figures, in scientific notation past eight digits (Figures, MostDigits):
+    // the format's eight places the figures' room. Its tooltip, and a copy, the value whole.
+    private const string Figured = "#,###.########;-#,###.########;–";
+
+    // An id's room: its 36 characters, and its arrow (orders.css: shown on hover, its place kept).
+    private const string IdWidth = "calc(36ch + 1.25em)";
+
+    // A name's room: the longest the reference data has (or its heading's, with its buttons, if wider) — the text is inline,
+    // which says only how much it can hold (24 or 16 characters), so a width left to the grid would be that.
+    private static readonly string ClientWidth = Room("Client", Reference.Clients.Select(c => c.Ref)),
+        RegionWidth = Room("Region", Reference.RegionNames), ChannelWidth = Room("Channel", Reference.ChannelNames),
+        InstrumentWidth = Room("Instrument", Reference.Instruments), SideWidth = Room("Side", Reference.SideNames),
+        StatusWidth = Room("Status", Reference.StatusNames);
+
+    private static string Room(string label, IEnumerable<string> names)
+    {
+        return $"{Math.Max(names.Max(n => n.Length), label.Length + 2)}ch";
+    }
+
+    private LiveGrid<Guid, OrderRow>? _orders;
+    private LiveGrid<Guid, FillRow>? _fills;
+    private object? _heard; // (the grid whose status is relayed)
+
+    /// <summary>The tab's own, the page's: its sort, filter, columns, rows selected and place.</summary>
+    [Parameter, EditorRequired]
+    public TabState State { get; set; } = default!;
+
+    /// <summary>Drawn in each heading after its label: the page's (its funnels).</summary>
+    [Parameter]
+    public RenderFragment<LiveHeading>? Heading { get; set; }
+
+    /// <summary>A row opened, in a line; none, the one activated not found.</summary>
+    [Parameter]
+    public EventCallback<Opened?> OnOpen { get; set; }
+
+    /// <summary>The view its grid reads — its session's (null till it starts).</summary>
+    public GridView? View => _orders?.View ?? _fills?.View;
+
+    /// <summary>Its grid's status: none till it's made.</summary>
+    public GridStatus? Status => _orders?.Status ?? _fills?.Status;
+
+    /// <summary>The row its grid shows first while held away from the live top: none at the live top.</summary>
+    public Guid? HeldAt => _orders is not null ? _orders.HeldAt : _fills?.HeldAt;
+
+    /// <summary>Its grid's columns, as a chooser shows and hides them.</summary>
+    public ILiveGridColumns? Columns => (ILiveGridColumns?)_orders ?? _fills;
+
+    /// <summary>What its source keeps, for the page's chip.</summary>
+    public ISourceMemory? Memory => State.Tab == Tabs.Orders ? Source : Fills;
+
+    /// <summary>Its grid's status changed (told at most four times a second, off the renderer's thread).</summary>
+    public event Action? StatusChanged;
+
+    /// <summary>The fills tab's source: none when the orders are computed in process (<c>--store computed</c>).</summary>
+    private IFillSource? Fills => Services.GetService<IFillSource>();
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        var grid = (object?)_orders ?? _fills;
+        if (ReferenceEquals(grid, _heard)) return;
+        Unhear();
+        switch (_heard = grid)
+        {
+            case LiveGrid<Guid, OrderRow> orders: orders.StatusChanged += Changed; break;
+            case LiveGrid<Guid, FillRow> fills: fills.StatusChanged += Changed; break;
+        }
+    }
+
+    private void Changed()
+    {
+        StatusChanged?.Invoke();
+    }
+
+    private void Unhear()
+    {
+        switch (_heard)
+        {
+            case LiveGrid<Guid, OrderRow> orders: orders.StatusChanged -= Changed; break;
+            case LiveGrid<Guid, FillRow> fills: fills.StatusChanged -= Changed; break;
+        }
+    }
+
+    public void Dispose()
+    {
+        Unhear();
+    }
+
+    private Task Open(LiveGridRowEvent<Guid> e)
+    {
+        var n = House.NumberOf(e.Key);
+        if (n < 0) return OnOpen.InvokeAsync(null);
+        var order = House.RowOf(n);
+        return OnOpen.InvokeAsync(new Opened("Order", order.OrderId.ToString(), Describe(order)));
+    }
+
+    /// <summary>An order in a line, as the blotter describes one.</summary>
+    private static string Describe(OrderRow o)
+    {
+        return string.Create(System.Globalization.CultureInfo.InvariantCulture,
+            $"{o.Client} {o.Side} {o.Qty:#,0.####} {o.Instrument} · {o.Status}, " +
+            $"{o.FilledQty:#,0.####} filled at {o.AvgPrice:#,0.######} (version {o.Version})");
+    }
+
+}

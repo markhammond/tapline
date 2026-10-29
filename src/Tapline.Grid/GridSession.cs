@@ -1,5 +1,6 @@
 using System.Numerics;
 using System.Runtime.CompilerServices;
+using Tapline.Grid.Provider;
 
 namespace Tapline.Grid;
 
@@ -33,6 +34,7 @@ public sealed class GridSession<TKey, TRow> : IAsyncDisposable
     private readonly Outlet _outlet;
     private readonly double _overscanFill; // seconds (0: no overscan told, the page's own count)
     private readonly GridPage<TKey, TRow> _page;
+    private GridRunPage<TKey, TRow>? _runPage; // (made as a row is first opened)
     private readonly Task _run;
     private readonly IGridSource<TKey, TRow> _source;
     private readonly Tap _tap;
@@ -47,8 +49,15 @@ public sealed class GridSession<TKey, TRow> : IAsyncDisposable
     private int _changed;
     private bool _byKey; // the view's order is its keys', greatest first (GridWindow.ByKey)
     private bool _disposed, _reading, _requested, _viewChanged, _visible = true;
+    private bool _turning; // (for Settled: the loop from deciding to read till it decides again — the answer applied, reported)
+    private bool _keepPlace; // (the new view keeps the page's place: GridWindow.Reset)
     private int _views; // how often the view has been set: the page's requests carry the one they're in
     private Locating? _locating;
+    private readonly GridRecentSet<TKey> _openRows; // the rows opened — every row open, closed — as the session's callers
+                                                   // have said (and it remembers)
+    private bool _allOpen; // every row open but those (SetAllOpen)
+    private readonly List<(TKey Key, bool Open, bool All)> _toggles = []; // and as the loop hasn't yet told its window
+    private readonly List<TKey> _forgotten = []; // (rows forgotten to make room for another: as every row is again)
     private long _readFrom, _readTo; // the window being read, in view positions: a request not touching it is a jump
     private long _asks, _askedAt; // windows asked for, and when the last was
     private int _askedRows; // and the rows in view it asked with
@@ -109,10 +118,12 @@ public sealed class GridSession<TKey, TRow> : IAsyncDisposable
             Order = new LastValueSource { Label = $"{name}/order" };
             StatusValue = new LastValueSource { Label = $"{name}/status" };
             _window = new GridWindow<TKey, TRow>(Rows, Order, _options.MaxWindowRows, _options.MaxWindowRows,
-                _options.RevealNear, _options.RevealAtOnce, StatusValue)
+                _options.RevealNear, _options.RevealAtOnce, StatusValue, _options.MaxOpenRows)
             {
-                ByKey = ByKey(source, _view), Overscan = _overscanFill > 0 ? 0 : -1 // (none, till the link's measured)
+                ByKey = ByKey(source, _view), Overscan = _overscanFill > 0 ? 0 : -1, // (none, till the link's measured)
+                MaxBytes = _options.MaxReadBytes
             };
+            _openRows = new GridRecentSet<TKey>(_options.MaxOpenRows);
             _page = new GridPage<TKey, TRow>(_window.PageCapacity);
             _tap = outlet.Watch(name, WatchMember.Of(Rows), WatchMember.Of(Order), WatchMember.Of(StatusValue));
             _timer = _time.CreateTimer(static s => ((GridSession<TKey, TRow>)s!)._wake.Set(), this,
@@ -192,12 +203,18 @@ public sealed class GridSession<TKey, TRow> : IAsyncDisposable
     /// <summary>Whether the page has the watch's state at a version, when a test says (null: the tap's).</summary>
     internal Func<long, bool>? Reached { get; init; }
 
-    /// <summary>Nothing asked of the loop and nothing read (for tests): the rest of a window read too.</summary>
+    /// <summary>
+    ///     Nothing asked of the loop and nothing read (for tests): the rest of a window read too, rows opened or closed taken,
+    ///     and the last answer applied and reported — not between a read's end and its frames, nor with a toggle waiting
+    ///     for the loop, however a read in flight meanwhile ends.
+    /// </summary>
     internal bool Settled
     {
         get
         {
-            lock (_gate) return !_reading && !_requested && _locating is null && !_viewChanged && !_window.NeedsRest;
+            lock (_gate)
+                return !_reading && !_turning && !_requested && _locating is null && !_viewChanged && _toggles.Count == 0 &&
+                       !_window.NeedsRest;
         }
     }
 
@@ -266,10 +283,12 @@ public sealed class GridSession<TKey, TRow> : IAsyncDisposable
 
     /// <summary>
     ///     A new sort or filter: the window goes back to the top, read at once, the read in flight cancelled, a request
-    ///     waiting dropped. Its number, which the page's requests carry from now (<see cref="GridRequest.View" />), and the
-    ///     order its rows are of (<see cref="GridOrderHeader.View" />).
+    ///     waiting dropped — or, keeping its place (<paramref name="keepPlace" />), held, to where the row the page shows
+    ///     first sorts in the new view, held there (the page goes there with it).
+    ///     Its number, which the page's requests carry from now (<see cref="GridRequest.View" />), and the order its rows
+    ///     are of (<see cref="GridOrderHeader.View" />).
     /// </summary>
-    public int SetView(GridView view)
+    public int SetView(GridView view, bool keepPlace = false)
     {
         ArgumentNullException.ThrowIfNull(view);
         var byKey = ByKey(_source, view); // (the source's, asked outside the lock)
@@ -281,7 +300,7 @@ public sealed class GridSession<TKey, TRow> : IAsyncDisposable
             _view = view;
             _byKey = byKey;
             views = ++_views;
-            _viewChanged = true;
+            (_viewChanged, _keepPlace) = (true, keepPlace);
             _requested = false; // (in the view replaced: its positions are another sort's)
             superseded = TakeRead();
         }
@@ -334,6 +353,84 @@ public sealed class GridSession<TKey, TRow> : IAsyncDisposable
         replaced?.Done.TrySetResult(null);
         _wake.Set();
         return locating.Done.Task;
+    }
+
+    /// <summary>
+    ///     Opens a row of the view, so that its run — its descendants, depth first
+    ///     (<see cref="IGridSource{TKey,TRow}.ReadRunsAsync" />) — is shown after it, or closes it: read at once, the window
+    ///     as asked for, the view's rows below it moving down (or up) by as many; held, a row opened or closed above the
+    ///     page's first moves the page's scroll too, so its rows stay where they're drawn. A row stays open as the reader
+    ///     scrolls away and back, and as the sort or filter changes — but past <see cref="GridOptions.MaxOpenRows" />, one
+    ///     opened forgets the row open least recently used (opened, or held by the window), never one the window holds:
+    ///     that one is closed with it. Every row open (<see cref="SetAllOpen" />), the rows closed are remembered so
+    ///     instead, one forgotten open again. False if the session is over.
+    /// </summary>
+    public bool SetOpen(TKey key, bool open)
+    {
+        lock (_gate)
+        {
+            if (_disposed) return false;
+            if (open != _allOpen) // (apart from the rest: remembered)
+            {
+                if (!_openRows.Open(key, _forgotten)) return true; // (so already: used now)
+                foreach (var gone in _forgotten) _toggles.Add((gone, _allOpen, false));
+                _forgotten.Clear();
+            }
+            else if (!_openRows.Close(key))
+            {
+                return true;
+            }
+
+            _toggles.Add((key, open, false));
+        }
+
+        _wake.Set();
+        return true;
+    }
+
+    /// <summary>Whether a row is open (<see cref="SetOpen" />).</summary>
+    public bool IsOpen(TKey key)
+    {
+        lock (_gate) return _openRows.Contains(key) != _allOpen;
+    }
+
+    /// <summary>
+    ///     Every row of the view opened — rows arriving too — or closed (<paramref name="open" />), the rows opened or closed
+    ///     before as the rest: read at once. Every row open, a row's view position counts the runs above it that reads have
+    ///     crossed, a run not read yet none, so the total is at least so many and settles as the reader goes; held, runs
+    ///     counted above the page's first row move the page's scroll with them, so its rows stay where they're drawn.
+    ///     <see cref="SetOpen" /> closes one, and opens it again. False if the session is over.
+    /// </summary>
+    public bool SetAllOpen(bool open)
+    {
+        lock (_gate)
+        {
+            if (_disposed) return false;
+            _allOpen = open;
+            _openRows.Clear();
+            _toggles.Add((default, open, true));
+        }
+
+        _wake.Set();
+        return true;
+    }
+
+    /// <summary>Every row open but those closed since (<see cref="SetAllOpen" />).</summary>
+    public bool AllOpen
+    {
+        get
+        {
+            lock (_gate) return _allOpen;
+        }
+    }
+
+    /// <summary>Held, the key of the view's row the page shows first; none at the live top.</summary>
+    public TKey? HeldAt
+    {
+        get
+        {
+            lock (_gate) return _window.HeldAt;
+        }
     }
 
     /// <summary>A request's window, in view positions: [from, to).</summary>
@@ -394,12 +491,19 @@ public sealed class GridSession<TKey, TRow> : IAsyncDisposable
                     lock (_gate)
                     {
                         if (_disposed) return;
+                        _turning = false; // (the turn before, if any, done: applied and reported)
                         if (Interlocked.Exchange(ref _changed, 0) != 0) _pending = true;
+                        var toggled = _toggles.Count > 0; // (rows opened or closed: the window read as asked, at once)
+                        foreach (var (key, open, all) in _toggles)
+                            if (all) _window.SetAllOpen(open);
+                            else if (open) _window.OpenRow(key);
+                            else _window.CloseRow(key);
+                        _toggles.Clear();
                         var reset = _viewChanged;
                         if (reset)
                         {
                             _viewChanged = false;
-                            _window.Reset(_views);
+                            _window.Reset(_views, _keepPlace ? Math.Max(1, _askedRows) : 0); // (kept: the page's view)
                             _window.ByKey = _byKey;
                             _restAfter = 0;
                         }
@@ -425,7 +529,7 @@ public sealed class GridSession<TKey, TRow> : IAsyncDisposable
                             read = _window.PlanRest(); // (a view's first answer in front of the page: now the rest)
                             (_readFrom, _readTo) = _window.Rest;
                         }
-                        else if (!((reset || (_pending && _visible && IsDue(_time.GetTimestamp(), _readAt,
+                        else if (!((reset || toggled || (_pending && _visible && IsDue(_time.GetTimestamp(), _readAt,
                                        _window.Live ? _liveEvery : _heldEvery))) && _window.PlanRefresh(out read)))
                         {
                             moved = _pending && !_visible; // (passive: the source moved past the page's rows, unread)
@@ -442,7 +546,7 @@ public sealed class GridSession<TKey, TRow> : IAsyncDisposable
                         _readAt = _time.GetTimestamp();
                         if (_cancel is null || !_cancel.TryReset()) _cancel = new CancellationTokenSource(); // (taken: a new one)
                         token = _cancel.Token;
-                        _reading = true;
+                        (_reading, _turning) = (true, true);
                     }
 
                     _readViews.Add(view);
@@ -450,7 +554,8 @@ public sealed class GridSession<TKey, TRow> : IAsyncDisposable
                     _page.Clear();
                     try
                     {
-                        answer = await _source.ReadAsync(view, read, _page, token).ConfigureAwait(false);
+                        answer = await _source.ReadAsync(view, read with { MaxBytes = _options.MaxReadBytes }, _page, token)
+                            .ConfigureAwait(false); // (the host's budget for this user's reads)
                     }
                     catch (OperationCanceledException) when (token.IsCancellationRequested)
                     {
@@ -478,6 +583,55 @@ public sealed class GridSession<TKey, TRow> : IAsyncDisposable
 
                     if (_overscanFill > 0) _window.Overscan = TellOverscan(false); // (told with the rows)
                     var staged = _window.Apply(answer, _page);
+                    if (_window.NeedsRuns) // (the runs the window crosses, read now: published with the view's rows)
+                    {
+                        _runPage ??= new GridRunPage<TKey, TRow>(2 * _window.PageCapacity);
+                        _runPage.Clear();
+                        GridAnswer runs;
+                        lock (_gate)
+                        {
+                            if (_cancel?.Token != token || token.IsCancellationRequested) // (superseded meanwhile)
+                            {
+                                locating?.Done.TrySetResult(null);
+                                continue;
+                            }
+
+                            _reading = true;
+                        }
+
+                        try
+                        {
+                            runs = await _source.ReadRunsAsync(view, _window.RunReads, _runPage, token).ConfigureAwait(false);
+                        }
+                        catch (OperationCanceledException) when (token.IsCancellationRequested)
+                        {
+                            lock (_gate) _reading = false;
+                            locating?.Done.TrySetResult(null);
+                            continue;
+                        }
+                        catch (Exception e)
+                        {
+                            runs = GridAnswer.Refused($"The source failed: {e.Message}");
+                        }
+
+                        lock (_gate)
+                        {
+                            _reading = false;
+                            replaced = _viewChanged || _disposed;
+                        }
+
+                        if (replaced)
+                        {
+                            locating?.Done.TrySetResult(null);
+                            continue;
+                        }
+
+                        staged = _window.ApplyRuns(runs, _runPage);
+                    }
+
+                    lock (_gate) // (those apart the window holds used now: never forgotten while it holds them)
+                        if (_openRows.Count > 0)
+                            _openRows.Shown(_window.ToggledHeld());
                     if (_window.PlannedFirst) (_restAfter, _restPoll) = (staged ? _tap.Source.Version : 0, 0); // (its rest once it's there)
                     else if (!_window.NeedsRest) _restAfter = 0;
                     Report(answer.Version); // (before the page can know it's answered)
@@ -688,7 +842,7 @@ public sealed class GridSession<TKey, TRow> : IAsyncDisposable
         var status = new GridStatus
         {
             Live = _window.Live, Holds = _window.Holds, Total = _window.Total, TotalKind = _window.TotalKind,
-            Above = _window.Above, LetIn = _window.LetIn, Version = version, Refusal = _window.Refusal
+            Above = _window.Unseen, LetIn = _window.LetIn, Version = version, Refusal = _window.Refusal
         };
         lock (_gate)
         {

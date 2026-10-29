@@ -29,5 +29,8 @@
         <!-- (MagicOnion 7.11.0 asks for MessagePack 3.1.7 or later: 3.1.9 fixes GHSA-qhrr-8q5h-9q3h, nested arrays past buffer limits) -->
         <MessagePackVersion>3.1.12</MessagePackVersion>
         <WasmtimeVersion>48.0.2</WasmtimeVersion>
+        <!-- (ChalkQL 0.6.3: the views' filters and the store's pages of Tapline.Grid.ChalkQL, its views' results keeping one
+             slot a key) -->
+        <ChalkQLVersion>0.6.3</ChalkQLVersion>
     </PropertyGroup>
 </Project>

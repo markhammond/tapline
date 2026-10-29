@@ -1,134 +1,343 @@
 @page "/"
 @rendermode InteractiveServer
 
-@inject Orders Source
+@implements IAsyncDisposable
+@using LiveGrid.Sample.Domain
+@using Tapline.Alerts
+@inject Catalog Catalog
+@inject IServiceProvider Services
 @inject House House
+@inject NavigationManager Nav
+@inject LinkShroud Shroud
+@inject IJSRuntime JS
 
 @*
-    The ChalkQL blotter's client orders tab on LiveGrid: its columns, formats and presentation, over the same market
-    (the house's 200 changes a second, bursts and all), newest first. Sort by a heading — descending, ascending, then
-    back to the newest first; shift-click within a sort by several — and filter by the funnels, up to a million orders;
-    choose columns below the rows; select (⌘ or Ctrl adds); open an order by its id or by Enter.
+    The ChalkQL blotter's tabs on LiveGrid — the catalog's (Catalog), client orders and fills, each the domain's grid
+    (Domain/TabGrid.razor) — over the same market (the house's 200 changes a second, bursts and all), newest first. Sort
+    by a heading — descending, ascending, then back to the newest first; shift-click within a sort by several — and filter
+    by the funnels, up to a million orders; choose columns by Columns, above the rows; select (⌘ or Ctrl adds); open an
+    order by its id or by Enter. An order's fills show under it by its time's chevron (→ and ←), every order's by the Time
+    heading's (or *). Each tab keeps its own sort, filters, columns and place; the tab out of sight reads nothing, its
+    session stopped, and comes back about where it was held. Alerts, as the blotter's, by the bell: a condition in SQL on
+    either tab's rows, sounded as rows come to pass it, wait too long for the database, or a count of them comes to be
+    enough — evaluated once a shape, however many pages watch it, each rule's alerts no oftener than its throttle
+    (Tapline.Alerts). As the blotter's too: the rows in view copied, a link to the view (private, its data shrouded, or
+    readable), Escape closing what's open over the page; under the grid, the house's and the database's toggles, and the
+    vital statistics. The page knows the rows only by the catalog: their fields, the database and the market are Domain's.
 *@
 
-<PageTitle>Client orders · LiveGrid</PageTitle>
+<PageTitle>@_on.Tab.Title · LiveGrid</PageTitle>
 <main>
     <div class="bar">
-        <h1>Client orders</h1>
-        <Chips Grid="_grid"/>
+        <nav class="tabs" role="tablist" aria-label="Tabs">
+            @foreach (var tab in _tabs)
+            {
+                <button type="button" role="tab" class="tab" aria-selected="@(tab == _on ? "true" : "false")" @onclick="ShowClick(tab)">@tab.Tab.Title</button>
+            }
+        </nav>
+        <Chips Source="@(_grid?.Memory)" View="_view" Lag="_lag"/>
         <span class="spacer"></span>
-        <button @onclick="() => House.Send(3000)" title="The house takes and works 3,000 orders at once">Simulate burst</button>
-        <button @onclick="() => House.Paused = !House.Paused" aria-pressed="@House.Paused"
-                title="Outage: the house takes and works no orders, so nothing new arrives">Outage: @(House.Paused ? "on" : "off")</button>
+        @if (Desk is not null)
+        {
+            <AlertsBar @ref="_alertsBar" Book="_alerts" Tab="_on.Tab" Filter="_on.Filter"/>
+        }
+        @* Both copy in the browser itself, in the click (page.js): a clipboard takes nothing written later. *@
+        <button type="button" class="icon-button" title="Copy the rows in view, to paste into a sheet or a message"
+                aria-label="Copy the rows in view" onclick="liveGrid.copyRows(this)">
+            <svg viewBox="0 0 16 16" width="11" height="11" aria-hidden="true">
+                <rect x="5.5" y="5.5" width="8.5" height="8.5" rx="1.5"/>
+                <path d="M10.5 3.5V3a1.5 1.5 0 0 0-1.5-1.5H3A1.5 1.5 0 0 0 1.5 3v6A1.5 1.5 0 0 0 3 10.5h.5"/>
+            </svg>
+        </button>
+        @* The menu opens and closes in the browser alone, so a choice in it is still the click a clipboard asks for. *@
+        <span class="share-wrap">
+            <button type="button" class="icon-button"
+                    title="Copy a link to this view: its sort, filters and columns, and the row at the top unless it follows the live top"
+                    aria-label="Copy a link to this view" aria-haspopup="menu" onclick="liveGrid.toggleShare(this)">
+                <svg viewBox="0 0 16 16" width="11" height="11" aria-hidden="true">
+                    <path d="M6.5 9.5l3-3"/>
+                    <path d="M7.2 4.3l1.1-1.1a2.9 2.9 0 0 1 4.1 4.1l-1.1 1.1"/>
+                    <path d="M8.8 11.7l-1.1 1.1a2.9 2.9 0 0 1-4.1-4.1l1.1-1.1"/>
+                </svg>
+            </button>
+            <span class="share-menu" role="menu">
+                <button type="button" role="menuitem"
+                        title="The filters' values and the row at the top shrouded: the link shows only the tab, the sort and the columns"
+                        onclick="liveGrid.shareView(this, true)">Copy private link</button>
+                <button type="button" role="menuitem" title="Everything in plain text, the filters' values and the row at the top included"
+                        onclick="liveGrid.shareView(this, false)">Copy readable link</button>
+            </span>
+        </span>
+        <LiveColumnChooser Grid="@(_grid?.Columns)" Class="bar-chooser"/>
     </div>
+    @if (_linkRefused is { } linkRefused)
+    {
+        <div class="notice">
+            This link couldn't be opened, so the page opens as it always does: @linkRefused
+            <button type="button" class="link-button" @onclick="() => _linkRefused = null">Dismiss</button>
+        </div>
+    }
+    @if (_refusal is { } refusal)
+    {
+        <div class="notice refused" role="status">The last read was refused, its rows shown as they were: @refusal</div>
+    }
     @if (_opened is { } opened)
     {
         <div class="opened">
-            Order <span class="mono">@opened.OrderId</span>: @Describe(opened)
+            @opened.What <span class="mono">@opened.Id</span>: @opened.Description
             <button class="close" @onclick="() => _opened = null" aria-label="Close">✕</button>
         </div>
     }
-    @if (_filter is { } filter)
+    @if (_on.Filter is { } filter)
     {
         <div class="toolbar">
             @foreach (var column in filter.Columns)
             {
                 var f = column;
-                <span class="pill filter-pill" @onclick="() => _editing = (f.Column, f.Label)">
+                <span class="pill filter-pill" @onclick="() => _on.Editing = _on.Tab.ColumnOf(f.Column)">
                     @f.Describe()
                     <button type="button" aria-label="Remove the filter on @f.Label" @onclick="() => Remove(f.Column)"
                             @onclick:stopPropagation>×</button>
                 </span>
             }
-            <button type="button" class="link-button" @onclick="() => _filter = null">Clear all</button>
+            <button type="button" class="link-button" @onclick="() => _on.Filter = null">Clear all</button>
         </div>
     }
-    @if (_editing is var (name, label))
+    @if (_on.Editing is { } editing)
     {
-        <FilterEditor Column="@name" Label="@label" Current="_filter?.For(name)" Within="PeriodOfInterest()" OnApply="Apply"
-                      OnClose="() => _editing = null"/>
+        <FilterEditor Column="editing" Current="_on.Filter?.For(editing.Name)" Within="PeriodOfInterest()" OnApply="Apply"
+                      OnClose="() => _on.Editing = null"/>
     }
-    @if (!_sorts)
-    {
-        <div class="muted">This sample sorts and filters up to @Orders.MostSorted.ToString("N0") orders (<code>--orders 1m</code> or fewer); it has more, so it shows them newest first.</div>
-    }
-    <div class="frame">
-        <LiveGrid TKey="Guid" TRow="OrderRow" @ref="_grid" Source="Source" Class="orders" RowHeight="30" AriaLabel="Client orders"
-                  @bind-Sort="_sort" Filter="_filter" Selection="GridSelection.Multiple" @bind-Selected="_selected"
-                  ArrivedFromKey ChangedAt="EventTime" SortDescendingFirst NaturalSort="Newest" OnRowActivate="Open" RowName="order" NewAbove>
-            <Columns>
-                <LiveColumn Name="order_time" Field="OrderTime" Label="Time" Kind="CellKind.Time" Format="@Clock" Frozen Sortable="_sorts" Filterable="_sorts"/>
-                <LiveColumn Name="order_id" Field="OrderId" Label="Order" Width="@IdWidth" Frozen Link Sortable="_sorts" Filterable="_sorts"/>
-                <LiveColumn Name="version" Field="Version" Label="Ver" Visible="false" Sortable="_sorts" Filterable="_sorts"/>
-                <LiveColumn Name="cl_ord_id" Field="ClOrdId" Label="ClOrdId" Width="15ch" Sortable="_sorts" Filterable="_sorts"/>
-                <LiveColumn Name="client" Field="Client" Label="Client" Dictionary="Reference.ClientNames" Sortable="_sorts" Filterable="_sorts"/>
-                <LiveColumn Name="region" Field="Region" Label="Region" Dictionary="Reference.RegionNames" Visible="false" Sortable="_sorts" Filterable="_sorts"/>
-                <LiveColumn Name="channel" Field="Channel" Label="Channel" Dictionary="Reference.ChannelNames" Visible="false" Sortable="_sorts" Filterable="_sorts"/>
-                <LiveColumn Name="instrument" Field="Instrument" Label="Instrument" Dictionary="Reference.InstrumentNames" Sortable="_sorts" Filterable="_sorts"/>
-                <LiveColumn Name="side" Field="Side" Label="Side" MarkValues Sortable="_sorts" Filterable="_sorts"/>
-                <LiveColumn Name="qty" Field="Qty" Label="Qty" Format="@Figured" Figures="6" MostDigits="8" Width="6ch" Sortable="_sorts" Filterable="_sorts"/>
-                <LiveColumn Name="filled_qty" Field="FilledQty" Label="Filled" Format="@Figured" Figures="6" MostDigits="8" Width="6ch" Visible="false" Sortable="_sorts" Filterable="_sorts"/>
-                <LiveColumn Name="filled_pct" Label="Fill%" Kind="CellKind.Percent" Of="FilledQty" Over="Qty" Format="@Share"/>
-                <LiveColumn Name="avg_price" Field="AvgPrice" Label="@("Avg px")" Format="@Figured" Figures="6" MostDigits="8" Width="11ch" Sortable="_sorts" Filterable="_sorts"/>
-                <LiveColumn Name="filled_amt" Field="FilledAmt" Label="@("Filled amt")" Format="@Amount" Sortable="_sorts" Filterable="_sorts"/>
-                <LiveColumn Name="markup_bps" Field="MarkupBps" Label="Markup" Format="@Bps" Width="8ch" Sortable="_sorts" Filterable="_sorts"/>
-                <LiveColumn Name="status" Field="Status" Label="Status" MarkValues Sortable="_sorts" Filterable="_sorts"/>
-                <LiveColumn Name="event_time" Field="EventTime" Label="Updated" Kind="CellKind.Time" Format="@Clock" Sortable="_sorts" Filterable="_sorts"/>
-            </Columns>
-            <HeadingTemplate Context="h">
-                @if (h.Filterable)
-                {
-                    <button type="button" class="funnel @(_filter?.For(h.Name) is null ? "" : "on") @(_editing?.Name == h.Name ? "open" : "")"
-                            title="Filter @h.Label" aria-label="Filter @h.Label" @onclick="EditClick(h)">
-                        <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><path d="M1.5 2h13l-5 6.2V14l-3-1.6V8.2z"/></svg>
-                    </button>
-                }
-            </HeadingTemplate>
-        </LiveGrid>
+    <div class="frame @_bell">
+        <TabGrid @key="_on" @ref="_grid" State="_on" Heading="_heading" OnOpen="OnOpened"/>
     </div>
+    @* Under the grid, one row: what opens beneath it, then what the page acts with. *@
+    <div class="bar controls">
+        <button type="button" class="link-button disclosure" aria-expanded="@(_vitals ? "true" : "false")" @onclick="() => _vitals = !_vitals">
+            <Chevron Open="_vitals"/>
+            Vital statistics
+        </button>
+        <span class="spacer"></span>
+        <span class="actions">
+            <button @onclick="() => House.Send(3000)" title="The house takes and works 3,000 orders at once">Simulate burst</button>
+            @if (Ledger is { } ledger)
+            {
+                <button @onclick="() => ledger.Stall(TimeSpan.FromSeconds(20))" title="The database writes nothing for 20 s, while the streams go on">
+                    Stall database 20 s
+                </button>
+                <button @onclick="() => ledger.Disordered = !ledger.Disordered" aria-pressed="@ledger.Disordered"
+                        title="Out of order: a few rows on each stream sent late, by a delay mostly short and now and then long; and a few written to the database before they're sent">
+                    Out of order: @(ledger.Disordered ? "on" : "off")
+                </button>
+            }
+            <button @onclick="() => House.Paused = !House.Paused" aria-pressed="@House.Paused"
+                    title="Outage: the house takes and works no orders, so nothing new arrives">Outage: @(House.Paused ? "on" : "off")</button>
+        </span>
+    </div>
+    @if (_vitals)
+    {
+        <div class="bar telemetry">
+            <Vitals/>
+        </div>
+    }
 </main>
 
 @code {
-    private static readonly SortKey Newest = new("order_time", true);
-
-    // The blotter's figures, as finance writes them (.NET formats, the page writing them as the server would): grouped
-    // in thousands, no nought before a fraction's point, none after its last digit that counts, a dash for nought; a
-    // time of day after an ellipsis, its date on hover.
-    private const string Amount = "#,###.##;-#,###.##;–";
-    private const string Bps = "#,###.#;-#,###.#;–";
-    private const string Share = "#,###.#%;-#,###.#%;–";
-    private const string Clock = "'… 'HH:mm:ss";
-
-    // A quantity or a price to six significant figures, in scientific notation past eight digits (Figures, MostDigits):
-    // the format's eight places the figures' room. Its tooltip, and a copy, the value whole.
-    private const string Figured = "#,###.########;-#,###.########;–";
-
-    // An id's room: its 36 characters, and its arrow (orders.css: shown on hover, its place kept).
-    private const string IdWidth = "calc(36ch + 1.25em)";
-
-    private LiveGrid<Guid, OrderRow>? _grid;
-    private IReadOnlyList<SortKey> _sort = [];
-    private OrderFilter? _filter;
-    private IReadOnlyCollection<Guid> _selected = [];
-    private (string Name, string Label)? _editing; // the column whose filter is open
+    private IReadOnlyList<TabState> _tabs = [];
+    private TabState _on = null!; // the tab shown
+    private TabGrid? _grid; // (its grid, once made: none while a tab's is made anew)
     private readonly Dictionary<string, Action> _editClicks = new();
-    private OrderRow? _opened;
-    private bool _sorts;
+    private readonly Dictionary<TabState, Action> _showClicks = new();
+    private RenderFragment<LiveHeading> _heading = null!; // (each heading's funnel: one delegate, kept)
+    private Opened? _opened;
+    private Func<GridView?> _view = null!;
+    private Func<TimeSpan?> _lag = null!;
+    private string? _linkRefused; // (why the link the page was opened by couldn't be: none of it taken)
+    private string? _refusal; // (why the shown grid's last read was refused: its status line's word, the line not drawn)
+    private bool _vitals;
+    private IJSObjectReference? _page; // (page.js: Escape, copy and share)
+    private DotNetObjectReference<Home>? _self;
+
+    // The page's alerts; and the bell on "new above": alerts fired on the tab shown since its grid was held (its hold).
+    private readonly PageAlerts _alerts = new();
+    private AlertsBar? _alertsBar;
+    private (TabState Tab, int Hold)? _belled;
+    private string _bell = "";
+    private TabGrid? _heard; // (the grid whose status is heard)
+
+    /// <summary>The alerts: none when the orders are computed in process (no ledger to hear).</summary>
+    private AlertDesk? Desk => Services.GetService<AlertDesk>();
+
+    /// <summary>The database's ledger, for its toggles: none when the orders are computed in process.</summary>
+    private Ledger? Ledger => Services.GetService<Ledger>();
 
     protected override void OnInitialized()
     {
-        _sorts = Source.Sorts;
+        _tabs = [.. Catalog.Tabs.Select(t => new TabState(t))];
+        _on = _tabs[0];
+        _heading = FunnelOf;
+        _view = () => _grid?.View;
+        _lag = () => _grid?.Status?.Lag;
+        _alerts.Fired += AlertsFired;
+        OpenLink(new Uri(Nav.Uri).Query);
     }
 
-    protected override void OnAfterRender(bool firstRender)
+    /// <summary>The view a link describes, if the page was opened by one: its tab, sort, filters, columns and the row held at.</summary>
+    private void OpenLink(string query)
     {
-        if (firstRender && _grid is not null) StateHasChanged(); // (the chips and the pill get the grid, now it's there)
+        if (query.Length <= 1) return;
+        try
+        {
+            var link = ViewLink.Parse(query, Catalog, Shroud);
+            var tab = _tabs.First(t => t.Tab == link.Tab);
+            (tab.Sort, tab.Filter, tab.Hidden, tab.HeldAt, _on) = (link.Sort, link.Filter, link.Hidden, link.At, tab);
+        }
+        catch (ArgumentException refused)
+        {
+            _linkRefused = refused.Message;
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        // The shown grid, once there: its status heard, and the page drawn again for it — the chips, the pill and the
+        // column chooser get the grid (a tab shown makes its grid anew, its reference set as it renders).
+        if (!ReferenceEquals(_grid, _heard))
+        {
+            Hear(_grid);
+            StateHasChanged();
+        }
+
+        if (!firstRender) return;
+        _page = await JS.InvokeAsync<IJSObjectReference>("import", "./" + Assets["page.js"]);
+        _self = DotNetObjectReference.Create(this);
+        await _page.InvokeVoidAsync("listen", _self);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        _alerts.Fired -= AlertsFired;
+        Hear(null);
+        try
+        {
+            if (_page is not null)
+            {
+                await _page.InvokeVoidAsync("stop");
+                await _page.DisposeAsync();
+            }
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+
+        _self?.Dispose();
+    }
+
+    /// <summary>Escape (page.js): whatever is open over the page closes — the filter editor, the row opened, the alerts' panel and splash.</summary>
+    [JSInvokable]
+    public void OnEscape()
+    {
+        _alertsBar?.Escape();
+        if (_on.Editing is null && _opened is null) return;
+        (_on.Editing, _opened) = (null, null);
+        StateHasChanged();
+    }
+
+    /// <summary>
+    ///     A link to the view shown (page.js, in the share menu's click): its tab, sort, filters, columns, and the row it's
+    ///     held at unless it follows the live top — private, the filters' values and that row shrouded, or readable.
+    /// </summary>
+    [JSInvokable]
+    public string ShareLink(bool shrouded)
+    {
+        var query = new ViewLink(_on.Tab, _on.Sort, _on.Filter, HiddenOf(_grid?.Columns) ?? _on.Hidden, _grid?.HeldAt)
+            .Query(Catalog, shrouded ? Shroud : null);
+        return Nav.BaseUri + (query.Length > 0 ? "?" + query : "");
+    }
+
+    /// <summary>A grid's columns hidden now, by name: null till its columns are known.</summary>
+    private static IReadOnlySet<string>? HiddenOf(ILiveGridColumns? grid)
+    {
+        return grid?.ColumnChoices is { Count: > 0 } choices ? choices.Where(c => !c.Shown).Select(c => c.Name).ToHashSet(StringComparer.Ordinal) : null;
+    }
+
+    /// <summary>A row opened (an order, by its id or Enter), or none found.</summary>
+    private void OnOpened(Opened? opened)
+    {
+        _opened = opened;
+    }
+
+    /// <summary>Alerts fired on a tab: the bell on "new above" if it's the tab shown and its grid holds.</summary>
+    private void AlertsFired(string tab)
+    {
+        if (tab != _on.Tab.Name || _grid?.Status is not { Live: false } status) return;
+        _belled = (_on, status.Holds);
+        Ring();
+    }
+
+    /// <summary>The bell on "new above" while the hold it rang in lasts (muted, the page making no sound): drawn if it changed.</summary>
+    private void Ring()
+    {
+        var on = _belled is var (tab, hold) && tab == _on && _grid?.Status is { Live: false } status && status.Holds == hold;
+        var bell = !on ? "" : _alerts.SoundOn ? "belled" : "belled silent"; // (not "muted": the page's grey text style)
+        if (bell == _bell) return;
+        _bell = bell;
+        StateHasChanged();
+    }
+
+    /// <summary>The shown grid's status heard (a hold ending lets the bell go; a read refused is said), the other's no longer.</summary>
+    private void Hear(TabGrid? grid)
+    {
+        if (ReferenceEquals(grid, _heard)) return;
+        if (_heard is not null) _heard.StatusChanged -= StatusChanged;
+        if ((_heard = grid) is not null) grid!.StatusChanged += StatusChanged;
+    }
+
+    /// <summary>The status changed (told at most four times a second): drawn only for a refusal come or gone, or the bell ringing.</summary>
+    private void StatusChanged()
+    {
+        _ = InvokeAsync(() =>
+        {
+            if (_grid?.Status?.Refusal is var refusal && refusal != _refusal)
+            {
+                _refusal = refusal;
+                StateHasChanged();
+            }
+
+            if (_bell.Length > 0) Ring();
+        });
+    }
+
+    /// <summary>A tab's click handler, one a tab and kept (as <see cref="EditClick" />).</summary>
+    private Action ShowClick(TabState tab)
+    {
+        return _showClicks.TryGetValue(tab, out var click) ? click : _showClicks[tab] = () => Show(tab);
+    }
+
+    /// <summary>A tab shown: the one going out of sight remembers where it was held and its columns, its grid let go (its session stopped).</summary>
+    private void Show(TabState tab)
+    {
+        if (tab == _on) return;
+        (_on.HeldAt, _on.Hidden) = (_grid?.HeldAt, HiddenOf(_grid?.Columns) ?? _on.Hidden);
+        _grid = null;
+        _on = tab;
+        (_belled, _bell, _refusal) = (null, "", null);
+    }
+
+    /// <summary>A heading's funnel: its column's filter, opened by a click; on when it filters, open while it's edited.</summary>
+    private RenderFragment FunnelOf(LiveHeading h)
+    {
+        if (!h.Filterable) return _ => { };
+        return @<button type="button" class="funnel @(_on.Filter?.For(h.Name) is null ? "" : "on") @(_on.Editing?.Name == h.Name ? "open" : "")"
+                        title="Filter @h.Label" aria-label="Filter @h.Label" @onclick="EditClick(h)">
+                   <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><path d="M1.5 2h13l-5 6.2V14l-3-1.6V8.2z"/></svg>
+               </button>;
     }
 
     /// <summary>A funnel's click: its column's filter opened, or closed if it was.</summary>
-    private void Edit(string name, string label)
+    private void Edit(string name)
     {
-        _editing = _editing?.Name == name ? null : (name, label);
+        _on.Editing = _on.Editing?.Name == name ? null : _on.Tab.ColumnOf(name);
     }
 
     /// <summary>
@@ -137,42 +346,28 @@
     /// </summary>
     private Action EditClick(LiveHeading heading)
     {
-        var (name, label) = (heading.Name, heading.Label);
-        return _editClicks.TryGetValue(name, out var click) ? click : _editClicks[name] = () => Edit(name, label);
+        var name = heading.Name;
+        return _editClicks.TryGetValue(name, out var click) ? click : _editClicks[name] = () => Edit(name);
     }
 
     /// <summary>A column's filter applied (empty: removed): the grid reads the new view from its top.</summary>
     private void Apply(ColumnFilter filter)
     {
-        _filter = _filter is null ? OrderFilter.Of([filter]) : _filter.With(filter);
-        _editing = null;
+        _on.Filter = _on.Filter is null ? ViewFilter.Of([filter]) : _on.Filter.With(filter);
+        _on.Editing = null;
     }
 
     private void Remove(string column)
     {
-        _filter = _filter?.Without(column);
+        _on.Filter = _on.Filter?.Without(column);
     }
 
-    /// <summary>The period the chooser offers values from, as the blotter's: the time filter's, or the last day.</summary>
+    /// <summary>The period the chooser offers values from, as the blotter's: the tab's time filter's, or the last day.</summary>
     private (DateTime From, DateTime To) PeriodOfInterest()
     {
-        var time = _filter?.For("order_time");
+        var time = _on.Filter?.For(_on.Tab.Time);
         var to = time?.To ?? DateTime.UtcNow.AddMinutes(1);
         return (time?.From ?? to.AddDays(-1), to);
-    }
-
-    private void Open(LiveGridRowEvent<Guid> e)
-    {
-        var n = House.NumberOf(e.Key);
-        _opened = n >= 0 ? House.RowOf(n) : null;
-    }
-
-    /// <summary>An order in a line, as the blotter describes one.</summary>
-    private static string Describe(OrderRow o)
-    {
-        return string.Create(System.Globalization.CultureInfo.InvariantCulture,
-            $"{Reference.ClientNames[(long)o.Client]} {o.Side} {o.Qty:#,0.####} {Reference.InstrumentNames[(long)o.Instrument]} · {o.Status}, " +
-            $"{o.FilledQty:#,0.####} filled at {o.AvgPrice:#,0.######} (version {o.Version})");
     }
 
 }

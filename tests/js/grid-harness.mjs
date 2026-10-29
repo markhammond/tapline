@@ -9,7 +9,7 @@ import { Table } from '/src/Tapline.AspNetCore/wwwroot/tapline.js';
 
 if (new URLSearchParams(location.search).get('visible') === '1')
     Object.defineProperty(document, 'visibilityState', { get: () => 'visible' });
-import { GridBody } from '/src/Tapline.Grid/wwwroot/tapline-grid.js';
+import { GridBody } from '/src/Tapline.Grid.Blazor/wwwroot/tapline-grid.js';
 
 const q = new URLSearchParams(location.search);
 const ROWS = Number(q.get('rows') ?? 5_000_000), LATENCY = Number(q.get('latency') ?? 80);
@@ -159,8 +159,8 @@ columns.forEach((c, i) => {
     h.className = 'tg-heading' + (c.frozen ? ' tg-frozen' : '') + (['int', 'fixed', 'float', 'percent'].includes(c.kind) ? ' tg-end' : ' tg-start');
     h.setAttribute('role', 'columnheader');
     h.textContent = c.label;
-    h.style.width = i === 0 ? 'var(--tg-x1)' : `calc(var(--tg-x${i + 1}) - var(--tg-x${i}))`;
-    if (c.frozen) h.style.left = i === 0 ? '0' : `var(--tg-x${i})`;
+    h.style.width = i === 0 ? 'var(--tg-px1, var(--tg-x1))' : `calc(var(--tg-px${i + 1}, var(--tg-x${i + 1})) - var(--tg-px${i}, var(--tg-x${i})))`;
+    if (c.frozen) h.style.left = i === 0 ? '0' : `var(--tg-px${i}, var(--tg-x${i}))`;
     head.firstElementChild.append(h);
 });
 const status = document.getElementById('status'), events = [];

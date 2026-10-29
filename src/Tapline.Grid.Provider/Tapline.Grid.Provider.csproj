@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <LangVersion>latest</LangVersion>
+        <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+        <RootNamespace>Tapline.Grid.Provider</RootNamespace>
+    </PropertyGroup>
+    <ItemGroup>
+        <!-- What a grid's data provider implements and builds on — the source a session reads (IGridSource), a store and
+             its stream merged (StoreAndStream), the rows' inline text — and nothing of ASP.NET Core, nor of the session
+             and component that read it (Tapline.Grid): a provider in a process of its own needs neither. -->
+        <InternalsVisibleTo Include="Tapline.Grid"/>
+        <InternalsVisibleTo Include="Tapline.Tests"/>
+        <InternalsVisibleTo Include="Tapline.Grid.ChalkQL.Tests"/>
+    </ItemGroup>
+</Project>

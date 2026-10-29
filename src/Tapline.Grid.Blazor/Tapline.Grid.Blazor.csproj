@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <LangVersion>latest</LangVersion>
+        <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+        <!-- (its wwwroot is served where its package, Tapline, serves it: packages/Tapline) -->
+        <StaticWebAssetBasePath>_content/Tapline</StaticWebAssetBasePath>
+        <RootNamespace>Tapline.Grid.Blazor</RootNamespace>
+    </PropertyGroup>
+    <ItemGroup>
+        <!-- LiveGrid, Blazor's: the component and its columns, the page's module and stylesheet (tapline-grid.js, .css), and
+             what tells the page its columns and formats — over the session (Tapline.Grid), which needs none of it. -->
+        <FrameworkReference Include="Microsoft.AspNetCore.App"/>
+        <ProjectReference Include="../Tapline.Grid/Tapline.Grid.csproj"/>
+        <InternalsVisibleTo Include="Tapline.Tests"/>
+    </ItemGroup>
+</Project>

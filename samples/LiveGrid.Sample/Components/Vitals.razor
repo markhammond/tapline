@@ -1,0 +1,75 @@
+@* The vital statistics under the grid, as the ChalkQL blotter's: from the feed to the database and the host, read every
+   second while they're open — closed, they're not on the page at all, so nothing in them renders as they change. It renders
+   on its own, not the page around it. *@
+@implements IDisposable
+@using System.Globalization
+@using LiveGrid.Sample.Domain
+@inject House House
+@inject IServiceProvider Services
+
+<span class="chip" title="Changes a second the house is making now — new orders, fills and cancels — and the versions and fills the streams have sent: of them, out of order, those sent late, and those sent after the database wrote them">
+    <span class="label">feed</span><b>@Count(_rate)/s</b>
+    @if (Ledger is not null)
+    {
+        <span class="label">sent</span>@Count(_sent)
+        @if (_late + _afterDatabase > 0)
+        {
+            <span class="label">late</span>@Count(_late)
+            <span class="label">after the database</span>@Count(_afterDatabase)
+        }
+    }
+</span>
+@if (Ledger is not null)
+{
+    <span class="chip @(_stalled ? "stalled" : "")"
+          title="The database the grids read, written behind the streams: whether it's writing or stalled (the page's 20 s, or the ingestion's own 3 s every 45 s); how long ago the oldest version or fill it hasn't written yet was made; and how many it hasn't">
+        <span class="label">database</span><b>@(_stalled ? "stalled" : "writing")</b>
+        <span class="label">behind</span>@(_behind is { } behind ? behind.TotalSeconds.ToString("F1", CultureInfo.InvariantCulture) + " s" : "–")
+        <span class="label">pending</span>@Count(_pending)
+    </span>
+}
+<span class="chip" title="The process's working set, and its managed heap: read in the process, approximate">
+    <span class="label">host</span><b>@Figures.Two(_workingSet) MB</b><span class="label">heap</span>@Figures.Two(_heap) MB
+</span>
+
+@code {
+    private double _rate, _workingSet, _heap;
+    private long _sent, _late, _afterDatabase, _pending;
+    private TimeSpan? _behind;
+    private bool _stalled;
+    private Timer? _timer;
+
+    /// <summary>The database's ledger: none when the orders are computed in process (<c>--store computed</c>).</summary>
+    private Ledger? Ledger => Services.GetService<Ledger>();
+
+    protected override void OnInitialized()
+    {
+        Read();
+        _timer = new Timer(_ => InvokeAsync(() =>
+        {
+            Read();
+            StateHasChanged();
+        }), null, 1000, 1000);
+    }
+
+    private void Read()
+    {
+        _rate = House.CurrentRate;
+        _workingSet = Environment.WorkingSet / 1048576.0;
+        _heap = GC.GetTotalMemory(false) / 1048576.0;
+        if (Ledger is not { } ledger) return;
+        (_sent, _late, _afterDatabase) = ledger.Streamed;
+        (_pending, _behind, _stalled) = (ledger.Pending, ledger.Behind(DateTime.UtcNow), ledger.Stalled);
+    }
+
+    private static string Count(double n)
+    {
+        return n.ToString("N0", CultureInfo.InvariantCulture);
+    }
+
+    public void Dispose()
+    {
+        _timer?.Dispose();
+    }
+
+}

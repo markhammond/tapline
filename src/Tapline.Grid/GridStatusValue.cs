@@ -11,7 +11,7 @@ namespace Tapline.Grid;
 ///     without the held window's keys.
 ///     Little-endian: u8 format (1) | u8 flags (<see cref="Refused" />, <see cref="Moved" />) | u16 the overscan the link carries (rows either
 ///     side of the view, <see cref="GridOptions.OverscanFill" />; <see cref="OwnOverscan" />: the page's own) | i64 above
-///     (held: rows arrived above, not let in) | why the last read was refused, UTF-8 (none: it wasn't).
+///     (held: rows arrived above the reader hasn't seen) | why the last read was refused, UTF-8 (none: it wasn't).
 /// </summary>
 public static class GridStatusValue
 {

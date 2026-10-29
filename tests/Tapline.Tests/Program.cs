@@ -33,6 +33,7 @@ using Tapline.Client;
 using Tapline.Tests;
 using Tapline.Wasm;
 using Wasmtime;
+using Tapline.Grid.Provider;
 
 var tests = new (string Name, Func<Task> Run)[]
 {
@@ -343,18 +344,58 @@ var tests = new (string Name, Func<Task> Run)[]
         T.FaultInjectionPages),
     ("Grid rules: a held total kept within 1 % of the one held (a row past it either way taken afresh; set where the rows end; grown by rows let in); a read for changes due its cadence after the last began (a microsecond before: not; on it and after: yes); the order value and the status value written and read back, another format or one cut short not one; the overscan told, what the link's delivery rate carries in a second in powers of two (up once the next fits; down once a quarter fewer than told fit, only while the link is the limit), and a resting reader's step (doubled, by no more than four fills, to the page's most; halved, the link the limit, never below the fill)",
         T.GridRules),
-    ("Grid window, live and held: the live top at ranks, arrivals pushing rows down; held, arrivals above counted and nothing sent, a row in the window changed sent alone (the order unchanged), rows deleted in it and above keeping the rest in place, far reads placed by rank past the rows not shown; back at the top, live; a refusal kept stale with its reason until answered; a source's key twice refused; a new sort and filter from its top, the old rows gone; a key located, held about it, or not found and nothing changed",
+    ("Grid window, live and held: the live top at ranks, arrivals pushing rows down; held, arrivals above counted and nothing sent, a row in the window changed sent alone (the order unchanged), rows deleted in it and above keeping the rest in place, far reads placed by rank past the rows not shown; back at the top, live; a refusal kept stale with its reason until answered; a source's key twice refused; a new sort and filter from its top, the old rows gone; a key located, held about it — not let go by the page's asks from the top before it has scrolled there, then live once it has and scrolls back up — or not found and nothing changed",
         T.GridWindowLiveHeld),
     ("Grid window, held on the page's row: on a slow link the page draws a live window the session has moved on from; asked from it with the key of the row at its view's first position, the hold keeps that row there (thirty arrived since, above and not shown) — unanchored, the row now at that rank stands there instead; the row gone, placed by rank",
         T.GridWindowAnchoredHold),
-    ("Grid letting rows in: held with fifty above — at 200 none, at 199 thirty, no more until the page has applied them (its request read in its own positions), then no more than it fetches above, none fetching none, none at rest however wide its pre-fetch (only as the reader scrolls up); a window reaching the top takes them; back at the top, live. At the first row shown with a view's worth or more above, held, thirty let in, the window from the top taking them; fewer, live; the live top asked for (the pill, Home), live with five hundred above. Racing up: with fewer above than the view holds, live at once, the window the top's, wherever the reader was; with as many or more, held, as many let in as it fetches above near the top, three views at a time at the first row shown, none further down",
+    ("Grid letting rows in: held with fifty above — at 200 none, at 199 thirty, no more until the page has applied them (its request read in its own positions), then no more than it fetches above, none fetching none, none at rest however wide its pre-fetch (only as the reader scrolls up); a window reaching the top takes them; those let in counted unseen till the page shows them (fifty, then thirty at 30, twenty at 20); back at the top, live. At the first row shown with a view's worth or more above, held, thirty let in, the window from the top taking them; fewer, live; the live top asked for (the pill, Home), live with five hundred above. Racing up: with fewer above than the view holds that the reader hasn't seen (those let in above the view among them), live at once, the window the top's, wherever the reader was; with as many or more, held, as many let in as it fetches above near the top, three views at a time at the first row shown, none further down",
         T.GridLetIn),
     ("Grid by key: a source whose own order is its keys', greatest first — at the live top the order its header alone (40 bytes), the rows held the oracle's window placed by their keys; five arriving, five rows in at the top and five out, by key still; held, with its keys; back at the top from far away, its view first with its keys while the rows before linger, then its rest by key; sorted another way, with its keys",
         T.GridByKey),
+    ("Grid kept place: held, a filter reads the new view about where the page's first row sorts in it — failing it, its rows from where it would be; passing, it first — in a hold of their own, the page asking round it held still; past the view's end, its last rows; at the top, held still — asked there, three arriving above counted — till the pill; asked for before it's placed, placed first; at the live top, the live top; a sort, the row first at its rank in the new order; no place kept, the top; a run's row first on the page, kept by its open row, its run after it",
+        T.GridKeptPlace),
+    ("Grid held, the view moving past every row the window holds (they stop passing its filter, new ones arriving above): read about the last row it held, where that sorts now — the rows above counted as they stand, never more than the view has, the total never below none, the rows still below shown, read after read; the pill, live, every row",
+        T.GridHeldEmptied),
     ("Grid against an oracle: five seeds of random scrolling, jumps, arrivals, updates, deletes, sorts of up to three columns and filters of up to two, its own order by key — every window a run of the view's order worked out apart, at its ranks, the table its rows alone as the source has them (by key at the live top, placed by their keys); held still, every window the oracle's exactly",
         T.GridOracleRuns),
+    ("Grid nested rules: the rows open, placed where a read found them, their runs as last read — a row of the view after the runs open above it, a view position a row of the view or of a run, moved all at once, unplaced when read elsewhere, unread for another view; as a session remembers them, three at most, one opened forgetting the least recently used (opened, or held by the window), never one the window holds — four while it holds three — and none remembered, those it holds kept; cleared, as new; a run's rows one to thirty-two deep",
+        T.GridNestedRules),
+    ("Grid nested rows: live, a row opened shows its run after it, the total counting it, arrivals pushing both down, by key too (the order's header and its runs); a chain thirty-two deep; a million under one, the window anywhere in it, a slice read and no more; held in it, the run growing or shrinking at its head moves every position and the page's first row stays where it's drawn; a million and two closed above, the same; from the live top, held on a run's row, kept there with four arrived above; its open row closed, drawn where that row was",
+        T.GridNested),
+    ("Grid every row open: live, the window's rows open, their runs after them, counted as read (the total at least the rows and the runs read); held further down, more counted; runs coming to be counted above the page's first row moving every position, the page's row where it's drawn; a row closed — a closed run on the wire — and opened again; a million rows' run read a few rows first, then by slice; the runs counted bounded, jumping here and there; every row closed again, the page's row where it's drawn",
+        T.GridNestedAll),
+    ("Grid store and stream merged: an append-only store, the stream ahead of it (half its versions not landed) and behind it (five landed, not sent) — in four views, the top, a page from a rank and one about a row the truth's, worked out apart: each key once at its newest, ranked and counted exactly; a key the stream alone has found about it, filtered out not; the store caught up and seen a haircut on, the state tail let go, the event log never kept",
+        T.GridStoreMerge),
+    ("Grid store and stream's watermark: no reads, the state tail's oldest row two haircuts behind the stream's newest — the store asked its newest stamp once, not again within a haircut, then the rows a haircut behind it let go, no recheck; a read bringing the store's newest stamp, unasked, and asking a recheck, none other within a Recheck, another a Recheck on",
+        T.GridStoreWatermark),
+    ("Grid store and stream, a read under way: its store rows taken before a version landed, the watermark passing that version by a haircut meanwhile — kept in the state tail till the read is done, so the read shows it, not the store's older one, and a row another read found the store holds; then let go",
+        T.GridStoreInFlight),
+    ("Grid store and stream bounded: the store stalled, past the state tail's cap the oldest row pruned, reads served (the pruned key as the store has it); caught up a haircut past it, the grids told to read again with no batch sent, the truth; a read's memory budget carried by each statement, one past it refused saying why; the event log kept for a view, at most its versions, back its reach from the newest, past the policy's refused, let go once no view keeps it; a policy that can't be kept to refused",
+        T.GridStoreBounds),
+    ("Grid store and stream's gap fill: a version written as the grid subscribed, which the stream never sends, landing after the first page — a haircut on, taken as if streamed, the grid told and the version shown; the event log the stream's alone",
+        T.GridStoreGapFill),
+    ("Grid store and stream against an oracle: four seeds of versions made, streamed in order and landed out of stamp order within the haircut (the store behind the stream, ahead of it, stalled), reads from ranks, about rows and about keys in four views — every page in order, no key twice, each row passing, none older than a version sent before the read; quiet, every page the truth's at its ranks, the state tail let go",
+        T.GridStoreOracle),
+    ("Grid store and stream's catch-up: the filters slow — what the stream sends unpublished (the tail and the version as they were), reads waiting for what was sent before them, a view asked for meanwhile opened after it; an order leaving the view, its store row past a recheck's reach, kept as the store counts it (an estimate), then, landed and read again, counted out exactly; a filter failed, its view's next read refused saying why and the one after opening it again; an evaluation failing outright, every view opened again by its next read",
+        T.GridStoreCatchUp),
+    ("Grid store and stream sized without counting: a page short of its limit counting the view, nothing asked of the store; past it the store's size, asked once; a store that can't say, at least the rows seen; about a row near the top, its place counted from the rows read back, far down the store's",
+        T.GridStoreSizes),
+    ("Grid store and stream's kept windows: what a read brings kept, changed by every change the stream sends — the live top and a held page each step the truth's, placed, the store asked nothing; read again past a window's edge; a version written to the store directly healed by a refresh off a read's path (the grids told, placed by the store's count); a window of final rows read again while the store's clock stands, settled once it moves on past them (the store's judgment); let go with its view, idle, past the policy's rows, and all when the tail prunes; past a view's own rows, its least recently read let go, another view's untouched; the rows held counted once each throughout; once closed, a read refused saying so",
+        T.GridStoreWindows),
+    ("Grid store and stream warm: each millisecond a version streamed, the store landing each eight on, a view keeping a second of history — the tails trimmed, and (optimised) the live top and a page about a row read each step — 10,000 steps allocating nothing",
+        T.GridStoreAllocation),
+    ("Alerts shared by shape: rules of one source, condition and trigger, in two audiences, one evaluation and one source, each page's subscription at its rule's throttle (Tapline's MinInterval: conflated, debounced); fired, the shape's count up by the rows, its latest last, a thousand firings one value; presented, the most a page says, never past the count, each audience its own; renamed or rethrottled, kept, its interval set; reshaped or added, from the count as it stands; a count fired at its throttle; refused before kept (checked, watched, past each cap); unattended, kept for the keep-for time, then let go with the shapes only it had; apart from grids, rows packed",
+        T.AlertDeskShapes),
+    ("Alert texts: inline, whole when it fits, else cut at a character's boundary and flagged, four-byte characters never split",
+        T.AlertTexts),
+    ("Grid nested against an oracle: six seeds of scrolling, jumps, rows opened and closed (in the window, and anywhere), orders arriving, changing and going, runs growing and shrinking, sorts and filters, the last two with three remembered at most (rows forgotten as others open, never one the window holds) — every window a run of the view as drawn, each row at its depth, its first row where the view has it, less the rows not shown above and the rows of runs above it the window doesn't know of: exactly",
+        T.GridNestedOracle),
+    ("Grid session's nested rows on the wire: a row opened or closed read at once, the page's replica (verified) the view as drawn, the run after its open row at its depths; a jump into a million rows' run; three remembered at most, a fourth forgetting the row open least recently used, out of the window — above it, every position up by its run, the page's rows kept where they're drawn — and the window's own outliving rows used since; closed, its run gone; every row open at the live top, one closed on the wire and the rest open, then every row closed again",
+        T.GridSessionNested),
     ("Grid session on the wire: each request answered by a rendezvous, the page's replica (rows verified, order) the oracle's window — live, by key, the order its header alone and the rows placed by their keys; held, with its keys; held, arrivals above read at its cadence and the status value alone sent (five above; not the rows, nor their order); a row in view changed: one cut; back at the top, live, none above",
         T.GridSessionWire),
+    ("Grid session's kept place on the wire: held, a filter — the replica's new view held where the page's first row is in it, that row first; the page asking round it, held still, the window widened; a sort, the row first at its rank in the new order; no place kept, the top, live",
+        T.GridSessionKeptPlace),
     ("Grid session's first answers alone: on a slow link a window's answers merge on their way, the first waiting for the rest — the live top's view alone, its rest once the page has it; held from it on the page's row with thirty arrived since, the view and a view below alone, thirty above in the status; a request whose view the window holds answered as it stands, not widened; the page having the first, the last request's window",
         T.GridSessionFirstAlone),
     ("Grid overscan told by the link: under fixed flow control, or with no time for the fill, none (the page's own count); adaptive, none before the link's measured, then what its delivery rate carries in a second, both sides, in powers of two",
@@ -373,7 +414,7 @@ var tests = new (string Name, Func<Task> Run)[]
         T.GridSessionViews),
     ("Grid session's bounds: options that can't work refused when made, saying why (a negative overscan fill among them); a client's grids at most so many (another client's its own); a window wider than its most refused, saying why; the session over with its subscription",
         T.GridSessionBounds),
-    ("Grid allocation: a held window sliding through 100,000 rows, a row in and out and the order each answer — 10,000 answers on the thread, nothing allocated; 2,000 through the session's loop",
+    ("Grid allocation: a held window sliding through 100,000 rows, a row in and out and the order each answer — 10,000 answers on the thread, nothing allocated; 2,000 through the session's loop; nested, held in a million rows' run, the window's way to the wire allocating nothing either",
         T.GridAllocation),
     ("Grid memory: a session holds its window, not its view — as much over 50,000,000 rows as over 5,000",
         T.GridMemory),
@@ -383,12 +424,14 @@ var tests = new (string Name, Func<Task> Run)[]
         T.LiveColumnsResolved),
     ("LiveGrid's formats in a culture, as the page gets it: what differs from the invariant culture's (a date's names only where a pattern writes them; genitive months where a culture has them); a culture of another calendar in its Gregorian one; a time's standard format spelt out, o, r, s and u in the invariant culture's names",
         T.GridFormatsCulture),
-    ("LiveGrid's columns refused, saying why: none, no name, a name twice, frozen after not, no such field (naming those there are), a decimal, a struct of its own, a kind that can't read its field, fixed without a scale, an enum without names, names or Of where they don't belong, a percentage of nothing or of text or sorted by, formats their values' types refuse (or of too many digits, or for kinds that have none), figures out of range or of what isn't a number written as a decimal, widths that aren't CSS lengths, scales out of range, more columns than the stylesheet places; an arrival time from a field that isn't one, from a field and the key both, or from a key that isn't a Guid",
+    ("LiveGrid's columns refused, saying why: none, no name, a name twice, frozen after not, no such field (naming those there are), a decimal, a struct of its own, a kind that can't read its field, fixed without a scale, an enum without names, names or Of where they don't belong, a percentage of nothing or of text or sorted by, formats their values' types refuse (or of too many digits, or for kinds that have none), figures out of range or of what isn't a number written as a decimal, widths that aren't CSS lengths, scales out of range, more columns than the stylesheet places; an arrival time from a field that isn't one, from a field and the key both, or from a key that isn't a Guid; two expanders, a field saying which rows open without one, of no such field, or of text — and nested rows' columns resolved: the expander's with room for its chevron and a level, the field saying which rows open, a column a run's rows leave empty",
         T.LiveColumnsRefused),
     ("LiveGrid's keys as the page holds them (a character a byte, as tapline.js keys its replica) and back, anything else no key; a UUIDv7's time where the page reads it from its key; text written as the page reads it, cut at a character's end and flagged",
         T.LiveGridKeysAndText),
     ("LiveGrid rendered statically: refused where it would be, with the reason and the render mode to give it; no grid",
         T.LiveGridStaticRefused),
+    ("LiveGrid's columns as a chooser anywhere on the page shows them (ILiveGridColumns, LiveColumnChooser): every column in order, shown at first as its Visible says; shown or hidden by name, in any case, the last shown kept; the chooser's ticks as the choices are, the last shown not to be unticked, its button alone till it has a grid",
+        T.LiveGridColumnChooser),
     ("LiveGrid's sorts by a heading's click: ascending first (sorted by it alone, then reversed, and again), or descending first as a blotter sorts (then ascending, then the source's own order); shift-clicked, added the first way, reversed, taken out; a column named in any case",
         T.LiveGridSorts),
     ("LiveGrid's first window, read before the page asks, from the body's height: the rows in view and a quarter of them ahead (as the page's module asks first), in the view asked in, within the window's bound; no height, none",
@@ -2252,8 +2295,14 @@ internal static partial class T
             if (pos + bal != Endowment) separateTorn++;
         }));
 
+        // Trades go on until the watch has been read under them often enough for "never torn" to mean something: 40,000
+        // at least, and until it has delivered 100 groups meanwhile — counted, not timed (on a loaded machine the
+        // consumer gets less of the CPU than the producer; a minute of trades means it's stuck, and the assert says so).
         var rnd = new Random(21);
-        for (var i = 0; i < 40_000; i++)
+        var trading = Stopwatch.StartNew();
+        for (var i = 0;
+             i < 40_000 || (Volatile.Read(ref deliveries) <= 100 && trading.Elapsed < TimeSpan.FromMinutes(1));
+             i++)
         {
             int account = rnd.Next(4), symbol = rnd.Next(8);
             long qty = rnd.Next(-50, 100);
@@ -2263,13 +2312,12 @@ internal static partial class T
             if ((i & 255) == 0) await Task.Yield();
         }
 
+        // Caught up: the watch's state as of the last trade written (the router's word — a key range's record carries the
+        // table's version only when the range changed, so the replica's sequence numbers can't say so; nor is the
+        // consumer's replica the test thread's to read while it runs).
         var sw = Stopwatch.StartNew();
-        while (sw.Elapsed < TimeSpan.FromSeconds(10))
-        {
-            if (c.Groups.TryGetValue(watch.Id, out var g) && g.Tables.TryGetValue(0, out var m) &&
-                m.Seq == positions.Version && g.Tables[1].Seq == cash.Version) break;
-            await Task.Delay(5);
-        }
+        while (watch.Waiting && sw.Elapsed < TimeSpan.FromSeconds(10)) await Task.Delay(5);
+        var caughtUp = !watch.Waiting;
 
         Volatile.Write(ref stop, true);
         s.Interrupt();
@@ -2279,10 +2327,13 @@ internal static partial class T
         var group = c.Groups[watch.Id];
         Assert(group.Failures == 0 && deliveries > 100 && torn == 0,
             $"watch: {deliveries} deliveries, {torn} torn, {group.Failures} verification failures");
-        Assert(Wealth(group) == Endowment, "converged");
+        Assert(caughtUp && Wealth(group) == Endowment, "converged");
         var expected = new List<KeyValuePair<Holding, long>>();
         positions.CopyTo(expected);
-        Assert(group.Tables[0].Rows.Count == expected.Count(kv => kv.Key.Account == 2),
+        var replica = group.Tables[0].Rows.Values.ToDictionary(
+            r => new Holding(BitConverter.ToInt32(r.Key), BitConverter.ToInt32(r.Key, 4)), r => BitConverter.ToInt64(r.Row));
+        var mine = expected.Where(kv => kv.Key.Account == 2).ToList();
+        Assert(replica.Count == mine.Count && mine.All(kv => replica.TryGetValue(kv.Key, out var q) && q == kv.Value),
             "the range holds exactly account 2's positions");
         Notes.Add(
             $"atomicity: watch {deliveries} deliveries, 0 torn; two independent taps were torn in {separateTorn} of {separateFrames} frames");
@@ -9666,7 +9717,13 @@ internal static partial class T
         var opsPort = FreePort();
         var builder = WebApplication.CreateBuilder();
         builder.WebHost.UseUrls("http://127.0.0.1:0", $"http://127.0.0.1:{opsPort}");
-        builder.Services.AddTapline(o => o.Ops.Port = opsPort);
+        builder.Services.AddTapline(o =>
+        {
+            o.Ops.Port = opsPort;
+            // No heartbeats of its own: they'd check the provider's health too (every second, while it holds a route),
+            // and the health checks counted here are the viewer's alone.
+            o.HeartbeatInterval = TimeSpan.FromHours(1);
+        });
         await using var app = builder.Build();
         app.MapTaplineViewer();
         app.MapTaplineViewer("/ops/busy", 0); // a viewer with no room: always busy
@@ -12777,7 +12834,8 @@ internal static partial class T
                 account2Rows = Enumerable.Range(0, 4).Count(sym => positions.TryGet(new Holding(2, sym), out _))
             },
             auth = AuthFixture(),
-            grid = GridFixture(registry, scratch)
+            grid = GridFixture(registry, scratch),
+            alerts = AlertFixture()
         };
         Directory.CreateDirectory(Path.Combine(RepoRoot(), "tests", "js", "fixtures"));
         File.WriteAllText(Path.Combine(RepoRoot(), "tests", "js", "fixtures", "frames.json"),

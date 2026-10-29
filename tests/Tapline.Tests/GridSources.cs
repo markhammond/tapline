@@ -1,6 +1,6 @@
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
-using Tapline.Grid;
+using Tapline.Grid.Provider;
 
 /// <summary>An order, as a test grid shows it: worked out from its id and a seed, or as last updated.</summary>
 [StructLayout(LayoutKind.Sequential, Pack = 1)]
@@ -36,6 +36,9 @@ internal sealed class ComputedGrid(int seed, long rows) : IGridSource<long, Grid
     private long _version;
     public int Reads;
 
+    /// <summary>The memory budget the last read carried (<see cref="GridRead{TKey,TRow}.MaxBytes" />).</summary>
+    public uint Budget;
+
     /// <summary>Says its own order is by id, greatest first (as it is): the grid's live top then goes without keys.</summary>
     public bool ByKey { get; init; }
 
@@ -51,6 +54,7 @@ internal sealed class ComputedGrid(int seed, long rows) : IGridSource<long, Grid
     {
         cancellationToken.ThrowIfCancellationRequested();
         Interlocked.Increment(ref Reads);
+        Budget = read.MaxBytes;
         lock (_gate)
         {
             var sorted = Sorted(view);
@@ -289,6 +293,231 @@ internal sealed class NaturalGrid<TRow>(long rows, Func<long, TRow> row) : IGrid
         public void Dispose()
         {
             lock (grid._watchers) grid._watchers.Remove(changed);
+        }
+    }
+}
+
+/// <summary>
+///     A computed grid with nested rows: <see cref="ComputedGrid" />'s orders are the view's rows, and under each a run — its
+///     descendants, depth first — worked out from its id: none under a fifth of them, a small tree of up to four levels
+///     under the rest, a chain thirty-two deep under <see cref="Deep" />, a million children under <see cref="Big" />. Runs
+///     grow at their head, as the newest fills come first, and shrink there. A run's rows have keys from 2^40 up, none an
+///     order's. Thread-safe: a session reads on its loop while a test changes it.
+/// </summary>
+internal sealed class TreeGrid(int seed, long rows) : IGridSource<long, GridOrderRow>
+{
+    public const long Deep = 7, Big = 11, Million = 1_000_000;
+    private const long Small = 1L << 40, Huge = 1L << 50, Grown = 1L << 52; // (run keys: a small tree's, the million's, rows grown)
+    private readonly Dictionary<long, List<long>> _grown = []; // rows a run grew by, newest first
+    private readonly Dictionary<long, long> _grownOwner = [];
+    private readonly Lock _gate = new();
+    private readonly Dictionary<long, (long Key, byte Depth)[]> _trees = [];
+    private readonly Dictionary<long, long> _shrunk = []; // rows a run lost at its head, of those it had
+    private readonly List<Action> _watchers = [];
+    private long _nextGrown, _version;
+    public int RunReads, RunRows;
+
+    /// <summary>The memory budget the last run read carried (<see cref="GridRunRead{TKey}.MaxBytes" />).</summary>
+    public uint RunBudget;
+
+    public ComputedGrid Top { get; } = new(seed, rows) { ByKey = true };
+
+    public long Version => Top.Version + Volatile.Read(ref _version);
+
+    public bool NewestFirstByKey(GridView view)
+    {
+        return Top.NewestFirstByKey(view);
+    }
+
+    public ValueTask<GridAnswer> ReadAsync(GridView view, GridRead<long, GridOrderRow> read, GridPage<long, GridOrderRow> page,
+        CancellationToken cancellationToken)
+    {
+        return Top.ReadAsync(view, read, page, cancellationToken);
+    }
+
+    public ValueTask<GridAnswer> ReadRunsAsync(GridView view, ReadOnlyMemory<GridRunRead<long>> reads,
+        GridRunPage<long, GridOrderRow> page, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        Interlocked.Increment(ref RunReads);
+        lock (_gate)
+        {
+            foreach (var read in reads.Span)
+            {
+                RunBudget = read.MaxBytes;
+                var length = Length(read.Owner);
+                long start, at = -1;
+                if (read.Kind == GridRunReadKind.AtOffset)
+                {
+                    start = Math.Min(read.Offset, length);
+                }
+                else
+                {
+                    at = IndexOf(read.Owner, read.Key);
+                    start = at < 0 ? length : Math.Max(0, at - read.Before);
+                }
+
+                var end = at < 0 ? Math.Min(length, start + read.Count) : Math.Min(length, at + read.Count);
+                if (read.Kind == GridRunReadKind.AroundKey && at < 0) end = start;
+                for (var i = start; i < end; i++)
+                {
+                    var (key, depth) = At(read.Owner, i);
+                    if (!page.Add(key, RowOf(key), depth)) break;
+                    RunRows++;
+                }
+
+                page.End(new GridRunAnswer
+                {
+                    FirstOffset = start, Anchor = read.Kind == GridRunReadKind.AroundKey ? at < 0 ? GridAnswer.NotFound : (int)(at - start) : 0,
+                    Length = length, LengthKind = TotalKind.Exact
+                });
+            }
+
+            return new ValueTask<GridAnswer>(new GridAnswer { Version = Version });
+        }
+    }
+
+    public IDisposable Watch(Action changed)
+    {
+        lock (_watchers) _watchers.Add(changed);
+        var top = Top.Watch(changed);
+        return new Unwatch(this, changed, top);
+    }
+
+    /// <summary>A run's row, worked out from its key.</summary>
+    public static GridOrderRow RowOf(long key)
+    {
+        return ComputedGrid.Computed(key, 99) with { Placed = key };
+    }
+
+    /// <summary>An owner's run as it stands: its keys and depths, depth first (the million's whole: for a test's oracle).</summary>
+    public (long Key, byte Depth)[] Run(long owner)
+    {
+        lock (_gate)
+        {
+            var length = Length(owner);
+            var run = new (long, byte)[length];
+            for (var i = 0; i < length; i++) run[i] = At(owner, i);
+            return run;
+        }
+    }
+
+    public long LengthOf(long owner)
+    {
+        lock (_gate) return Length(owner);
+    }
+
+    /// <summary>The run's row at <paramref name="offset" />.</summary>
+    public (long Key, byte Depth) RunAt(long owner, long offset)
+    {
+        lock (_gate) return At(owner, offset);
+    }
+
+    /// <summary>A run's row's offset in it (-1: not its).</summary>
+    public long OffsetOf(long owner, long key)
+    {
+        lock (_gate) return IndexOf(owner, key);
+    }
+
+    /// <summary>The owner of a run's row, by its key (-1: an order's own).</summary>
+    public long OwnerOf(long key)
+    {
+        lock (_gate)
+            return key >= Grown ? _grownOwner.GetValueOrDefault(key, -1) : key >= Huge ? Big : key >= Small ? (key - Small) >> 12 : -1;
+    }
+
+    /// <summary>The run grows by <paramref name="n" /> children at its head, the newest first.</summary>
+    public void Grow(long owner, int n)
+    {
+        lock (_gate)
+        {
+            if (!_grown.TryGetValue(owner, out var grown)) _grown[owner] = grown = [];
+            for (var i = 0; i < n; i++)
+            {
+                var key = Grown + _nextGrown++;
+                grown.Insert(0, key);
+                _grownOwner[key] = owner;
+            }
+        }
+
+        Changed();
+    }
+
+    /// <summary>The run loses its first <paramref name="n" /> rows (those grown first, then its own).</summary>
+    public void Shrink(long owner, int n)
+    {
+        lock (_gate)
+            for (var i = 0; i < n && Length(owner) > 0; i++)
+                if (_grown.TryGetValue(owner, out var grown) && grown.Count > 0) grown.RemoveAt(0);
+                else _shrunk[owner] = _shrunk.GetValueOrDefault(owner) + 1;
+        Changed();
+    }
+
+    private long Length(long owner)
+    {
+        var grown = _grown.TryGetValue(owner, out var g) ? g.Count : 0;
+        var own = owner == Big ? Million : Tree(owner).Length;
+        return grown + own - _shrunk.GetValueOrDefault(owner);
+    }
+
+    private (long Key, byte Depth) At(long owner, long i)
+    {
+        if (_grown.TryGetValue(owner, out var grown) && i < grown.Count) return (grown[(int)i], (byte)1);
+        i += _shrunk.GetValueOrDefault(owner) - (grown?.Count ?? 0);
+        return owner == Big ? (Huge + i, (byte)1) : Tree(owner)[i];
+    }
+
+    private long IndexOf(long owner, long key)
+    {
+        var g = _grown.TryGetValue(owner, out var grown) ? grown.Count : 0;
+        if (key >= Grown) return grown?.IndexOf(key) ?? -1;
+        var lost = _shrunk.GetValueOrDefault(owner);
+        long own;
+        if (owner == Big) own = key >= Huge && key < Huge + Million ? key - Huge : -1;
+        else own = Array.FindIndex(Tree(owner), r => r.Key == key);
+        return own < lost ? -1 : g + own - lost;
+    }
+
+    /// <summary>An order's own tree, depth first: generated from its id, kept.</summary>
+    private (long Key, byte Depth)[] Tree(long owner)
+    {
+        if (_trees.TryGetValue(owner, out var tree)) return tree;
+        var rnd = new Random(unchecked(seed * 1_000_003 + (int)owner)); // (not HashCode: the same trees every run)
+        var rows = new List<(long, byte)>();
+        if (owner == Deep)
+        {
+            for (var depth = 1; depth <= GridRuns.MaxDepth; depth++) rows.Add((Small + (owner << 12) + rows.Count, (byte)depth));
+            for (var i = 0; i < 3; i++) rows.Add((Small + (owner << 12) + rows.Count, 1));
+        }
+        else if (owner >= 0 && rnd.Next(5) > 0)
+        {
+            void Node(int depth)
+            {
+                rows.Add((Small + (owner << 12) + rows.Count, (byte)depth));
+                if (depth < 4 && rows.Count < 40)
+                    for (var n = rnd.Next(depth == 1 ? 3 : 2); n > 0; n--) Node(depth + 1);
+            }
+
+            for (var n = rnd.Next(1, 4); n > 0; n--) Node(1);
+        }
+
+        return _trees[owner] = [.. rows];
+    }
+
+    private void Changed()
+    {
+        Interlocked.Increment(ref _version);
+        Action[] watchers;
+        lock (_watchers) watchers = [.. _watchers];
+        foreach (var watcher in watchers) watcher();
+    }
+
+    private sealed class Unwatch(TreeGrid grid, Action changed, IDisposable top) : IDisposable
+    {
+        public void Dispose()
+        {
+            lock (grid._watchers) grid._watchers.Remove(changed);
+            top.Dispose();
         }
     }
 }

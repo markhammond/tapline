@@ -1,0 +1,11 @@
+@* A chevron for a control that opens something, drawn so it's the same size wherever it stands: pointing right, or down
+   when Down; open, a quarter turn — down, or up. *@
+<svg class="chevron @(Open ? "open" : "") @(Down ? "down" : "")" viewBox="0 0 16 16" aria-hidden="true">
+    <path d="M6 3.5 10.5 8 6 12.5"/>
+</svg>
+
+@code {
+    [Parameter] public bool Open { get; set; }
+
+    [Parameter] public bool Down { get; set; }
+}

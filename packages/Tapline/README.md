@@ -6,6 +6,8 @@
 - **MagicOnion** (gRPC), the router's side: a session's outlet held across its calls, frames written one at a time as the call takes them.
 - **Data providers in a process of their own**, reached by routers over MagicOnion: their topics, step 1s, notices, health, heartbeats, drains and mailboxes.
 - **Sign-in** by a realm's authentication service of modules (passkeys by WebAuthn, passthrough, tickets, your own), each handing a proven user to your backend, which says who they are.
+- **LiveGrid:** a virtual data grid for live data in Blazor. The server keeps each reader's window, the rows in view and either side; Tapline carries it to the page as binary rows, only what changed, conflated to the reader's link; and the page draws the rows itself (`tapline-grid.js`). Its source can be an append-only database and the stream of its changes, merged (`StoreAndStream`).
+- **Alerts:** rules over any source, by shape: each shape evaluated once and published as one value, each page taking it no oftener than its rule's throttle (`tapline-alerts.js`).
 - **Hosting:** the router's identity, heartbeats and health; the out-of-band fetch and module endpoints; the ops port and the router's viewer; and the browser client, `tapline.js`, served at `_content/Tapline/`.
 
 ```csharp
@@ -17,6 +19,7 @@ app.MapBlazorRealtime();                       // the out-of-band and module end
 
 The core and the .NET client are [Tapline.Client](https://www.nuget.org/packages/Tapline.Client), which this brings in.
 WebAssembly folds and password sign-in are [Tapline.Wasm](https://www.nuget.org/packages/Tapline.Wasm).
+LiveGrid over a database through ChalkQL is [Tapline.Grid.ChalkQL](https://www.nuget.org/packages/Tapline.Grid.ChalkQL).
 
 ## Documentation
 
@@ -26,6 +29,7 @@ WebAssembly folds and password sign-in are [Tapline.Wasm](https://www.nuget.org/
 - [Transports](https://github.com/markhammond/tapline/blob/main/docs/transports.md)
 - [Signing users in](https://github.com/markhammond/tapline/blob/main/docs/provider.md#signing-users-in)
 - [Observability](https://github.com/markhammond/tapline/blob/main/docs/observability.md)
+- [The LiveGrid sample](https://github.com/markhammond/tapline/blob/main/samples/LiveGrid.Sample/README.md)
 
 ## License
 

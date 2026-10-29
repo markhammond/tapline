@@ -1,0 +1,194 @@
+@namespace Tapline.Grid.Blazor
+@typeparam TKey where TKey : unmanaged, IEquatable<TKey>
+@typeparam TRow where TRow : unmanaged
+@using Microsoft.AspNetCore.Components.Rendering
+@using Microsoft.AspNetCore.Components.Web
+
+<CascadingValue Value="_registry" IsFixed="true">@Columns</CascadingValue>
+@((RenderFragment)Deferred)
+
+@code {
+
+    /// <summary>The grid in a render of its own (<see cref="GridDeferred" />): after its columns have registered.</summary>
+    private void Deferred(RenderTreeBuilder builder)
+    {
+        builder.OpenComponent<GridDeferred>(0);
+        builder.AddComponentParameter(1, nameof(GridDeferred.Render), (RenderFragment)RenderGrid);
+        builder.CloseComponent();
+    }
+
+    /// <summary>The status template, rendered by a component of its own as the status changes (<see cref="GridStatusView" />).</summary>
+    private void StatusView(RenderTreeBuilder builder)
+    {
+        builder.OpenComponent<GridStatusView>(0);
+        builder.AddComponentParameter(1, nameof(GridStatusView.Source), (IGridStatusSource)this);
+        builder.AddComponentParameter(2, nameof(GridStatusView.Template), StatusTemplate);
+        builder.CloseComponent();
+    }
+
+    /// <summary>The grid, rendered after its columns have registered — or why it can't show its rows.</summary>
+    private void RenderGrid(RenderTreeBuilder builder)
+    {
+        ResolveColumns();
+        builder.AddContent(0, Refusal is null ? GridMarkup : RefusedMarkup);
+    }
+
+    private RenderFragment RefusedMarkup => @<div @attributes="AdditionalAttributes" class="live-grid live-grid-refused @Class" style="@Style" role="alert">
+        <strong>LiveGrid can't show its rows:</strong> @Refusal
+    </div>;
+
+    // The grid element carries no style of Blazor's: the page's module keeps its custom properties there (a measured
+    // column's width, the scrollbar's), and its aria-rowcount and aria-activedescendant. The columns' widths are on the
+    // component's element (GridStyle), and tapline-grid.css places each column by them.
+    private RenderFragment GridMarkup => @<div @attributes="AdditionalAttributes" class="live-grid @Class" style="@GridStyle()">
+        <div class="tg-grid" role="@(_shown.Any(c => c.Expander) ? "treegrid" : "grid")" tabindex="0" aria-label="@AriaLabel" aria-colcount="@_shown.Length"
+             aria-multiselectable="@(Selection == GridSelection.Multiple ? "true" : null)" @ref="_host">
+            <div class="tg-head" role="rowgroup" @ref="_head">
+                <div class="tg-head-row" role="row" aria-rowindex="1">
+                    @for (var i = 0; i < _shown.Length; i++)
+                    {
+                        var index = i;
+                        var column = _shown[i];
+                        var rank = SortRank(column.Name);
+                        <div @key="column.Name" class="@HeadingClass(column)" role="columnheader" aria-colindex="@(index + 1)"
+                             aria-sort="@AriaSort(column)" style="@HeadingStyle(column, index)">
+                            @if (column.Expander)
+                            {
+                                <button type="button" class="tg-all" aria-expanded="@(AllExpanded ? "true" : "false")"
+                                        aria-label="@(AllExpanded ? "Collapse all" : "Expand all")"
+                                        title="@(AllExpanded ? "Collapse all" : "Expand all (*)")" @onclick="ToggleAllClick"></button>
+                            }
+                            @if (column.Sortable)
+                            {
+                                <button type="button" class="tg-sort" aria-label="@SortLabel(column, rank)" title="@SortHint(rank)"
+                                        @onclick="SortClick(column)">
+                                    <span class="tg-label">@column.Label</span>
+                                    <span class="@(rank == 0 && Natural(column) is not null ? "tg-arrow tg-natural" : "tg-arrow")" aria-hidden="true">@Arrow(column, rank)</span>
+                                    @if (rank > 0 && _sort.Count > 1)
+                                    {
+                                        <span class="tg-rank" aria-hidden="true">@rank</span>
+                                    }
+                                </button>
+                            }
+                            else
+                            {
+                                <span class="tg-label">@column.Label</span>
+                                @if (Natural(column) is not null)
+                                {
+                                    <span class="tg-arrow tg-natural" aria-hidden="true">@Arrow(column, 0)</span>
+                                }
+                            }
+                            @HeadingTemplate?.Invoke(HeadingOf(column))
+                        </div>
+                    }
+                    <span class="tg-head-end" aria-hidden="true"></span>
+                </div>
+            </div>
+            <div class="tg-body" @ref="_body" data-frozen="@(Frozen > 0 ? "" : null)" style="@BodyStyle()"></div>
+            @if (Frozen is > 0 and var frozen)
+            {
+                <div class="tg-frozen-divider" aria-hidden="true" style="left: var(--tg-px@(frozen), var(--tg-x@(frozen)))"></div>
+            }
+        </div>
+        @if (StatusTemplate is not null || StatusLine || ColumnChooser)
+        {
+            <div class="tg-foot">
+                <div class="tg-status">
+                    @if (StatusTemplate is not null)
+                    {
+                        @((RenderFragment)StatusView)
+                    }
+                    else if (StatusLine)
+                    {
+                        <span class="tg-status-line" @ref="_statusLine"></span>
+                    }
+                </div>
+                @if (ColumnChooser)
+                {
+                    <LiveColumnChooser Grid="this"/>
+                }
+            </div>
+        }
+    </div>;
+
+    /// <summary>The side a column keeps to, as its cells' and heading's class: Auto, a number's end, the rest's start.</summary>
+    internal static string AlignClass(GridColumn column)
+    {
+        return column.Align switch
+        {
+            "start" => " tg-start", "center" => " tg-center", "end" => " tg-end", "left" => " tg-left", "right" => " tg-right",
+            _ => column.Kind is "int" or "fixed" or "float" or "percent" ? " tg-end" : " tg-start"
+        };
+    }
+
+    private static string HeadingClass(GridColumn column)
+    {
+        return "tg-heading" + (column.Frozen ? " tg-frozen" : "") + AlignClass(column) + (column.Class is { } c ? " " + c : "");
+    }
+
+    /// <summary>
+    ///     A heading's width and, frozen, its offset: its column's place — the page module's, in pixels (--tg-px&lt;i&gt;),
+    ///     else as tapline-grid.css works it out (--tg-x&lt;i&gt;).
+    /// </summary>
+    private static string HeadingStyle(GridColumn column, int index)
+    {
+        var width = index == 0 ? "width: " + Place(1) : $"width: calc({Place(index + 1)} - {Place(index)})";
+        return column.Frozen ? $"{width}; left: {(index == 0 ? "0" : Place(index))}" : width;
+    }
+
+    /// <summary>Where a column ends: the page module's place, in pixels, once it has measured; the stylesheet's till then.</summary>
+    private static string Place(int index)
+    {
+        return $"var(--tg-px{index}, var(--tg-x{index}))";
+    }
+
+    /// <summary>
+    ///     The component's style: its own (<see cref="Style" />), then the row height and the room each column shown has
+    ///     for its text (--tg-w&lt;i&gt;, a CSS length: its Width, or what its format writes, in ch) — from which
+    ///     tapline-grid.css works out each column's place in the cells' font, so the headings, and the skeleton of rows
+    ///     below them, stand where the rows will before the page's module has drawn any.
+    /// </summary>
+    private string GridStyle()
+    {
+        var style = new System.Text.StringBuilder();
+        if (!string.IsNullOrWhiteSpace(Style)) style.Append(Style.TrimEnd().TrimEnd(';')).Append("; ");
+        style.Append("--tg-row-height: ").Append(RowHeight).Append("px");
+        for (var i = 0; i < _shown.Length; i++) style.Append("; --tg-w").Append(i).Append(": ").Append(_shown[i].Width);
+        return style.ToString();
+    }
+
+    /// <summary>The frozen columns shown: the first, so many of them.</summary>
+    private int Frozen => _shown.TakeWhile(c => c.Frozen).Count();
+
+    /// <summary>
+    ///     The body's style: where the frozen columns end (--tg-frozen-x), from the first paint — a placeholder's bar split
+    ///     there, the skeleton's before the module draws a row too. (The module sets no style on the body: its are the
+    ///     grid element's.)
+    /// </summary>
+    private string? BodyStyle()
+    {
+        return Frozen is > 0 and var frozen ? $"--tg-frozen-x: {Place(frozen)}" : null;
+    }
+
+    /// <summary>A heading's arrow: its way in the sort; the source's own order's, muted, given no sort; else none.</summary>
+    private string Arrow(GridColumn column, int rank)
+    {
+        if (rank > 0) return _sort[rank - 1].Descending ? "▼" : "▲";
+        return Natural(column) is { } natural ? natural.Descending ? "▼" : "▲" : "";
+    }
+
+    private string SortLabel(GridColumn column, int rank)
+    {
+        if (rank == 0 && Natural(column) is { } natural)
+            return $"{column.Label}: the source's own order, {(natural.Descending ? "descending" : "ascending")}";
+        if (rank == 0) return $"{column.Label}: sort by it";
+        var way = _sort[rank - 1].Descending ? "descending" : "ascending";
+        return _sort.Count == 1 ? $"{column.Label}: sorted {way}" : $"{column.Label}: sorted {way}, {rank} of {_sort.Count}";
+    }
+
+    private static string SortHint(int rank)
+    {
+        return rank == 0 ? "Sort by this (shift-click: add it to the sort)" : "Click: sort by this alone; shift-click: reverse it, or take it out";
+    }
+
+}

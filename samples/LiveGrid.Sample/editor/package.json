@@ -1,0 +1,24 @@
+{
+  "name": "livegrid-condition-editor",
+  "private": true,
+  "description": "The alerts panel's SQL condition editor (the ChalkQL Blotter sample's, copied whole): CodeMirror 6, bundled once into wwwroot/condition-editor.js, which is committed, so the sample needs no Node to run.",
+  "license": "Elastic-2.0",
+  "scripts": {
+    "build": "esbuild condition-editor.js --bundle --minify --format=iife --legal-comments=eof --target=es2020 --outfile=../wwwroot/condition-editor.js"
+  },
+  "devDependencies": {
+    "@codemirror/autocomplete": "6.20.3",
+    "@codemirror/commands": "6.11.1",
+    "@codemirror/lang-sql": "6.10.0",
+    "@codemirror/language": "6.13.1",
+    "@codemirror/lint": "6.9.7",
+    "@codemirror/state": "6.7.6",
+    "@codemirror/view": "6.43.14",
+    "@lezer/highlight": "1.2.5",
+    "esbuild": "0.28.2"
+  },
+  "overrides": {
+    "@codemirror/autocomplete": "6.20.3",
+    "@codemirror/view": "6.43.14"
+  }
+}

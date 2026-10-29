@@ -2,8 +2,8 @@
 
 ## Verification
 
-`dotnet run --project tests/Tapline.Tests` (186 tests; `TAPLINE_TEST=<part of a name>` runs only those,
-`TAPLINE_TEST_REPEAT=n` each n times), then `node tests/js/test.mjs` (67 tests, using the fixtures the C# run writes).
+`dotnet run --project tests/Tapline.Tests` (207 tests; `TAPLINE_TEST=<part of a name>` runs only those,
+`TAPLINE_TEST_REPEAT=n` each n times), then `node tests/js/test.mjs` (72 tests, using the fixtures the C# run writes).
 Nothing to install for either: the JS tests use Node's own modules, and the SignalR JS client's side of the wire —
 how it encodes every control invocation tapline.js sends over a circuit, at each integer width, and how it reads a frame
 envelope — is captured in `tests/js/fixtures/signalr.json` (client 10.0.11), which the C# tests hold the library to.
@@ -89,7 +89,7 @@ Debug reports what the writes that found the ring full allocated. Highlights:
   replica; not asked, nothing is noted. Across a resync, the snapshot is told against the state last handed over, not
   the rows a failed record left (one key it changed, one it deleted and the snapshot put back); a watch's by member,
   through a group reset; through `replace` and a later view.
-- Grid (Tapline.Grid): a window kept by the server against an oracle worked out apart from the source (LINQ over the
+- Grid (Tapline.Grid, the session): a window kept by the server against an oracle worked out apart from the source (LINQ over the
   rows) — five seeds of random scrolling, jumps, arrivals, updates, deletes, sorts of up to three columns and filters
   of up to two: every window a run of the view's order at its ranks (its view position plus the rows above not shown),
   the rows table its rows alone, each as the source has it (its own order by key: at the live top, the order without
@@ -104,7 +104,8 @@ Debug reports what the writes that found the ring full allocated. Highlights:
   boundary (200: none; 199: thirty; no more until the page has applied them; no more than it fetches above; only as the
   reader scrolls up, none at rest however wide the pre-fetch; at the first
   row shown with a view's worth or more above, let in, held; fewer, or the live top asked for, live; racing up, as many
-  as it fetches above, three views at a time at the first row shown, or fewer above than the view holds, live). Its
+  as it fetches above, three views at a time at the first row shown, or fewer unseen above than the view holds, live —
+  those let in above the view counted unseen till the page shows them). Its
   session on the wire: each request answered by a rendezvous, the .NET client's replica the oracle's window; a view the
   window published doesn't hold (a jump, or a scroll outrunning the pre-fetch) answered view first (its view read and
   sent alone with the rendezvous, then the rows round it — the window's other rows left on the page until then, none
@@ -112,7 +113,12 @@ Debug reports what the writes that found the ring full allocated. Highlights:
   page has it (the tap says): the live top's view, a hold's view and a view below with the rows above counted, the
   window not widened meanwhile — its rest not read, a request whose view it holds answered as the window stands — then
   the last request's window; a new sort or filter numbered, a request asked in
-  the view before it dropped unread, the source told once of each view the grid is done with (a newer one answered,
+  the view before it dropped unread; held, a filter keeping the reader's place — the new view read about where the
+  page's first row sorts in it (failing the filter, from where it would be; passing, it first; a run's row, by its open
+  row), in a hold of its own, the page asking round it held still; past the view's end, its last rows; at the top,
+  held still (rows arriving above counted) till the pill; at the live top, the live top; a sort, the row first at its
+  rank in the new order; no place kept, the top; held, every row the window holds leaving the view, read about the
+  last of them where it sorts now, the rows above counted as they stand and the total never below none — the source told once of each view the grid is done with (a newer one answered,
   or the grid closed); its cadences on a clock moved by hand (live 100 ms, held 500 ms: a microsecond before,
   not read; on it, read); hidden, nothing read; passive, the status alone saying once that the source moved past the
   page's rows (no rows, no order, nothing more as it moves again), and back in sight, its window asked again, read at
@@ -130,15 +136,102 @@ Debug reports what the writes that found the ring full allocated. Highlights:
   reader rests, climbing on a clock moved by hand: held, once the page has asked with the last step and rested a second,
   its state sent, a step in the status alone (doubled, by no more than four fills) to the page's most, none sooner;
   its state waiting longer than a step takes, halved with the rows; back at the live top, afresh, four seconds a step.
-- LiveGrid (the component): its columns resolved against the row's fields — each where it is in the bytes Tapline sends,
+- Grid, nested rows: a row opened shows its run — its descendants, depth first — after it, read a slice at a time as
+  the window crosses it, against an oracle worked out apart from the source (generated trees of up to four levels, a
+  chain thirty-two deep, a run of a million rows). The open rows placed where a read found them, their runs as last
+  read: a row of the view after the runs open above it, a view position a row of the view or of a run. Live, the run
+  after its row, the total counting it, arrivals pushing both down, by key too (the order's header and its runs); the
+  window anywhere in a million rows' run, a slice read and no more; held in it, the run growing or shrinking at its head,
+  or a million and two rows closed above, every position moving and the page's first row drawn where it was; from the
+  live top, held on a run's row, kept there with four arrived above; its open row closed, drawn where that row was.
+  The open rows as a session remembers them: past its most, one opened forgets the least recently used (opened, or
+  held by the window), never one the window holds. Every row open: the window's rows open, their runs counted as read
+  (the total at least so many, growing as the reader goes; runs coming to be counted above the page's first row
+  moving it, its row where it's drawn); a row closed, a closed run on the wire; a million rows' run read a few rows
+  first, then by slice; the runs counted bounded; every row closed again. Six seeds of scrolling, jumps, rows opened
+  and closed (in the window and anywhere), every row opened and closed, orders arriving, changing and going, runs
+  growing and shrinking, sorts and filters (held, a filter alone keeping the place), the last two with three
+  remembered at most and the runs counted bounded: every window a run of the view as drawn, each row at its depth and
+  open on the wire as it is, its first row where the view has it less the rows not shown above and the runs above it
+  the window doesn't know of, exactly (1,800 windows). On the wire, through the session: opened and
+  closed at once, the .NET client's replica (verified) the view as drawn; three remembered at most, a fourth forgetting
+  the least recently used out of the window (above it, the page's rows kept where they're drawn); every row open, one
+  closed on the wire, then every row closed. Held in a million
+  rows' run, 10,000 answers on the window's way to the wire: 0 B.
+- Grid, store and stream (`StoreAndStream`, Tapline.Grid.Provider): an append-only store in memory, its pages laid over with what the stream
+  sent that it hasn't reached, against the truth worked out apart. The stream ahead of the store and behind it, in four
+  views, a view keeping a key while the store's row of it last passed (the blotter's rule): each key once at its newest,
+  ranked and counted exactly once a recheck has read the store's rows (a read from a rank moving where it reads the store
+  from); a key the stream alone has found about it; one landed after the store was found without it, counted once. The
+  state tail forgotten by the store's watermark: read from pages, asked of the store once a haircut at most when none
+  has said lately and the tail is getting old; rechecks asked by reads, once a Recheck at most, none with no reads; a read under way keeping what its store reads may
+  lack, so it shows a version landed meanwhile, not the store's older one. The catch-up: changes evaluated by every
+  view's filter, then published with the tail; filters answering later (held) leave what was sent unpublished, reads
+  waiting for what was sent before them, a view asked for meanwhile opened after; an order leaving a view, its store row
+  past a recheck's reach, kept as the store counts it (an estimate), then, landed and read again, counted out exactly;
+  a filter failed, its view's next read refused and the one after opening it again. Past the tail's cap, the oldest row pruned and
+  reads served, the pruned key as the store has it; the store a haircut past it, the grids told to read again (no batch
+  sent), the truth. Sized without counting: a page short of its limit counting the view, nothing asked of the store;
+  past it the store's size, asked once; a store that can't say, at least the rows seen; about a row near the top, its
+  place counted from the rows read back, far down the store's. A read's memory budget carried by each statement it makes, from a rank and about a key; a
+  statement refused past it, the read refused saying why, its rows none. The gap fill: a version written as the grid subscribed, which the stream never sends, taken
+  as if streamed, the grid told. The event log kept only while a view asks (none otherwise: one tail), at most its
+  versions, back its reach. Four seeds of versions streamed in order and landed out of stamp order within the haircut
+  (the store behind, ahead, stalled; two seeds' filters answering later; the even seeds' windows kept by the stream, the
+  odd's every read the store's), reads from ranks, about rows and about keys: every page exactly what the source can
+  know (each key at the newer of the versions sent and landed, but those the store holds a version of the stream hasn't
+  sent), in order, no key twice; quiet, every page the truth's at its ranks. Kept windows: the live top and a page held
+  below it, forty batches streamed — every page the truth's, placed, the store asked nothing; read again past a
+  window's edge; a held window's place drifting by changes it can't place (an estimate), and a version written to the
+  store directly, healed by a refresh off a read's path (the grids told, placed by the store's count); a window of final
+  rows read again while the store's clock stands, settled once it moves on (the store's judgment); a window from the top
+  made about a row near it, the store's rows before the row in it; let go with its view, idle, past the policy's rows,
+  and all when the tail prunes; past a view's own rows (a session's share), its least recently read let go, the one
+  read kept and another view's untouched, what each view keeps told apart; the rows held counted once each throughout,
+  every view's and in all, whatever joined, grew or went; once the source is closed, a read refused saying so, not thrown. The tests that hold a fresh read to exact counts, a
+  statement's budget or a read under way read the store each time (`Windows = None`). Warm, 10,000 steps of a version
+  streamed and landed, the live top and a page about a row read, every read a kept window's: 0 B (optimised).
+- Grid over ChalkQL (Tapline.Grid.ChalkQL), in a project of its own, as it starts ChalkQL's planner (a Java 21 sidecar):
+  `dotnet run --project tests/Tapline.Grid.ChalkQL.Tests` (5 tests). The store's pages as ChalkQL statements over a
+  database in process, the views' filters as standing views over the tail's tables: the stream ahead of the store and
+  behind it, in four views sorted and filtered by SQL with values bound — pages, ranks and counts exact, each view's
+  filter's state counted as its own; an oracle of
+  three seeds, every page exactly what the source can know; a filter ChalkQL can't prepare, one not ChalkQL's, a
+  parameter named as the grid's, a sort by no column, and a view past its state budget, each refused saying why; a deep
+  sorted jump run in an arena of the read's budget, refused past 64 KiB saying so, served within 256 MiB (twice, the
+  second from a warm arena); sized without counting, past a page the provider's estimate, with none at least the rows
+  seen, five ending in their page counted from it; stamps and fields of DateTime (UTC) bound as the TIMESTAMP wall clocks ChalkQL's
+  tables hold — the gap fill and a recheck reading the versions since a stamp, pages sorted by a time from a rank and
+  about a key, a filter on a time over the store and the tail — each the truth's, nothing refused; rows that never change
+  (fills, trades: no version, one table their current rows and their versions), streamed ahead of the store, sent twice
+  and landed — each once, counted, filtered alike, the tail let go once the store is past them.
+- LiveGrid (the component, Tapline.Grid.Blazor): its columns resolved against the row's fields — each where it is in the bytes Tapline sends,
   laid out by the runtime (two bools side by side, not as marshalled) and read back as written, its kind from its type
-  — and every configuration that can't work refused, saying why; keys as the page holds them and back; text written
-  as the page reads it; rendered statically, refused in its place with the render mode to give it (HtmlRenderer); a
+  — and every configuration that can't work refused, saying why (two expanders among them, or a field saying which rows
+  open that isn't a count or a bool); the expander's column with room for its chevron and a level; keys as the page holds
+  them and back; text written
+  as the page reads it; rendered statically, refused in its place with the render mode to give it (HtmlRenderer); its
+  columns as a chooser anywhere on the page shows them (`ILiveGridColumns`, `LiveColumnChooser`) — shown at first as
+  their `Visible` says, shown or hidden by name, the last shown kept, the chooser's ticks as they are; a
   heading's clicks cycling its sort (ascending or descending first, then back to the source's own order), shift-clicks
   within a sort by several; the first window it reads before the page asks, from the body's height (the view and a
-  quarter ahead, as the page's module asks first). In a browser: `dotnet run --project samples/LiveGrid.Sample` (http://localhost:5970).
+  quarter ahead, as the page's module asks first). In a browser: `dotnet run --project samples/LiveGrid.Sample` (http://localhost:5970;
+  its database PostgreSQL 16 or later, started from the installation found, or `--store memory`).
+- Alerts (Tapline.Alerts), apart from grids (neither references the other): rules of one shape — the same source,
+  condition and trigger — in two audiences, one evaluation and one source, each page's subscription to it at its own
+  rule's throttle (`Tap.MinInterval`); fired, the shape's count up by the rows, its latest row the last, a thousand
+  firings one value; how far an audience presented a rule, the most any page says and never past the count; a rule
+  renamed or throttled anew keeps its place, one reshaped or added starts from the count as it stands; rules refused
+  with their reasons (no name, a throttle or a trigger out of range, the evaluator's word) and past the caps (rules,
+  shapes, audiences); an audience unattended past the keep-for time let go, its shapes with it; a page opened at the
+  desk's time; the inbox's row and a shape's value 105 and 192 bytes, their texts cut at a character's boundary and
+  flagged. JS (tapline-alerts.js, in Node): both read as .NET lays them out (the fixture); an audience's alerts — each
+  rule's shape past what its audience presented, presented once and said back, sounded unless muted, away if its
+  shape last fired before the page opened (said in one line), a rule's shape subscribed again only when its tap
+  changes, another page's presenting honoured. In a browser: the LiveGrid sample's bell.
 - JS, the grid's page body (tapline-grid.js), in Node: scrolling scaled past the safe height (the thumb at 90 % shows
-  90 %, the bottom the last row; the wheel by rows, the row standing through the browser's rounding); the pre-fetch's
+  90 %, the bottom the last row; the wheel by rows, the row standing through the browser's rounding); the columns'
+  places in pixels (a width's ch, em and rem from the font's measures, as WebKit zoomed needs them); the pre-fetch's
   steps at each boundary on a fake clock (150 ms and 500 ms medians, hold-backs of 30 s doubling to 5 min); a fling's
   lead (as mip-chart projects a pan), and a steady pace's, stepped scrolling included, covering an answer's trip (from
   setting off after rest, or turning back; rows let in above moving its samples); the overscan, held either side as
@@ -146,7 +239,7 @@ Debug reports what the writes that found the ring full allocated. Highlights:
   live top on such a link: the pre-fetch's quarter view below); the first window before any overscan is told (the
   rows LiveGrid reads from the body's height); racing up at two views a second; requests held to an interval and by the
   answers outstanding (asked again, as a grid back in sight does, even the same window); the order value (by key, the header alone; its keys placed greatest first, as a .NET Guid or an
-  integer compares) and cells as the server writes them, and as LiveGrid describes its columns (unsigned, float32, DateTime ticks, enums of
+  integer compares; with runs, each after its open row, one above the window first, at their depths) and cells as the server writes them, and as LiveGrid describes its columns (unsigned, float32, DateTime ticks, enums of
   any size and sign, Guids, a percentage by place), by their .NET formats (a blotter's custom ones, a time's pattern, the
   default G), to significant figures (scientific past the most digits, the tooltip whole) — held to .NET's own output (`fixtures/formats.json`, the C# run's: some 130,000 numbers of every integer
   type, decimals, doubles and floats — edges, ties, random bits — by every standard format and custom ones, 5,000 times

@@ -1,0 +1,69 @@
+@namespace Tapline.Grid.Blazor
+@implements IDisposable
+@using Microsoft.AspNetCore.Components.Web
+
+@*
+    A grid's column chooser (ILiveGridColumns): every column, ticked while it's shown — a tick shows or hides one, the last
+    shown kept. The grid draws one below its rows (LiveGrid.ColumnChooser); a page puts one where it likes, given the grid,
+    its list opening below it. It opens and closes in the browser alone (a <details>), so a slow link carries nothing for
+    that; Escape closes it, and a click outside it (tapline-grid.js).
+*@
+<details class="@("tg-chooser" + (Class is null ? "" : " " + Class))">
+    <summary>Columns</summary>
+    @if (_grid?.ColumnChoices is { Count: > 0 } choices)
+    {
+        var last = choices.Count(c => c.Shown) == 1;
+        <div class="tg-chooser-list" role="group" aria-label="Columns shown">
+            @foreach (var choice in choices)
+            {
+                <label @key="choice.Name">
+                    <input type="checkbox" checked="@choice.Shown" disabled="@(last && choice.Shown)" @onchange="Change(choice.Name)"/>
+                    @choice.Label
+                </label>
+            }
+        </div>
+    }
+</details>
+
+@code {
+    private readonly Dictionary<string, Func<ChangeEventArgs, Task>> _changes = new(StringComparer.OrdinalIgnoreCase);
+    private ILiveGridColumns? _grid;
+
+    /// <summary>The grid whose columns it shows and hides: a LiveGrid (none yet: its button alone).</summary>
+    [Parameter]
+    public ILiveGridColumns? Grid { get; set; }
+
+    /// <summary>Its class, beside <c>tg-chooser</c>.</summary>
+    [Parameter]
+    public string? Class { get; set; }
+
+    protected override void OnParametersSet()
+    {
+        if (ReferenceEquals(_grid, Grid)) return;
+        if (_grid is not null) _grid.ColumnsChanged -= Changed;
+        _grid = Grid;
+        if (_grid is not null) _grid.ColumnsChanged += Changed;
+    }
+
+    /// <summary>
+    ///     A tick's change handler, one a column and kept: a render that changes nothing sends nothing (a new delegate each
+    ///     render is a new event handler, sent to the browser).
+    /// </summary>
+    private Func<ChangeEventArgs, Task> Change(string name)
+    {
+        return _changes.TryGetValue(name, out var change)
+            ? change
+            : _changes[name] = e => _grid?.ShowColumnAsync(name, e.Value is true) ?? Task.CompletedTask;
+    }
+
+    private void Changed()
+    {
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        if (_grid is not null) _grid.ColumnsChanged -= Changed;
+    }
+
+}

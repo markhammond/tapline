@@ -1,0 +1,189 @@
+@* The browser's alerts, as the blotter's: each a condition on a tab's rows, in SQL, with a sound and a throttle, firing as a
+   row comes to pass it, as one that passes it waits too long for the database, or as the rows that match in a sliding
+   window come to be enough, or none. A new one starts from this tab's filters as they are; each can be tried, muted or
+   removed. Rules alike, in any browser, are evaluated once (their shape), and each rule's alerts come no oftener than its
+   throttle, what fired meanwhile counted in. *@
+@using System.Globalization
+@using LiveGrid.Sample.Alerts
+@using Tapline.Alerts
+@inject AlertDesk Desk
+@inject Catalog Catalog
+
+<div class="alerts-panel" role="dialog" aria-label="Alerts">
+    <div class="alerts-head">
+        <b>Alerts</b>
+        <label title="A system notification for each alert while this page is in the background, if the browser allows it">
+            <input type="checkbox" checked="@Book.Notify" onchange="liveAlerts.setNotify(this.checked)"/>
+            Notify in the background
+        </label>
+        @if (!Book.SoundOn)
+        {
+            <button type="button" class="link-button" onclick="liveAlerts.enableSound()">Enable sound</button>
+        }
+    </div>
+
+    @if (Book.Rules.Count == 0)
+    {
+        <p class="muted">No alerts yet.</p>
+    }
+    else
+    {
+        <table class="alerts-list">
+            @foreach (var rule in Book.Rules)
+            {
+                var r = rule;
+                <tr>
+                    <td>
+                        <b>@r.Name</b>
+                        <div class="muted">@(Catalog.Of(r.Source)?.Title ?? r.Source):
+                            @if (string.IsNullOrWhiteSpace(r.Condition))
+                            {
+                                <span>every row</span>
+                            }
+                            else
+                            {
+                                <code>@r.Condition</code>
+                            }
+                        </div>
+                        @if (Book.Refused.GetValueOrDefault(r.Id) is { } notRunning)
+                        {
+                            <div class="alerts-refused" title="The alerts won't evaluate this rule">Not running: @notRunning</div>
+                        }
+                    </td>
+                    <td class="alerts-settings">
+                        <AlertWhen Trigger="r.Trigger" Changed="t => SaveTriggerAsync(r, t)"/>
+                        <select value="@r.Sound" aria-label="Sound" @onchange="e => SaveAsync(r with { Sound = (string)e.Value! })">
+                            @foreach (var (id, label) in AlertSounds.All)
+                            {
+                                <option value="@id">@label</option>
+                            }
+                        </select>
+                        @if (r.Trigger is not AlertTrigger.Counting)
+                        {
+                            <select value="@r.Throttle.TotalSeconds" aria-label="At most once every"
+                                    @onchange="e => SaveAsync(r with { Throttle = TimeSpan.FromSeconds(double.Parse((string)e.Value!, CultureInfo.InvariantCulture)) })">
+                                @foreach (var throttle in AlertChoices.Throttles)
+                                {
+                                    <option value="@throttle.TotalSeconds">at most every @AlertChoices.Span(throttle)</option>
+                                }
+                            </select>
+                        }
+                    </td>
+                    <td class="alerts-actions">
+                        <button type="button" class="icon-button" title="Hear it" aria-label="Hear @r.Name" onclick="liveAlerts.play('@r.Sound')">▶</button>
+                        <button type="button" class="link-button" @onclick="() => SaveAsync(r with { Muted = !r.Muted })">@(r.Muted ? "Unmute" : "Mute")</button>
+                        <button type="button" class="link-button" @onclick="() => RemoveAsync(r)">Remove</button>
+                    </td>
+                </tr>
+            }
+        </table>
+    }
+
+    @* An alert's condition is SQL: an example, before the editor that writes one. *@
+    <p class="alerts-how muted">
+        An alert fires on the rows that pass its condition, as they arrive, once the database is too far behind them, or on
+        how many pass within a sliding window: at least so many, or none. An order counts each time a newer version of it
+        passes. Write the condition in SQL over this tab's columns@(Tab.Paths.Count > 0 ? ", and along " + string.Join(", ", Tab.Paths.Select(p => p.Name + ".")) : ""),
+        or set the column funnels first and start from those: for example
+        <code>@(Tab.Overrides ? "client = 'CEDAR' AND side = 'Buy' AND qty >= 10" : "order.status = 'Partial' AND instrument LIKE 'BTC%'")</code>.
+        ChalkQL runs it.
+    </p>
+    <div class="alerts-new">
+        <span class="muted">New alert on @Tab.Title:</span>
+        <ConditionEditor Tab="Tab" @bind-Text="_condition" Placeholder="every row; ctrl-space for what may come next"/>
+        <input type="text" placeholder="@DefaultName()" @bind="_name" aria-label="Name"/>
+        <AlertWhen Trigger="_trigger" Changed="t => _trigger = t"/>
+        <select @bind="_sound" aria-label="Sound">
+            @foreach (var (id, label) in AlertSounds.All)
+            {
+                <option value="@id">@label</option>
+            }
+        </select>
+        <button type="button" class="icon-button" title="Hear it" aria-label="Hear the sound chosen"
+                onclick="liveAlerts.play(this.previousElementSibling.value)">▶</button>
+        @if (_trigger is not AlertTrigger.Counting)
+        {
+            <select @bind="_throttle" aria-label="At most once every">
+                @foreach (var throttle in AlertChoices.Throttles)
+                {
+                    <option value="@throttle.TotalSeconds">at most every @AlertChoices.Span(throttle)</option>
+                }
+            </select>
+        }
+        <button type="button" @onclick="AddAsync">Add</button>
+        @if (_refused is { } refused)
+        {
+            <div class="alerts-refused">Not added: @refused</div>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter][EditorRequired] public PageAlerts Book { get; set; } = default!;
+
+    [Parameter][EditorRequired] public Tab Tab { get; set; } = default!;
+
+    /// <summary>The tab's filters now, which a new alert takes.</summary>
+    [Parameter]
+    public ViewFilter? Filter { get; set; }
+
+    private string _name = "";
+    private string _condition = "";
+    private string? _refused;
+    private (Tab, ViewFilter?)? _from;
+    private string _sound = AlertSounds.Default;
+    private double _throttle = 3;
+    private AlertTrigger _trigger = AlertTrigger.Entering.Instance;
+
+    // The condition starts from the tab's filters, and again whenever they change.
+    protected override void OnParametersSet()
+    {
+        if (_from == (Tab, Filter)) return;
+        _from = (Tab, Filter);
+        _condition = Filter?.Condition() ?? "";
+        _refused = null;
+    }
+
+    // The name an alert takes if none is typed, shown in its box.
+    private string DefaultName()
+    {
+        var text = _condition.Trim();
+        var named = text.Length == 0 ? Tab.Overrides ? "Any order" : "Any fill"
+            : Filter is { } filter && text == filter.Condition() ? string.Join("; ", filter.Columns.Select(c => c.Describe()))
+            : text.Length <= 40 ? text : text[..39] + "…";
+        return _trigger is AlertTrigger.Entering ? named : $"{named}, {AlertChoices.Describe(_trigger)}";
+    }
+
+    /// <summary>Adds the alert, once ChalkQL has taken its condition; if not, says why, and adds nothing.</summary>
+    private async Task AddAsync()
+    {
+        if (Book.SaveAsync is not { } save) return;
+        var condition = Condition.Parse(Tab, _condition);
+        var rule = new AlertRule(Guid.NewGuid(), string.IsNullOrWhiteSpace(_name) ? DefaultName() : _name.Trim(), Tab.Name, condition.Text,
+            _trigger, TimeSpan.FromSeconds(_throttle), _sound, false);
+        _refused = condition.Errors.IsEmpty ? null : condition.Errors[0].Message;
+        _refused ??= _trigger is AlertTrigger.Counting count ? AlertChoices.Problem(count) : null;
+        _refused ??= await Desk.CheckAsync(rule);
+        if (_refused is not null) return;
+        _name = "";
+        await save([.. Book.Rules, rule]);
+    }
+
+    // A count out of range isn't kept: the rule keeps the one it had, and the count says what's wrong.
+    private Task SaveTriggerAsync(AlertRule rule, AlertTrigger trigger)
+    {
+        return trigger is AlertTrigger.Counting count && AlertChoices.Problem(count) is not null
+            ? Task.CompletedTask
+            : SaveAsync(rule with { Trigger = trigger });
+    }
+
+    private Task SaveAsync(AlertRule changed)
+    {
+        return Book.SaveAsync?.Invoke([.. Book.Rules.Select(r => r.Id == changed.Id ? changed : r)]) ?? Task.CompletedTask;
+    }
+
+    private Task RemoveAsync(AlertRule removed)
+    {
+        return Book.SaveAsync?.Invoke([.. Book.Rules.Where(r => r.Id != removed.Id)]) ?? Task.CompletedTask;
+    }
+}

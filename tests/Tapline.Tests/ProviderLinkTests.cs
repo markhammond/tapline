@@ -728,6 +728,12 @@ internal static partial class T
             var (router, outlet) = (rig.Router, rig.Outlet);
             for (var restart = 1; restart <= 3; restart++)
             {
+                // Gone only once it holds the router's link: its control stream served, not just opened (the router's
+                // side is up as its hello is written). A host disposed with that call still on its way in disposes its
+                // services under it, and the call fails resolving its service (an ObjectDisposedException, which gRPC
+                // logs as an error) — a host stopped first stops taking calls before it disposes anything.
+                await Until(() => provider.Channel is not null, () => { },
+                    $"restart {restart}: the process holding the router's link");
                 await app.DisposeAsync();
                 await Until(() => !rig.Remote.IsUp, () => { }, $"restart {restart}: the control stream down with the process");
                 provider = new LinkedProvider(ProviderInstance.Start("linked", endpoint));

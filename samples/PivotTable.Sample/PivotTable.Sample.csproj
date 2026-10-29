@@ -17,7 +17,7 @@
     <ItemGroup>
         <!-- ChalkQL: SQL over in-process data (its planner, Apache Calcite, runs in a Java 21 sidecar it starts itself);
              its POCO source holds the trades. Namespaces Chalk.*. -->
-        <PackageReference Include="ChalkQL" Version="0.6.1"/>
-        <PackageReference Include="ChalkQL.Sources" Version="0.6.1"/>
+        <PackageReference Include="ChalkQL" Version="0.6.3"/>
+        <PackageReference Include="ChalkQL.Sources" Version="0.6.3"/>
     </ItemGroup>
 </Project>

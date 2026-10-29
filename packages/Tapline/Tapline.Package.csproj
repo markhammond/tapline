@@ -3,12 +3,15 @@
         <PackageId>Tapline</PackageId>
         <PackageLicenseFile>LICENSE.txt</PackageLicenseFile>
         <PackageTags>$(PackageTags);aspnetcore;blazor;blazor-server;signalr;grpc;magiconion;authentication;passkeys;webauthn</PackageTags>
-        <Description>Tapline's router hosted in ASP.NET Core: real-time, last-mile fan-out of shared state and ordered messages, over a Blazor Server circuit or MagicOnion (gRPC); data providers in process or in their own; sign-in by modules (passkeys, passthrough, tickets, your own); the ops port, the router's viewer and the browser client (tapline.js).</Description>
+        <Description>Tapline's router hosted in ASP.NET Core: real-time, last-mile fan-out of shared state and ordered messages, over a Blazor Server circuit or MagicOnion (gRPC); data providers in process or in their own; sign-in by modules (passkeys, passthrough, tickets, your own); LiveGrid, a virtual data grid for live data, its source a database and its stream merged; alerts by shape; the ops port, the router's viewer and the browser client (tapline.js).</Description>
     </PropertyGroup>
     <ItemGroup>
         <ProjectReference Include="../../src/Tapline.AspNetCore/Tapline.AspNetCore.csproj" PrivateAssets="all"/>
         <ProjectReference Include="../../src/Tapline.BlazorRealtime/Tapline.BlazorRealtime.csproj" PrivateAssets="all"/>
+        <ProjectReference Include="../../src/Tapline.Grid.Provider/Tapline.Grid.Provider.csproj" PrivateAssets="all"/>
         <ProjectReference Include="../../src/Tapline.Grid/Tapline.Grid.csproj" PrivateAssets="all"/>
+        <ProjectReference Include="../../src/Tapline.Grid.Blazor/Tapline.Grid.Blazor.csproj" PrivateAssets="all"/>
+        <ProjectReference Include="../../src/Tapline.Alerts/Tapline.Alerts.csproj" PrivateAssets="all"/>
         <ProjectReference Include="../../src/Tapline.Authentication/Tapline.Authentication.csproj" PrivateAssets="all"/>
         <ProjectReference Include="../../src/Tapline.MagicOnion.Server/Tapline.MagicOnion.Server.csproj" PrivateAssets="all"/>
         <ProjectReference Include="../../src/Tapline.MagicOnion.Providers/Tapline.MagicOnion.Providers.csproj" PrivateAssets="all"/>
@@ -18,7 +21,8 @@
         <!-- The browser's scripts, served at _content/Tapline/ (as the projects serve them: their StaticWebAssetBasePath). -->
         <Content Include="../../src/Tapline.AspNetCore/wwwroot/tapline.js" Link="wwwroot/tapline.js"/>
         <Content Include="../../src/Tapline.BlazorRealtime/wwwroot/blazor-realtime.js" Link="wwwroot/blazor-realtime.js"/>
-        <Content Include="../../src/Tapline.Grid/wwwroot/tapline-grid.js" Link="wwwroot/tapline-grid.js"/>
-        <Content Include="../../src/Tapline.Grid/wwwroot/tapline-grid.css" Link="wwwroot/tapline-grid.css"/>
+        <Content Include="../../src/Tapline.Grid.Blazor/wwwroot/tapline-grid.js" Link="wwwroot/tapline-grid.js"/>
+        <Content Include="../../src/Tapline.Grid.Blazor/wwwroot/tapline-grid.css" Link="wwwroot/tapline-grid.css"/>
+        <Content Include="../../src/Tapline.Alerts/wwwroot/tapline-alerts.js" Link="wwwroot/tapline-alerts.js"/>
     </ItemGroup>
 </Project>

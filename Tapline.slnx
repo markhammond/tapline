@@ -4,6 +4,7 @@
         <Project Path="packages/Tapline.Client/Tapline.Client.Package.csproj" />
         <Project Path="packages/Tapline.Client.Opaque/Tapline.Client.Opaque.Package.csproj" />
         <Project Path="packages/Tapline.Wasm/Tapline.Wasm.Package.csproj" />
+        <Project Path="packages/Tapline.Grid.ChalkQL/Tapline.Grid.ChalkQL.Package.csproj" />
     </Folder>
     <Folder Name="/samples/">
         <Project Path="samples/ActivityFeed.Contracts/ActivityFeed.Contracts.csproj" />
@@ -31,11 +32,16 @@
         <Project Path="src/Tapline.MagicOnion.Server/Tapline.MagicOnion.Server.csproj" />
         <Project Path="src/Tapline.Wasm/Tapline.Wasm.csproj" />
         <Project Path="src/Tapline.BlazorRealtime/Tapline.BlazorRealtime.csproj" />
+        <Project Path="src/Tapline.Alerts/Tapline.Alerts.csproj" />
         <Project Path="src/Tapline.Grid/Tapline.Grid.csproj" />
+        <Project Path="src/Tapline.Grid.Blazor/Tapline.Grid.Blazor.csproj" />
+        <Project Path="src/Tapline.Grid.ChalkQL/Tapline.Grid.ChalkQL.csproj" />
+        <Project Path="src/Tapline.Grid.Provider/Tapline.Grid.Provider.csproj" />
     </Folder>
     <Folder Name="/tests/">
         <Project Path="tests/Opaque.Tests/Opaque.Tests.csproj" />
         <Project Path="tests/PivotTable.Tests/PivotTable.Tests.csproj" />
+        <Project Path="tests/Tapline.Grid.ChalkQL.Tests/Tapline.Grid.ChalkQL.Tests.csproj" />
         <Project Path="tests/Tapline.Tests/Tapline.Tests.csproj" />
     </Folder>
 </Solution>

@@ -73,6 +73,28 @@ h1 {
     flex: 1;
 }
 
+/* The tabs, as the blotter's: client orders and fills, as headings — the one shown underlined. */
+.tabs {
+    display: flex;
+    gap: 2px;
+}
+
+.tab {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--muted);
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    border-radius: 0;
+    padding: 2px 6px;
+}
+
+.tab[aria-selected="true"] {
+    color: var(--ink);
+    border-bottom-color: var(--accent);
+}
+
 .chip {
     display: inline-flex;
     gap: 6px;
@@ -493,6 +515,383 @@ button.primary {
     transition-delay: 250ms;
 }
 
-.orders .tg-foot {
+/* Alerts, as the blotter's: the bell, its panel, the splash that asks for sound, a notice of what fired while away, and a
+   bell on "new above" while alerts fired on the tab since its grid was held. */
+.bell {
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.4;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    flex: none;
+}
+
+.bell.silent { /* (not .muted: the page's grey text style) */
+    opacity: 0.7;
+}
+
+.icon-button {
+    position: relative;
+    border: none;
+    background: transparent;
+    color: var(--muted);
+    padding: 2px 5px;
+    display: inline-flex;
+    align-items: center;
+}
+
+.icon-button:hover {
+    color: var(--accent);
+}
+
+.alerts-wrap {
+    position: relative;
+    display: inline-flex;
+}
+
+.unseen-dot {
+    position: absolute;
+    top: 1px;
+    right: 2px;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #e5383b;
+    box-shadow: 0 0 0 1.5px var(--panel);
+}
+
+.alerts-panel {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    margin-top: 4px;
+    z-index: 20;
+    width: min(640px, calc(100vw - 32px));
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 10px 12px;
+    box-shadow: 0 4px 16px rgb(0 0 0 / 0.15);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    font-size: 12px;
+}
+
+.alerts-head {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.alerts-head label {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    color: var(--muted);
+}
+
+.alerts-list {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.alerts-list td {
+    padding: 4px 6px 4px 0;
     border-top: 1px solid var(--line);
+    vertical-align: top;
+}
+
+.alerts-actions {
+    white-space: nowrap;
+    text-align: right;
+}
+
+.alerts-list td.alerts-settings {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+
+.alerts-list code, .alerts-how code {
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 11px;
+}
+
+.alerts-new .condition-editor {
+    flex: 1 1 100%;
+    min-width: 0;
+}
+
+.alerts-refused {
+    flex: 1 1 100%;
+    color: var(--bad);
+}
+
+.alerts-how {
+    margin: 0;
+}
+
+.alerts-new {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+}
+
+.alerts-panel select, .alerts-panel input[type=text], .alerts-panel button:not(.icon-button):not(.link-button) {
+    font: inherit;
+    color: var(--ink);
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 2px 6px;
+}
+
+.alert-when {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px;
+}
+
+.alerts-panel input.count-number {
+    padding: 2px 4px;
+    width: 5.5em;
+}
+
+.alerts-panel input.count-number:invalid {
+    border-color: var(--bad);
+}
+
+.splash {
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgb(0 0 0 / 0.25);
+}
+
+.splash-card {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 18px 20px;
+    max-width: 360px;
+    box-shadow: 0 8px 32px rgb(0 0 0 / 0.25);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.splash-card p {
+    margin: 0;
+    color: var(--muted);
+}
+
+.splash-buttons {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+}
+
+/* A notice: in the bar (what fired while away, rules that couldn't be read), a line of its own, last; on the page (a link
+   that couldn't be opened, a read refused), a line above the grid. */
+.notice {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 10px;
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--accent) 10%, var(--panel));
+    border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--line));
+}
+
+.bar > .notice {
+    flex: 1 1 100%;
+    order: 10;
+}
+
+/* The bell on "new above": the Bell component's strokes, as a mask in the pill's colour (struck through, muted). */
+.frame.belled .tapline-grid .tg-new-above::before {
+    content: "";
+    display: inline-block;
+    width: 11px;
+    height: 11px;
+    margin-right: 4px;
+    vertical-align: -1px;
+    background: currentColor;
+    -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 11.5V7.2a4 4 0 0 1 8 0v4.3l1.2 1.3H2.8z'/%3E%3Cpath d='M6.6 14a1.5 1.5 0 0 0 2.8 0'/%3E%3C/svg%3E") center / contain no-repeat;
+    mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 11.5V7.2a4 4 0 0 1 8 0v4.3l1.2 1.3H2.8z'/%3E%3Cpath d='M6.6 14a1.5 1.5 0 0 0 2.8 0'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+
+.frame.belled.silent .tapline-grid .tg-new-above::before {
+    opacity: 0.7;
+    -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 11.5V7.2a4 4 0 0 1 8 0v4.3l1.2 1.3H2.8z'/%3E%3Cpath d='M6.6 14a1.5 1.5 0 0 0 2.8 0'/%3E%3Cpath d='M2 2l12 12'/%3E%3C/svg%3E");
+    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 11.5V7.2a4 4 0 0 1 8 0v4.3l1.2 1.3H2.8z'/%3E%3Cpath d='M6.6 14a1.5 1.5 0 0 0 2.8 0'/%3E%3Cpath d='M2 2l12 12'/%3E%3C/svg%3E");
+}
+
+/* The bar's copy and share, as the blotter's, and what they say for a moment once clicked; the link menu under the link. */
+.icon-button svg {
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.4;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.icon-button[data-said]::after {
+    content: attr(data-said);
+    position: absolute;
+    top: 100%;
+    right: 0;
+    margin-top: 4px;
+    z-index: 20;
+    pointer-events: none;
+    white-space: nowrap;
+    background: var(--ink);
+    color: var(--panel);
+    font-size: 11px;
+    padding: 3px 7px;
+    border-radius: 6px;
+}
+
+.share-wrap {
+    position: relative;
+    display: inline-flex;
+}
+
+.share-menu {
+    display: none;
+    position: absolute;
+    top: 100%;
+    right: 0;
+    margin-top: 4px;
+    z-index: 20;
+    flex-direction: column;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 4px;
+    box-shadow: 0 4px 16px rgb(0 0 0 / 0.15);
+    white-space: nowrap;
+}
+
+.share-wrap[data-open] .share-menu {
+    display: flex;
+}
+
+.share-menu button {
+    border: none;
+    background: transparent;
+    text-align: left;
+    padding: 5px 10px;
+    border-radius: 5px;
+}
+
+.share-menu button:hover, .share-menu button:focus-visible {
+    background: color-mix(in srgb, var(--accent) 12%, var(--panel));
+}
+
+/* The grid's column chooser (LiveColumnChooser), in the bar as the blotter's: "Columns" and a chevron, its list below. */
+.bar-chooser > summary {
+    list-style: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 4px;
+    color: var(--accent);
+}
+
+.bar-chooser > summary::-webkit-details-marker {
+    display: none;
+}
+
+.bar-chooser > summary::after { /* (the Chevron's, down; open, up) */
+    content: "";
+    width: 0.64em;
+    height: 0.64em;
+    background: currentColor;
+    -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 3.5 10.5 8 6 12.5'/%3E%3C/svg%3E") center / contain no-repeat;
+    mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 3.5 10.5 8 6 12.5'/%3E%3C/svg%3E") center / contain no-repeat;
+    transform: rotate(90deg);
+    transition: transform 0.12s ease;
+}
+
+.bar-chooser[open] > summary::after {
+    transform: rotate(-90deg);
+}
+
+.bar-chooser .tg-chooser-list {
+    z-index: 20;
+    max-height: min(32rem, calc(100vh - 6rem)); /* (every column of a tab, short of a short window) */
+    min-width: 140px;
+    gap: 4px;
+    padding: 8px 10px;
+    background: var(--panel);
+    border-color: var(--line);
+    font-size: 12px;
+}
+
+.bar-chooser .tg-chooser-list label {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+}
+
+/* A control that opens something: its chevron, pointing right, or down when Down; open, a quarter turn. */
+.chevron {
+    width: 0.64em;
+    height: 0.64em;
+    flex: none;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2.5;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    transition: transform 0.12s ease;
+}
+
+.chevron.open, .chevron.down {
+    transform: rotate(90deg);
+}
+
+.chevron.down.open {
+    transform: rotate(-90deg);
+}
+
+/* Under the grid, as the blotter's: what opens beneath it (the vital statistics), grey, then what the page acts with (a
+   burst, a stall, the streams out of order, an outage) — shown only while the pointer is on the page, or a button of them
+   has the keyboard's focus; always, where nothing hovers. */
+.link-button.disclosure {
+    color: var(--muted);
+    padding-left: 0.35em;
+}
+
+.actions {
+    display: inline-flex;
+    gap: 8px;
+    transition: opacity 0.15s;
+}
+
+main:not(:hover) .actions:not(:focus-within) {
+    opacity: 0;
+    pointer-events: none;
+}
+
+@media (hover: none) {
+    main .actions {
+        opacity: 1;
+        pointer-events: auto;
+    }
+}
+
+.bar.telemetry {
+    gap: 6px 10px;
+}
+
+.chip.stalled b {
+    color: var(--warn);
 }

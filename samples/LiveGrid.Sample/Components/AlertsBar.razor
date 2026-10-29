@@ -1,0 +1,215 @@
+@* The page's alerts (virtual-grid.md §15), as the blotter's: its browser's rules, kept in that browser's local settings and
+   evaluated by the server's desk — each distinct shape once, however many pages watch it — and presented here as Tapline
+   delivers them: each rule's shape no oftener than its throttle, what fired meanwhile counted in, beside the audience's
+   inbox (alerts.js, over tapline-alerts.js). The bell opens them; a red dot on it, alerts since they were looked at; a page
+   in the background is marked and, if allowed, notified. A browser makes no sound till someone clicks: asked once, if a
+   rule would sound. *@
+@implements IAsyncDisposable
+@using System.Globalization
+@using System.Text.Json
+@using LiveGrid.Sample.Alerts
+@using Tapline
+@using Tapline.Alerts
+@inject AlertDesk Desk
+@inject Catalog Catalog
+@inject IJSRuntime JS
+@inject IServiceProvider Services
+
+<span class="alerts-wrap">
+    <button type="button" class="icon-button" aria-expanded="@(_open ? "true" : "false")" @onclick="Toggle"
+            title="Alerts: a sound as a row comes to pass a condition, waits too long for the database, or as a count of them comes to be enough"
+            aria-label="@(Book.Unseen ? "Alerts, some unseen" : "Alerts")">
+        <Bell Muted="!Book.SoundOn && Book.Rules.Count > 0"/>
+        @if (Book.Unseen)
+        {
+            @* An alert has fired since the alerts were last looked at. *@
+            <span class="unseen-dot"></span>
+        }
+    </button>
+    @if (_open)
+    {
+        <AlertsPanel Book="Book" Tab="Tab" Filter="Filter"/>
+    }
+</span>
+@if (_unreadable is { } unreadable)
+{
+    <div class="notice">
+        Some saved alerts couldn't be read, and are left out: @unreadable
+        <button type="button" class="link-button" @onclick="() => _unreadable = null">Dismiss</button>
+    </div>
+}
+@if (_away is { } away)
+{
+    <div class="notice">
+        @away
+        <button type="button" class="link-button" @onclick="() => _away = null">Dismiss</button>
+    </div>
+}
+@if (_page is not null && !Book.Answered && !Book.SoundOn && Book.Rules.Count(r => !r.Muted) is var sounding and > 0)
+{
+    <div class="splash" role="dialog" aria-label="Sound alerts">
+        <div class="splash-card">
+            <b>This page sounds alerts</b>
+            <p>@(sounding is 1 ? "An alert is" : $"{sounding} alerts are") set to sound. The browser lets the page make sound once you allow it.</p>
+            <div class="splash-buttons">
+                <button type="button" class="primary" onclick="liveAlerts.enableSound()">Enable sound</button>
+                <button type="button" @onclick="() => Book.Answered = true">Not now</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter][EditorRequired] public PageAlerts Book { get; set; } = default!;
+
+    /// <summary>The tab shown, as alerts read it: a new alert is on it.</summary>
+    [Parameter][EditorRequired]
+    public Tab Tab { get; set; } = default!;
+
+    /// <summary>The tab's filters now, which a new alert starts from.</summary>
+    [Parameter]
+    public ViewFilter? Filter { get; set; }
+
+    private IJSObjectReference? _glue;
+    private DotNetObjectReference<AlertsBar>? _self;
+    private AlertPage? _page;
+    private string? _audience, _unreadable, _away;
+    private bool _open, _disposed;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || Services.GetService<Outlet>() is not { } outlet) return;
+        _glue = await JS.InvokeAsync<IJSObjectReference>("import", "./" + Assets["alerts.js"]);
+        var saved = await _glue.InvokeAsync<Saved>("load", "./" + Assets["_content/Tapline/tapline-alerts.js"]);
+        List<AlertRule> rules = [];
+        List<string> unreadable = [];
+        foreach (var kept in saved.Rules)
+            try
+            {
+                rules.Add((kept.Deserialize<SavedRule>(JsonSerializerOptions.Web) ?? throw new ArgumentException("an alert kept as nothing")).Load(Catalog));
+            }
+            catch (Exception refused) when (refused is ArgumentException or JsonException)
+            {
+                unreadable.Add(refused.Message);
+            }
+
+        (_audience, Book.Notify, Book.Rules) = (saved.Audience, saved.Notify, rules);
+        if (_disposed) return;
+        // Opened, then the rules set: a rule new to the audience starts from now, after the page was opened, so nothing it
+        // fires reads as having fired while away.
+        _page = Desk.Attach(_audience, outlet);
+        _page.Changed += ShapesChanged;
+        Book.Refused = await Desk.SetRulesAsync(_audience, rules);
+        if (_disposed) return;
+        _self = DotNetObjectReference.Create(this);
+        Book.SaveAsync = SaveAsync;
+        var sounds = AlertSounds.All.ToDictionary(s => s.Id, s => "./" + Assets[AlertSounds.Path(s.Id)]);
+        await _glue.InvokeVoidAsync("start", _self, new
+        {
+            inbox = _page.Inbox, shapes = _page.Shapes, since = _page.AttachedAt.ToUnixTimeMilliseconds(), sounds, notify = Book.Notify
+        });
+        _unreadable = unreadable.Count == 0 ? null : string.Join("; ", unreadable);
+        StateHasChanged();
+    }
+
+    /// <summary>Opens or closes the panel; opened, its alerts are seen.</summary>
+    private void Toggle()
+    {
+        _open = !_open;
+        Book.Looking = _open;
+        Book.Seen();
+    }
+
+    /// <summary>Escape (the page's): the panel closes, and the splash that asks for sound, as Not now.</summary>
+    public void Escape()
+    {
+        var splash = _page is not null && !Book.Answered && !Book.SoundOn && Book.Rules.Any(r => !r.Muted);
+        if (!_open && !splash) return;
+        (_open, Book.Looking) = (false, false);
+        if (splash) Book.Answered = true;
+        StateHasChanged();
+    }
+
+    /// <summary>The rules kept: on the desk (its refusals shown), and in the browser.</summary>
+    private async Task SaveAsync(IReadOnlyList<AlertRule> rules)
+    {
+        Book.Rules = rules;
+        Book.Refused = await Desk.SetRulesAsync(_audience!, rules);
+        if (_glue is not null) await _glue.InvokeVoidAsync("saveRules", (object)rules.Select(SavedRule.Of).ToArray()); // (one argument, the array)
+        StateHasChanged();
+    }
+
+    /// <summary>The rules changed (this page's, or another of the browser's): the page subscribes to their shapes as they are.</summary>
+    private void ShapesChanged()
+    {
+        _ = InvokeAsync(async () =>
+        {
+            if (_page is { } page && _glue is { } glue && !_disposed) await glue.InvokeVoidAsync("setShapes", page.Shapes);
+        });
+    }
+
+    /// <summary>An alert presented: as far as this page presented its rule's shape, said to the desk; its rows counted on its tab.</summary>
+    [JSInvokable]
+    public void Alerted(string rule, string source, long count, long fired)
+    {
+        if (Guid.TryParse(rule, out var id)) _page?.Presented(id, fired);
+        var unseen = Book.Unseen;
+        Book.Count(source, count);
+        if (Book.Unseen != unseen) StateHasChanged();
+    }
+
+    /// <summary>What fired while no page of this browser was open: said in one line.</summary>
+    [JSInvokable]
+    public void Away(Fired[] alerts)
+    {
+        _away = string.Create(CultureInfo.InvariantCulture,
+            $"While no page of this browser was open, alerts fired for {alerts.Sum(a => a.Count):N0} rows: ") +
+                string.Join(", ", alerts.GroupBy(a => a.Name).Select(g => string.Create(CultureInfo.InvariantCulture, $"{g.Key} ×{g.Sum(a => a.Count):N0}")));
+        StateHasChanged();
+    }
+
+    [JSInvokable]
+    public void SoundEnabled(bool on)
+    {
+        (Book.SoundOn, Book.Answered) = (on, true);
+        StateHasChanged();
+    }
+
+    [JSInvokable]
+    public void NotifyAllowed(bool on)
+    {
+        Book.Notify = on;
+        StateHasChanged();
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        _disposed = true;
+        Book.SaveAsync = null;
+        if (_page is not null)
+        {
+            _page.Changed -= ShapesChanged;
+            _page.Dispose();
+        }
+
+        try
+        {
+            if (_glue is not null)
+            {
+                await _glue.InvokeVoidAsync("stop");
+                await _glue.DisposeAsync();
+            }
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+
+        _self?.Dispose();
+    }
+
+    /// <summary>What the browser keeps: its audience's id (random, a bearer secret), its rules, and whether to notify.</summary>
+    private sealed record Saved(string Audience, JsonElement[] Rules, bool Notify);
+
+    /// <summary>A rule's alerts, as the page presented them.</summary>
+    public sealed record Fired(string Name, long Count, string Summary);
+}

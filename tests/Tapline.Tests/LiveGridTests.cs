@@ -9,6 +9,8 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.JSInterop;
 using Tapline.Grid;
+using Tapline.Grid.Blazor;
+using Tapline.Grid.Provider;
 
 /// <summary>
 ///     Tapline.Grid's component: LiveColumns resolved against their rows' fields — where each is in the bytes Tapline
@@ -143,6 +145,23 @@ internal static partial class T
             "figures of a hexadecimal");
         Says(Refused([.. Enumerable.Range(0, 65).Select(i => Col($"q{i}", c => c.Field = "Qty"))]), "it has 65 columns: at most 64",
             "more columns than the stylesheet places");
+        Says(Refused(Col("Qty", c => c.Expander = true), Col("Rate", c => c.Expander = true)),
+            "columns \"Qty\" and \"Rate\" both hold the rows' expanders: one may", "two expanders");
+        Says(Refused(Col("Qty", c => c.Expandable = "Count")), "Expandable is the column holding the rows' expanders'", "Expandable without the expander");
+        Says(Refused(Col("Qty", c => (c.Expander, c.Expandable) = (true, "Fills"))), "ColumnRow has no field \"Fills\" to say which rows can open",
+            "Expandable of no such field");
+        Says(Refused(Col("Qty", c => (c.Expander, c.Expandable) = (true, "Client"))), "a count of a row's descendants (an integer), or a bool",
+            "Expandable of text");
+
+        // Nested rows' columns resolved: the expander's, the field saying which rows can open, a run's rows left empty.
+        var (nested, nestedRefusal) = GridColumns<ColumnRow>.Resolve([
+            Col("Qty", c => (c.Expander, c.Expandable, c.Width) = (true, "Count", "9ch")),
+            Col("Rate", c => c.ForChildren = false), Col("Urgent", c => (c.Expander, c.Expandable) = (false, null))
+        ], CultureInfo.InvariantCulture);
+        Assert(nestedRefusal is null && nested[0] is { Expander: true, Expandable: { Size: 4, Unsigned: false, Float: false } } &&
+               nested[0].Width == "calc(9ch + 2 * var(--tg-indent, 1.25em))" && nested[1].ForChildren == false &&
+               nested[2] is { Expander: false, Expandable: null, ForChildren: null },
+            $"the expander's column with room for its chevron and a level, the field saying which rows open, a column left empty ({nestedRefusal})");
         Says(GridColumns<ColumnRow>.StampOf("Count").Refusal, "\"Count\" is a Int32: a time is a long of microseconds since 1970, or a DateTime",
             "a time that's an int");
         Says(GridColumns<ColumnRow>.StampOf("When").Refusal, "ColumnRow has no field \"When\"", "no such time field");
@@ -250,6 +269,87 @@ internal static partial class T
         Assert(html.Contains("role=\"alert\"") && html.Contains("show its rows") && html.Contains("rendered statically") &&
                html.Contains("@rendermode InteractiveServer"), $"rendered statically: refused in its place, saying why: {html}");
         Assert(!html.Contains("role=\"grid\""), "and no grid");
+    }
+
+    /// <summary>
+    ///     A grid's columns as a chooser anywhere on the page shows and hides them (ILiveGridColumns, LiveColumnChooser): every
+    ///     column in order, shown at first as its Visible says; shown or hidden by name, in any case, the last shown kept; the
+    ///     chooser's ticks as the choices are, the last shown not to be unticked, and its button alone till it has a grid.
+    /// </summary>
+    public static async Task LiveGridColumnChooser()
+    {
+        await using var services = new ServiceCollection().AddLogging().AddSingleton<IJSRuntime, NoScript>().BuildServiceProvider();
+        await using var renderer = new HtmlRenderer(services, NullLoggerFactory.Instance);
+        LiveGrid<long, ColumnRow>? grid = null;
+        await renderer.Dispatcher.InvokeAsync(() => renderer.RenderComponentAsync<ChooserHost>(ParameterView.FromDictionary(
+            new Dictionary<string, object?> { [nameof(ChooserHost.Captured)] = (Action<LiveGrid<long, ColumnRow>>)(g => grid = g) })));
+        string Choices() => string.Join(" ", grid!.ColumnChoices.Select(c => (c.Shown ? "+" : "-") + c.Name + ":" + c.Label));
+
+        Assert(Choices() == "+Qty:Qty -Rate:Rate +Count:Count", $"every column in order, shown as its Visible says: {Choices()}");
+        await grid!.ShowColumnAsync("rate", true);
+        Assert(Choices() == "+Qty:Qty +Rate:Rate +Count:Count", $"shown by name, in any case: {Choices()}");
+        await grid.ShowColumnAsync("Qty", false);
+        await grid.ShowColumnAsync("Count", false);
+        await grid.ShowColumnAsync("Rate", false);
+        Assert(Choices() == "-Qty:Qty +Rate:Rate -Count:Count", $"hidden, the last shown kept: {Choices()}");
+        await grid.ShowColumnAsync("Qty", true);
+        Assert(Choices() == "+Qty:Qty +Rate:Rate -Count:Count", $"and shown again: {Choices()}");
+
+        var html = await renderer.Dispatcher.InvokeAsync(async () => (await renderer.RenderComponentAsync<LiveColumnChooser>(ParameterView.FromDictionary(
+            new Dictionary<string, object?>
+            {
+                [nameof(LiveColumnChooser.Grid)] = new Choices([new LiveColumnChoice("a", "Alpha", false), new LiveColumnChoice("b", "Beta", true)]),
+                [nameof(LiveColumnChooser.Class)] = "mine"
+            }))).ToHtmlString());
+        Assert(html.Contains("<details class=\"tg-chooser mine\">") && html.Contains("<summary>Columns</summary>") &&
+               html.Contains("aria-label=\"Columns shown\""), $"a disclosure, its class beside tg-chooser: {html}");
+        Assert(System.Text.RegularExpressions.Regex.IsMatch(html, "<input type=\"checkbox\" />\\s*Alpha") &&
+               System.Text.RegularExpressions.Regex.IsMatch(html, "<input type=\"checkbox\" checked disabled />\\s*Beta"),
+            $"ticked as shown, the last shown not to be unticked: {html}");
+        var bare = await renderer.Dispatcher.InvokeAsync(async () => (await renderer.RenderComponentAsync<LiveColumnChooser>()).ToHtmlString());
+        Assert(bare.Contains("<summary>Columns</summary>") && !bare.Contains("tg-chooser-list"), $"no grid yet: its button alone: {bare}");
+    }
+
+    /// <summary>A page with a grid of three columns (one hidden at first), telling the test its grid.</summary>
+    private sealed class ChooserHost : ComponentBase
+    {
+        [Parameter] public Action<LiveGrid<long, ColumnRow>>? Captured { get; set; }
+
+        protected override void BuildRenderTree(Microsoft.AspNetCore.Components.Rendering.RenderTreeBuilder builder)
+        {
+            builder.OpenComponent<LiveGrid<long, ColumnRow>>(0);
+            builder.AddComponentParameter(1, nameof(LiveGrid<long, ColumnRow>.Source), new NaturalGrid<ColumnRow>(100, _ => default));
+            builder.AddComponentParameter(2, nameof(LiveGrid<long, ColumnRow>.Columns), (RenderFragment)(b =>
+            {
+                foreach (var (name, visible) in new[] { ("Qty", true), ("Rate", false), ("Count", true) })
+                {
+                    b.OpenComponent<LiveColumn>(0);
+                    b.SetKey(name);
+                    b.AddComponentParameter(1, nameof(LiveColumn.Name), name);
+                    b.AddComponentParameter(2, nameof(LiveColumn.Visible), visible);
+                    b.CloseComponent();
+                }
+            }));
+            builder.AddComponentReferenceCapture(3, r => Captured?.Invoke((LiveGrid<long, ColumnRow>)r));
+            builder.CloseComponent();
+        }
+    }
+
+    /// <summary>A grid's columns as a chooser reads them, given.</summary>
+    private sealed class Choices(IReadOnlyList<LiveColumnChoice> choices) : ILiveGridColumns
+    {
+        public IReadOnlyList<LiveColumnChoice> ColumnChoices => choices;
+
+        public Task ShowColumnAsync(string name, bool shown)
+        {
+            return Task.CompletedTask;
+        }
+
+        public event Action? ColumnsChanged
+        {
+            add { }
+            remove { }
+        }
     }
 
     private static LiveColumn Col(string name, Action<LiveColumn>? set = null)
