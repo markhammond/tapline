@@ -2,7 +2,7 @@
 
 ## Verification
 
-`dotnet run --project tests/Tapline.Tests` (207 tests; `TAPLINE_TEST=<part of a name>` runs only those,
+`dotnet run --project tests/Tapline.Tests` (213 tests; `TAPLINE_TEST=<part of a name>` runs only those,
 `TAPLINE_TEST_REPEAT=n` each n times), then `node tests/js/test.mjs` (72 tests, using the fixtures the C# run writes).
 Nothing to install for either: the JS tests use Node's own modules, and the SignalR JS client's side of the wire —
 how it encodes every control invocation tapline.js sends over a circuit, at each integer width, and how it reads a frame
@@ -191,6 +191,16 @@ Debug reports what the writes that found the ring full allocated. Highlights:
   every view's and in all, whatever joined, grew or went; once the source is closed, a read refused saying so, not thrown. The tests that hold a fresh read to exact counts, a
   statement's budget or a read under way read the store each time (`Windows = None`). Warm, 10,000 steps of a version
   streamed and landed, the live top and a page about a row read, every read a kept window's: 0 B (optimised).
+- Grid waits (`GridWaits`, Tapline.Grid.Provider), an alert evaluator's, on a manual clock over a store in memory: a
+  wait told at its threshold to the microsecond, not before, proved first (the store's newest stamp, then the key);
+  told again when a newer version is heard while it waits; let go past its last threshold, a version heard after
+  waiting afresh. Two anchors on one key (its stamp, and when it was placed), two deadlines; the watches changed while a
+  key waits, one kept not told again. Landed before its deadline, found by the lookup and not told; a haircut behind the
+  store's newest stamp, landed with no lookup; an older version landed alone, the wait moved on to the newer; a proof
+  the store refuses deferred, never told unproved, told once it answers. A trusted watch told at its deadline, the store
+  not asked, a confirmed one beside it proved; while a trusted watch is in force, every wait proved each second. Past
+  the cap, the oldest kept and the sink told how many went untracked; the store stalled for 10 s, the waits held at the
+  rate times the threshold (99). Warm, 10,000 versions heard and their passes run: 0 B (the passes optimised).
 - Grid over ChalkQL (Tapline.Grid.ChalkQL), in a project of its own, as it starts ChalkQL's planner (a Java 21 sidecar):
   `dotnet run --project tests/Tapline.Grid.ChalkQL.Tests` (5 tests). The store's pages as ChalkQL statements over a
   database in process, the views' filters as standing views over the tail's tables: the stream ahead of the store and
