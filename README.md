@@ -67,6 +67,17 @@ one circuit and kept in step. The server plays a MIDI arrangement and computes a
 ridges fill what bandwidth is left, blended so the motion stays smooth however few frames get through, and shown in time
 with the music. Cap the link and the picture thins out while the music plays on.
 
+## Playing Nicely with Orleans
+
+Tapline is the last mile, not the middle tier. [Orleans](https://github.com/dotnet/orleans) works in the middle tier:
+its grains keep the state and run the logic, every call for a grain going to its one activation, generally one request
+at a time. Its streams and observers fan out each and every event, and leave the browser to SignalR or the like.
+Tapline is selective: it carries that state the rest of the way, sending each subscriber only the latest value or a
+delta, at the pace of its own acknowledgements, so a slow one gets fewer, fuller deltas instead of a backlog.
+The grains sit behind your data provider, which decides who may subscribe, and to what.
+
+Orleans is the water main; Tapline runs the line to every tap.
+
 ## Quick start
 
 **Host the router** in a Blazor Server app (`Program.cs`):
