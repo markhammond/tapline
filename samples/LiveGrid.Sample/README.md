@@ -189,6 +189,40 @@ runs ahead. In exchange, the provider keeps:
 - **Approximate counting**: a read that comes back short has found the end; past it, PostgreSQL's plan estimates a
   view's size (`EXPLAIN`, the filter's values written in), and a row's place is counted (in memory, both are counted).
 
+### Disorder tolerance
+
+A stream and the database it feeds are rarely in step, and the grids don't wait for them to agree: each kind of disorder
+below is taken as it comes. The sample simulates each of them, as [The domain model](#the-domain-model) describes.
+
+- **The stream ahead of the database**, as when ingestion jobs write behind it: each read lays the stream's versions
+  over the database's rows, each order once, at the newest version either side knows. An order stays in a filtered view
+  while its newest version passes or the database's row of it last did, and leaves once the database, too, has a version
+  that doesn't pass.
+- **The database ahead of the stream**, a version written before it's sent: a read that reaches the database shows the
+  newer version, and the stream's copy, when it comes, is the same version and changes nothing.
+- **Late rows on the stream**, sent after rows made after them: a version older than one already known is dropped, so an
+  order never steps back. A late order is placed where it sorts, not at the top, and flashes from its own time rather
+  than from its arrival, so one later than a flash lasts doesn't flash at all.
+- **Versions landing out of their order**, the database holding an order's newer version before an older one:
+  `orders_current` takes a version only above its own, and the tail lets a version go only once the database's newest
+  stamp is a haircut past it.
+- **Stalls**, the database writing nothing for a while: the stream goes on, the tail holds what the database hasn't
+  landed, and the grids stay current. Past its bound, the tail lets its oldest rows go, shows those keys as the database
+  has them, and has the grids read again once the database has passed them.
+- **Versions in flight at the start**: a version written as the provider subscribed, which the stream never sends, comes
+  from the gap fill, a haircut later.
+- **Drift**: for the keys the stream has sent, continuous reconciliation learns the database's row about once a second
+  while grids read. A version written to the database directly shows wherever a read reaches the database, and in a kept
+  window at its next refresh.
+- **The sample's alerts** don't depend on the streams' order: they hear each row as the house writes it, and a wait for
+  the database runs from the oldest version not yet landed.
+
+What it can't tolerate is what the assumptions above rule out: a version landing more than a haircut out of order, one
+changed in place, a deletion, a key used again, or a stream that loses rows.
+
+To see it, turn on **Out of order**, then **Stall database 20 s**: the vital statistics count rows sent late and after
+the database, and show the database falling behind and catching up, while the grid stays current.
+
 ## The domain model
 
 > **Disclaimer:** Illustrative only.
