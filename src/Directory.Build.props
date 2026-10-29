@@ -2,7 +2,7 @@
     <!-- What every Tapline assembly shares. None is a package of its own: the projects in packages/ bundle them, four
          packages in all, versioned together. -->
     <PropertyGroup>
-        <Version>0.1.0</Version>
+        <Version>0.1.1</Version>
         <Authors>Mark Hammond</Authors>
         <Copyright>Copyright © 2026 Mark Hammond</Copyright>
         <RepositoryUrl>https://github.com/markhammond/tapline</RepositoryUrl>
