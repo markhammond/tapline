@@ -37,7 +37,7 @@ public sealed record PivotShape
     /// <summary>The statement, as asked for.</summary>
     public required string Sql { get; init; }
 
-    /// <summary>What it binds, as ChalkQL inferred them: <c>@now</c> (the time it runs, each run), and the lists bound.</summary>
+    /// <summary>What it binds, as ChalkQL inferred them: <c>@now</c> (the engine's clock, as of the rows read), and the lists bound.</summary>
     public required IReadOnlyList<ShapeParameter> Parameters { get; init; }
 
     /// <summary>What it answers, column by column, as ChalkQL prepared it: one row per cell, totals included.</summary>
