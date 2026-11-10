@@ -13,9 +13,11 @@ builder.Services.AddBlazorRealtime(); // the circuit transport, and the router i
 
 var app = builder.Build();
 Listening.WarnWhenStarted(app); // "This sample's sign-in is a demo… Listening on …"
+ContentSecurity.Use(app); // what may run in the page, which holds the password until OPAQUE has used it
 app.UseAntiforgery();
 app.MapStaticAssets();
-app.MapRazorComponents<App>().AddInteractiveServerRenderMode();
+app.MapRazorComponents<App>() // (framing: ContentSecurity's policy, frame-ancestors 'none', not Blazor's own 'self')
+    .AddInteractiveServerRenderMode(o => o.ContentSecurityFrameAncestorsPolicy = null);
 app.MapBlazorRealtime();
 SignInDemo.Map(app); // the demo realm: passkeys and passwords (OPAQUE), in memory; and "members", which requires a sign-in
 app.Run();

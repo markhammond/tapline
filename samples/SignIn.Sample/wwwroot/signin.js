@@ -17,7 +17,7 @@ export function createSignIn(tapline, passwords) {
 
     return {
         attach(form) {
-            const user = form.querySelector('[name=user]'), password = form.querySelector('[name=password]');
+            const user = form.querySelector('[name=user]'), password = form.querySelector('#signin-password'); // (nameless: never submitted)
             log = form.querySelector('.log');
             const name = () => user.value.trim() || null;
             const run = (what, act) => async () => {
