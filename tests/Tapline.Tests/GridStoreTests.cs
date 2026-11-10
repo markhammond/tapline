@@ -1407,8 +1407,13 @@ internal static partial class T
         // event log by its reach — and, optimised, the live top read, and every fourth step a page about a row below it.
         // 10,000 steps: nothing allocated (the test's store, stream and filter allocate nothing either).
         var clock = new ManualClock();
+        // No rechecks: they run on the thread pool, which a loaded machine runs late — the tail left untrimmed meanwhile, and
+        // reads waiting on the catch-up one starts, allocating. They have tests of their own.
         var store = new FlatStore(new AppendOnlyStorePolicy
-            { Haircut = TimeSpan.FromMilliseconds(50), History = TimeSpan.FromSeconds(1), MaxHistoryRows = 1_000 });
+        {
+            Haircut = TimeSpan.FromMilliseconds(50), History = TimeSpan.FromSeconds(1), MaxHistoryRows = 1_000,
+            Recheck = TimeSpan.FromHours(1)
+        });
         var stream = new LogStream();
         using var source = new StoreAndStream<long, LogRow, long>(store, stream, new FlatRows(), new LogScopes(), clock);
         using var keep = source.KeepHistory(TimeSpan.FromSeconds(1));
