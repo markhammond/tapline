@@ -46,8 +46,9 @@ public sealed class AlertDeskOptions
 ///     A page presents the difference between the count it last presented and its shape's, and says back what it
 ///     presented (<see cref="AlertPage.Presented" />): the rule's row keeps the most any page says, so a page opened later
 ///     presents only what fired meanwhile, its first records saying it. A rule added, or its shape changed, starts from
-///     the count as it stands. An audience no page has open is kept for <see cref="AlertDeskOptions.KeepFor" />, its rules
-///     evaluated, then let go. Rules per audience, distinct shapes and audiences are capped, and a rule over a cap refused,
+///     the count as it stands; each source is numbered, and the row says the number of the shape its presented counts,
+///     so a page compares a count only with a row of the same shape. An audience no page has open is kept for
+///     <see cref="AlertDeskOptions.KeepFor" />, its rules evaluated, then let go. Rules per audience, distinct shapes and audiences are capped, and a rule over a cap refused,
 ///     saying so: so nothing fired is ever let go. Every clock it reads is one <see cref="TimeProvider" />.
 /// </remarks>
 public sealed class AlertDesk : IAlertSink, IAsyncDisposable
@@ -62,6 +63,8 @@ public sealed class AlertDesk : IAlertSink, IAsyncDisposable
     private readonly SemaphoreSlim _watching = new(1, 1); // (one WatchAsync at a time, the last set in force)
     private bool _disposed;
     private IReadOnlyDictionary<AlertWatch, string> _refused = new Dictionary<AlertWatch, string>();
+    private long _sets; // (each SetRulesAsync's place in the order of calls)
+    private uint _shapes; // (the last shape's number: each source's its own)
 
     public AlertDesk(IAlertEvaluator evaluator, AlertDeskOptions? options = null, TimeProvider? time = null)
     {
@@ -115,10 +118,13 @@ public sealed class AlertDesk : IAlertSink, IAsyncDisposable
     ///     <paramref name="audience" />'s rules, from now: each checked (<see cref="CheckAsync(AlertRule, CancellationToken)" />) and kept, or refused —
     ///     the refusals, by rule. A rule kept with the same shape keeps how far it was presented; one new, or of another
     ///     shape, starts from its shape's count as it stands. Its pages' subscriptions follow (<see cref="AlertPage.Changed" />).
+    ///     Sets are kept in the order they were called: one whose checks end after a later set's was kept (a page closed
+    ///     while the evaluator checked its rules, the next page's set quicker) is not kept, and says only its own refusals.
     /// </summary>
     public async ValueTask<IReadOnlyDictionary<Guid, string>> SetRulesAsync(string audience, IReadOnlyList<AlertRule> rules,
         CancellationToken cancellationToken = default)
     {
+        var order = Interlocked.Increment(ref _sets);
         var refused = new Dictionary<Guid, string>();
         var checks = new Dictionary<AlertWatch, string?>();
         var kept = new List<AlertRule>();
@@ -158,6 +164,9 @@ public sealed class AlertDesk : IAlertSink, IAsyncDisposable
 
                 _audiences[audience] = held = new Audience(audience, _time.GetUtcNow());
             }
+
+            if (order < held.Order) return refused; // (a later set kept already: this one's out of date)
+            held.Order = order;
 
             // Shapes past the cap: those no other rule has already, the rules last in order first to go.
             var shapes = ShapesHeld(except: held);
@@ -238,11 +247,14 @@ public sealed class AlertDesk : IAlertSink, IAsyncDisposable
         lock (_gate) return _audiences.GetValueOrDefault(audience)?.Inbox;
     }
 
-    /// <summary>What a page presented of a rule: the rule's row keeps the most any page says, never past its shape's count.</summary>
-    internal void Presented(Audience audience, Guid rule, long count)
+    /// <summary>
+    ///     What a page presented of a rule's shape: the rule's row keeps the most any page says, never past its shape's
+    ///     count; said of a shape the rule no longer has, nothing.
+    /// </summary>
+    internal void Presented(Audience audience, Guid rule, uint shape, long count)
     {
         lock (_gate)
-            if (audience.Rules.TryGetValue(rule, out var state) && count > state.Presented)
+            if (audience.Rules.TryGetValue(rule, out var state) && state.Feed.Number == shape && count > state.Presented)
             {
                 state.Presented = Math.Min(count, state.Feed.Fired);
                 audience.Write(state);
@@ -305,7 +317,7 @@ public sealed class AlertDesk : IAlertSink, IAsyncDisposable
     /// <summary>A shape's source: made for its first rule.</summary>
     private Feed FeedOf(AlertWatch watch)
     {
-        if (!_feeds.TryGetValue(watch, out var feed)) _feeds[watch] = feed = new Feed();
+        if (!_feeds.TryGetValue(watch, out var feed)) _feeds[watch] = feed = new Feed(++_shapes);
         return feed;
     }
 
@@ -347,9 +359,13 @@ public sealed class AlertDesk : IAlertSink, IAsyncDisposable
         };
     }
 
-    /// <summary>A shape's source: its running count, when it last fired, its latest row — published at every firing.</summary>
+    /// <summary>
+    ///     A shape's source: its number, its running count, when it last fired, its latest row — published at every firing.
+    ///     The number says whose count a row's presented is: a rule whose shape changes counts another source's.
+    /// </summary>
     internal sealed class Feed
     {
+        public readonly uint Number;
         public readonly LastValueSource Source = new() { Label = $"alerts/shape/{Guid.CreateVersion7():N}" };
         public long Fired;
         private AlertFeedValue _value;
@@ -357,8 +373,9 @@ public sealed class AlertDesk : IAlertSink, IAsyncDisposable
         /// <summary>The value as last published.</summary>
         public AlertFeedValue Value => _value;
 
-        public Feed()
+        public Feed(uint number)
         {
+            _value.Shape = Number = number;
             Publish(); // (a first state, nothing fired: a page subscribing has its count from the start)
         }
 
@@ -386,6 +403,7 @@ public sealed class AlertDesk : IAlertSink, IAsyncDisposable
         public readonly Dictionary<Guid, RuleState> Rules = [];
         public readonly string Topic = $"alerts/{Guid.CreateVersion7():N}"; // (as a page's outlet names its watch: no word of the audience's id, a bearer secret)
         public DateTimeOffset LeftAt = since;
+        public long Order; // (the place of the set of its rules last kept, in the order SetRulesAsync was called)
 
         /// <summary>The rules kept, from now: those of the same shape keep how far they were presented, the rest start from their shape's count.</summary>
         public void Set(List<AlertRule> rules, Func<AlertWatch, Feed> feedOf)
@@ -432,7 +450,7 @@ public sealed class AlertDesk : IAlertSink, IAsyncDisposable
 
         public AlertRow Row()
         {
-            var row = new AlertRow { Presented = Presented, Muted = Rule.Muted ? (byte)1 : (byte)0 };
+            var row = new AlertRow { Presented = Presented, Muted = Rule.Muted ? (byte)1 : (byte)0, Shape = Feed.Number };
             AlertText.Write(row.Source, Rule.Source);
             AlertText.Write(row.Name, Rule.Name);
             AlertText.Write(row.Sound, Rule.Sound);
@@ -497,12 +515,13 @@ public sealed class AlertPage : IDisposable
     }
 
     /// <summary>
-    ///     The page presented <paramref name="rule" />'s alerts up to <paramref name="count" />, its shape's running count:
-    ///     every page of the audience presents from there; the row keeps the most any page says.
+    ///     The page presented <paramref name="rule" />'s alerts up to <paramref name="count" />, the running count of its
+    ///     shape numbered <paramref name="shape" /> (<see cref="AlertFeedValue.Shape" />): every page of the audience
+    ///     presents from there; the row keeps the most any page says. Said of a shape the rule has since left, nothing.
     /// </summary>
-    public void Presented(Guid rule, long count)
+    public void Presented(Guid rule, uint shape, long count)
     {
-        _desk.Presented(_audience, rule, count);
+        _desk.Presented(_audience, rule, shape, count);
     }
 
     /// <summary>A rule's subscription to its shape (for tests): none if the page has none for it.</summary>

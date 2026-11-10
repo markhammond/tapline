@@ -10,7 +10,8 @@ namespace Tapline.Alerts;
 ///     count of the rows it has fired since it began, when it last fired, and its latest row's key and what it was.
 ///     Published at every firing; each subscription takes it no oftener than its rule's throttle (Tapline's
 ///     <c>Tap.MinInterval</c>: "alerts can be conflated … debounced according to minimum interval"), whatever fired
-///     meanwhile conflated into it. 192 bytes, packed: <c>tapline-alerts.js</c> reads it at these offsets.
+///     meanwhile conflated into it. Its number, the desk's for the source, says whose count it is. 196 bytes, packed:
+///     <c>tapline-alerts.js</c> reads it at these offsets.
 /// </summary>
 [StructLayout(LayoutKind.Sequential, Pack = 1)]
 public struct AlertFeedValue
@@ -19,6 +20,7 @@ public struct AlertFeedValue
     public long FiredAt; // @8: when it last fired, µs since 1970 (UTC): none, 0
     public AlertText48 Key; // @16: the latest row's key (none, a count's)
     public AlertText128 Summary; // @64: what it was ("26 in the last 5 s", a count's)
+    public uint Shape; // @192: the shape's number (the desk's): a count is another's under another number
 
     /// <summary>The value's size, as it goes on the wire.</summary>
     public static int Size => Unsafe.SizeOf<AlertFeedValue>();
@@ -27,7 +29,8 @@ public struct AlertFeedValue
 /// <summary>
 ///     A rule as its audience has it: its row in the audience's inbox, keyed by the rule's id — how far the audience has
 ///     presented its shape's running count (a page opened later presents what fired since), and what a page needs to
-///     present it: its name, its sound, whether it's muted, its source. 105 bytes, packed.
+///     present it: its name, its sound, whether it's muted, its source; and the number of the shape whose count that is
+///     (<see cref="AlertFeedValue.Shape" />), for a rule's shape may change. 109 bytes, packed.
 /// </summary>
 [StructLayout(LayoutKind.Sequential, Pack = 1)]
 public struct AlertRow
@@ -37,6 +40,7 @@ public struct AlertRow
     public AlertText16 Source; // @9
     public AlertText48 Name; // @25
     public AlertText32 Sound; // @73
+    public uint Shape; // @105: the number of the shape Presented counts (AlertFeedValue.Shape)
 
     /// <summary>The row's size, as it goes on the wire.</summary>
     public static int Size => Unsafe.SizeOf<AlertRow>();

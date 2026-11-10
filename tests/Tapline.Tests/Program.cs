@@ -400,6 +400,8 @@ var tests = new (string Name, Func<Task> Run)[]
         T.GridWaitsAllocation),
     ("Alerts shared by shape: rules of one source, condition and trigger, in two audiences, one evaluation and one source, each page's subscription at its rule's throttle (Tapline's MinInterval: conflated, debounced); fired, the shape's count up by the rows, its latest last, a thousand firings one value; presented, the most a page says, never past the count, each audience its own; renamed or rethrottled, kept, its interval set; reshaped or added, from the count as it stands; a count fired at its throttle; refused before kept (checked, watched, past each cap); unattended, kept for the keep-for time, then let go with the shapes only it had; apart from grids, rows packed",
         T.AlertDeskShapes),
+    ("Alert sets kept in the order called: a page's set whose checks end after the next page's was kept isn't kept, the open page following its own",
+        T.AlertDeskSetsInOrder),
     ("Alert texts: inline, whole when it fits, else cut at a character's boundary and flagged, four-byte characters never split",
         T.AlertTexts),
     ("Grid nested against an oracle: six seeds of scrolling, jumps, rows opened and closed (in the window, and anywhere), orders arriving, changing and going, runs growing and shrinking, sorts and filters, the last two with three remembered at most (rows forgotten as others open, never one the window holds) — every window a run of the view as drawn, each row at its depth, its first row where the view has it, less the rows not shown above and the rows of runs above it the window doesn't know of: exactly",

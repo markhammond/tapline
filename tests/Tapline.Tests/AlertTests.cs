@@ -6,11 +6,21 @@ internal sealed class HandEvaluator : IAlertEvaluator
 {
     public int Rewatched;
     public IAlertSink? Sink;
+
+    /// <summary>While set, a condition saying "slow" is checked only once it's done.</summary>
+    public TaskCompletionSource? Slow;
     public AlertWatch[] Watching = [];
 
     public ValueTask<string?> CheckAsync(AlertWatch watch, CancellationToken cancellationToken)
     {
-        return new ValueTask<string?>(watch.Condition.Contains("refuse", StringComparison.Ordinal) ? $"no condition says '{watch.Condition}'" : null);
+        var said = watch.Condition.Contains("refuse", StringComparison.Ordinal) ? $"no condition says '{watch.Condition}'" : null;
+        return Slow is { } slow && watch.Condition.Contains("slow", StringComparison.Ordinal) ? Later(slow.Task, said) : new ValueTask<string?>(said);
+
+        static async ValueTask<string?> Later(Task done, string? said)
+        {
+            await done.ConfigureAwait(false);
+            return said;
+        }
     }
 
     public ValueTask<IReadOnlyDictionary<AlertWatch, string>> WatchAsync(IReadOnlyCollection<AlertWatch> watches, IAlertSink sink,
@@ -87,10 +97,12 @@ internal static partial class T
 
         // Presented by a page: the row keeps the most any page of the audience says, never past its shape's count; a page
         // behind can't lower it. Another audience's row isn't touched.
-        pageA.Presented(partial.Id, 3);
-        pageA.Presented(partial.Id, 2);
+        var shape = RowOf(desk, "browser-a", partial).Shape;
+        Assert(shape != 0 && shape == value.Shape && RowOf(desk, "browser-b", same).Shape == shape, "the row says its shape's number, as its value does");
+        pageA.Presented(partial.Id, shape, 3);
+        pageA.Presented(partial.Id, shape, 2);
         Assert(RowOf(desk, "browser-a", partial).Presented == 3, "presented: the most a page said");
-        pageA.Presented(partial.Id, 99_999);
+        pageA.Presented(partial.Id, shape, 99_999);
         Assert(RowOf(desk, "browser-a", partial).Presented == 1_003 && RowOf(desk, "browser-b", same).Presented == 0,
             "presented: never past the shape's count; another audience's own");
 
@@ -108,7 +120,14 @@ internal static partial class T
         await desk.SetRulesAsync("browser-a", [reshaped, counted]);
         Assert(RowOf(desk, "browser-a", reshaped).Presented == 0 && pageA.ShapeTap(reshaped.Id)!.Source != tapB.Source && changes == 1 &&
                desk.Shapes == 3, "its shape changed: a subscription to the new shape, from its count; the old shape kept for the other audience");
+        var newShape = RowOf(desk, "browser-a", reshaped).Shape;
+        Assert(newShape != shape && desk.ValueOf(reshaped.Watch)!.Value.Shape == newShape,
+            "its shape changed: its row counts the new shape, by its number — a page compares counts of one shape only");
         evaluator.Fire(reshaped.Watch, "n1");
+        pageA.Presented(reshaped.Id, shape, 1_003); // (a page presenting the old shape still, as the rule changed)
+        Assert(RowOf(desk, "browser-a", reshaped).Presented == 0, "presented of the shape it left: nothing (its new shape's firing still to present)");
+        pageA.Presented(reshaped.Id, newShape, 1);
+        Assert(RowOf(desk, "browser-a", reshaped).Presented == 1, "presented of its shape: kept");
         var joined = Rule("Late joiner", "status = 'New'", TimeSpan.Zero);
         await desk.SetRulesAsync("browser-b", [same, joined]);
         Assert(RowOf(desk, "browser-b", joined).Presented == 1, "a rule added to a shape that's fired: from its count as it stands");
@@ -146,21 +165,54 @@ internal static partial class T
         // Apart: Tapline.Alerts references nothing of grids; its rows packed as the page reads them.
         var references = typeof(AlertDesk).Assembly.GetReferencedAssemblies().Select(a => a.Name).ToArray();
         Assert(!references.Any(r => r!.StartsWith("Tapline.Grid", StringComparison.Ordinal)), $"apart from grids: {string.Join(", ", references)}");
-        Assert(AlertRow.Size == 105 && AlertFeedValue.Size == 192, $"rows packed as the page reads them: {AlertRow.Size}, {AlertFeedValue.Size} bytes");
+        Assert(AlertRow.Size == 109 && AlertFeedValue.Size == 196, $"rows packed as the page reads them: {AlertRow.Size}, {AlertFeedValue.Size} bytes");
+    }
+
+    public static async Task AlertDeskSetsInOrder()
+    {
+        var evaluator = new HandEvaluator { Slow = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously) };
+        await using var desk = new AlertDesk(evaluator);
+        var registry = new OutletRegistry();
+
+        // A page sets its rules, its evaluator slow to check them (a cold planner); the page reloads, and the next sets
+        // others, checked at once. The first set's checks end last: it isn't kept, so the page that's open follows its own.
+        var gone = Rule("Gone", "status = 'Cancelled' -- slow", TimeSpan.Zero);
+        var kept = Rule("Kept", "status = 'Filled'", TimeSpan.Zero);
+        var mine = Rule("Mine", "status = 'New'", TimeSpan.Zero);
+        var closed = desk.Attach("browser", NewOutlet(registry));
+        var first = desk.SetRulesAsync("browser", [gone, kept]).AsTask();
+        closed.Dispose();
+        using var page = desk.Attach("browser", NewOutlet(registry));
+        var changes = 0;
+        page.Changed += () => changes++;
+        var refused = await desk.SetRulesAsync("browser", [kept, mine]);
+        Assert(refused.Count == 0 && page.Shapes.Keys.Order().SequenceEqual(new[] { kept.Id, mine.Id }.Order()) && changes == 1,
+            "the later set kept: the open page follows it");
+        evaluator.Slow.SetResult();
+        refused = await first;
+        Assert(refused.Count == 0, $"the earlier set, out of date: no refusal of its own ({string.Join("; ", refused.Values)})");
+        Assert(page.Shapes.Keys.Order().SequenceEqual(new[] { kept.Id, mine.Id }.Order()) && changes == 1 && desk.InboxOf("browser")!.Count == 2 &&
+               !desk.InboxOf("browser")!.TryGet(gone.Id, out _) && desk.Shapes == 2,
+            $"the earlier set, ending last, not kept: the page's shapes, its inbox and the desk's shapes the later set's ({desk.Shapes} shapes)");
+
+        // A set after it is kept as ever.
+        refused = await desk.SetRulesAsync("browser", [mine]);
+        Assert(refused.Count == 0 && page.Shapes.Keys.Single() == mine.Id && desk.Shapes == 1, "the next set kept");
     }
 
     /// <summary>
     ///     An inbox's row and a shape's value as .NET lays them out (fixtures/frames.json, "alerts"), and a rule's key: for
-    ///     the JS tests to hold tapline-alerts.js's readers to — counts past 2³², a time, texts whole and cut.
+    ///     the JS tests to hold tapline-alerts.js's readers to — counts past 2³², a time, texts whole and cut, a shape's
+    ///     number past 2³¹.
     /// </summary>
     private static object AlertFixture()
     {
         var rule = Guid.Parse("01a18356-af60-7000-86cf-7ea6c6c82c20");
-        var row = new AlertRow { Presented = 1_234_567_890_123, Muted = 1 };
+        var row = new AlertRow { Presented = 1_234_567_890_123, Muted = 1, Shape = 4_000_000_007 };
         AlertText.Write(row.Source, "fills");
         AlertText.Write(row.Name, "Big fills for FERN — élan");
         AlertText.Write(row.Sound, "kaching");
-        var value = new AlertFeedValue { Fired = 9_876_543_210, FiredAt = 1_793_000_000_123_456 };
+        var value = new AlertFeedValue { Fired = 9_876_543_210, FiredAt = 1_793_000_000_123_456, Shape = 4_000_000_007 };
         AlertText.Write(value.Key, rule.ToString());
         AlertText.Write(value.Summary, string.Concat(Enumerable.Repeat("FERN Buy 0.5 BTC/USD Perp @ 65,053.8 · ", 4)));
         return new
@@ -169,7 +221,7 @@ internal static partial class T
             row = Convert.ToBase64String(System.Runtime.InteropServices.MemoryMarshal.AsBytes(new ReadOnlySpan<AlertRow>(in row))),
             shape = Convert.ToBase64String(System.Runtime.InteropServices.MemoryMarshal.AsBytes(new ReadOnlySpan<AlertFeedValue>(in value))),
             presented = row.Presented, name = AlertText.Read(row.Name).Text, fired = value.Fired, firedAt = value.FiredAt / 1000.0,
-            summary = AlertText.Read(value.Summary).Text + "…"
+            summary = AlertText.Read(value.Summary).Text + "…", number = row.Shape
         };
     }
 

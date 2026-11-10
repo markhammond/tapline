@@ -11,13 +11,13 @@
 
 /** Where AlertRow's fields are (an inbox's row): packed, little-endian; a text, its length (high bit: cut) then its UTF-8. */
 export const ROW = Object.freeze({
-    presented: 0, muted: 8, source: 9, name: 25, sound: 73, size: 105,
+    presented: 0, muted: 8, source: 9, name: 25, sound: 73, shape: 105, size: 109,
     widths: Object.freeze({source: 16, name: 48, sound: 32})
 });
 
 /** Where AlertFeedValue's fields are (a shape's value): packed, little-endian. */
 export const SHAPE = Object.freeze({
-    fired: 0, firedAt: 8, key: 16, summary: 64, size: 192,
+    fired: 0, firedAt: 8, key: 16, summary: 64, shape: 192, size: 196,
     widths: Object.freeze({key: 48, summary: 128})
 });
 
@@ -29,27 +29,37 @@ function text(bytes, at, width) {
     return {value: utf8.decode(bytes.subarray(at + 1, at + 1 + length)), cut: (bytes[at] & 0x80) !== 0};
 }
 
-const int64 = (bytes, at) => Number(new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).getBigInt64(at, true));
+const view = bytes => new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+const int64 = (bytes, at) => Number(view(bytes).getBigInt64(at, true));
+const uint32 = (bytes, at) => view(bytes).getUint32(at, true);
 
-/** A rule's row, as its audience's inbox has it: how far presented, muted or not, its source, name and sound. */
+/**
+ * A rule's row, as its audience's inbox has it: how far presented — of the shape numbered `shape` — muted or not, its
+ * source, name and sound.
+ */
 export function readRow(bytes) {
     return {
         presented: int64(bytes, ROW.presented),
         muted: bytes[ROW.muted] === 1,
         source: text(bytes, ROW.source, ROW.widths.source).value,
         name: text(bytes, ROW.name, ROW.widths.name).value,
-        sound: text(bytes, ROW.sound, ROW.widths.sound).value
+        sound: text(bytes, ROW.sound, ROW.widths.sound).value,
+        shape: uint32(bytes, ROW.shape)
     };
 }
 
-/** A shape's value: its running count, when it last fired (ms since 1970, null if never), its latest row's key and line. */
+/**
+ * A shape's value: its running count, when it last fired (ms since 1970, null if never), its latest row's key and line,
+ * and its number (the desk's), which says whose count it is.
+ */
 export function readShape(bytes) {
     const firedAt = int64(bytes, SHAPE.firedAt), summary = text(bytes, SHAPE.summary, SHAPE.widths.summary);
     return {
         fired: int64(bytes, SHAPE.fired),
         firedAt: firedAt === 0 ? null : firedAt / 1000,
         key: text(bytes, SHAPE.key, SHAPE.widths.key).value,
-        summary: summary.value + (summary.cut ? '…' : '')
+        summary: summary.value + (summary.cut ? '…' : ''),
+        shape: uint32(bytes, SHAPE.shape)
     };
 }
 
@@ -70,7 +80,7 @@ const AWAY_GATHER_MS = 250;
  *   since       when the page was opened, by the desk's clock (AlertPage.AttachedAt, ms since 1970): a rule's alerts whose
  *               shape last fired before it fired while away, no page of the audience open to present them
  *   tapline     the page's Tapline client (default: globalThis.tapline)
- *   presented   (rule, count) → told what this page presented of a rule: up to its shape's count (to the host)
+ *   presented   (rule, count, shape) → told what this page presented of a rule: up to the count of its shape so numbered (to the host)
  *   play        (sound) → plays a rule's sound (AlertSounds.play, say); not called for a muted rule
  *   alert       ({rule, name, count, summary, key, source, muted, firedAt, away}) → the app's own presenter (a toast, a list)
  *   away        (alerts) → what fired while no page of the audience was open: said in one line, by the app
@@ -84,7 +94,7 @@ export class AlertInbox {
         this.tapline = options.tapline ?? globalThis.tapline;
         this.rules = new Map();          // rule → its row
         this.values = new Map();         // rule → its shape's value
-        this.shown = new Map();          // rule → its shape's count, as far as this page has presented it
+        this.shown = new Map();          // rule → {shape, count}: the count of its shape so numbered, as far as this page presented it
         this.subscriptions = new Map();  // rule → [binding, unsubscribe]
         this.awayList = [];
         this.since = options.since ?? -Infinity;
@@ -147,12 +157,17 @@ export class AlertInbox {
         this.#consider(rule);
     }
 
-    /** A rule whose row and shape are both here: what its shape counted past what this page, or its audience, presented. */
+    /**
+     * A rule whose row and shape are both here, of one shape: what its shape counted past what this page, or its audience,
+     * presented. A rule whose shape changed counts another source's, from another number: its row and its new shape's
+     * value may come in either order, so a count is compared only with a count of the same shape.
+     */
     #consider(rule) {
         const row = this.rules.get(rule), value = this.values.get(rule);
-        if (!row || !value) return;
-        const shown = Math.max(this.shown.get(rule) ?? row.presented, row.presented);
-        this.shown.set(rule, Math.max(shown, value.fired));
+        if (!row || !value || row.shape !== value.shape) return;
+        const was = this.shown.get(rule);
+        const shown = was?.shape === value.shape ? Math.max(was.count, row.presented) : row.presented;
+        this.shown.set(rule, {shape: value.shape, count: Math.max(shown, value.fired)});
         if (value.fired <= shown) return;
         const alert = {rule, ...row, ...value, count: value.fired - shown, away: value.firedAt !== null && value.firedAt < this.since};
         if (alert.away) {
@@ -181,7 +196,7 @@ export class AlertInbox {
             if (this.notify && typeof Notification !== 'undefined' && Notification.permission === 'granted')
                 new Notification(alert.name, {body: (alert.count > 1 ? `×${alert.count} ` : '') + alert.summary, tag: alert.rule});
         }
-        this.options.presented?.(alert.rule, alert.fired);
+        this.options.presented?.(alert.rule, alert.fired, alert.shape);
     }
 }
 
