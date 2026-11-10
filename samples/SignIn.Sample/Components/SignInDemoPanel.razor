@@ -11,12 +11,13 @@
     Passkeys belong to <code>localhost</code>: open this page as http://localhost:…, not 127.0.0.1.
 </p>
 
-@* Not bound to Blazor: what's typed here stays in the page, never sent over the circuit — the page's script reads it. *@
+@* Not bound to Blazor: what's typed here stays in the page, never sent over the circuit — the page's script reads it.
+   The password has no name, so no form submission could ever carry it. *@
 <form @ref="_form" autocomplete="on" style="display: grid; grid-template-columns: max-content 16rem; gap: 6px 10px; align-items: center">
     <label for="signin-user">Name</label>
     <input id="signin-user" name="user" autocomplete="username webauthn" spellcheck="false"/>
     <label for="signin-password">Password</label>
-    <input id="signin-password" name="password" type="password" autocomplete="current-password"/>
+    <input id="signin-password" type="password" autocomplete="current-password"/>
     <span></span>
     <span style="display: flex; gap: 6px; flex-wrap: wrap">
         <button type="button" data-action="passkey">Sign in with a passkey</button>

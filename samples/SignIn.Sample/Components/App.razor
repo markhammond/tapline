@@ -12,7 +12,7 @@
 <body>
 <Routes/>
 <script src="@Assets["_framework/blazor.web.js"]" autostart="false"></script>
-<script type="module">
+<script type="module" nonce="@ContentSecurity.Nonce(HttpContext)">
     import {tapline} from './@Assets["_content/Tapline/tapline.js"]';
     import {startBlazor} from './@Assets["_content/Tapline/blazor-realtime.js"]';
     import {createSignIn} from './@Assets["signin.js"]';
@@ -23,3 +23,7 @@
 </script>
 </body>
 </html>
+
+@code {
+    [CascadingParameter] HttpContext? HttpContext { get; set; } // (the page renders statically: its request is here)
+}
