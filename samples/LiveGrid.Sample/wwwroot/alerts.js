@@ -33,7 +33,7 @@ export function start(dotnet, {inbox: binding, shapes, since, sounds: urls, noti
         notify,
         soundOn: sounds.unlocked,
         play: sound => sounds.play(sound).catch(failure => console.warn("an alert's sound couldn't be played", failure)),
-        alert: a => page?.invokeMethodAsync('Alerted', a.rule, a.source, a.count, a.fired),
+        alert: a => page?.invokeMethodAsync('Alerted', a.rule, a.source, a.count, a.shape, a.fired),
         away: list => page?.invokeMethodAsync('Away', list.map(a => ({name: a.name, count: a.count, summary: a.summary}))),
         error: failure => console.warn('an alert subscription ended', failure)
     });

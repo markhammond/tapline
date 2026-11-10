@@ -2,7 +2,7 @@
 
 ## Verification
 
-`dotnet run --project tests/Tapline.Tests` (214 tests; `TAPLINE_TEST=<part of a name>` runs only those,
+`dotnet run --project tests/Tapline.Tests` (215 tests; `TAPLINE_TEST=<part of a name>` runs only those,
 `TAPLINE_TEST_REPEAT=n` each n times), then `node tests/js/test.mjs` (72 tests, using the fixtures the C# run writes).
 Nothing to install for either: the JS tests use Node's own modules, and the SignalR JS client's side of the wire —
 how it encodes every control invocation tapline.js sends over a circuit, at each integer width, and how it reads a frame
@@ -233,14 +233,17 @@ Debug reports what the writes that found the ring full allocated. Highlights:
   condition and trigger — in two audiences, one evaluation and one source, each page's subscription to it at its own
   rule's throttle (`Tap.MinInterval`); fired, the shape's count up by the rows, its latest row the last, a thousand
   firings one value; how far an audience presented a rule, the most any page says and never past the count; a rule
-  renamed or throttled anew keeps its place, one reshaped or added starts from the count as it stands; rules refused
+  renamed or throttled anew keeps its place, one reshaped or added starts from the count as it stands, its row
+  numbered for the new shape and a page's word on the old one ignored; sets kept in the order called (a page's set
+  whose checks end after the next page's isn't kept); rules refused
   with their reasons (no name, a throttle or a trigger out of range, a wait from a timestamp left blank, the evaluator's word) and past the caps (rules,
   shapes, audiences); an audience unattended past the keep-for time let go, its shapes with it; a page opened at the
-  desk's time; the inbox's row and a shape's value 105 and 192 bytes, their texts cut at a character's boundary and
+  desk's time; the inbox's row and a shape's value 109 and 196 bytes, their texts cut at a character's boundary and
   flagged. JS (tapline-alerts.js, in Node): both read as .NET lays them out (the fixture); an audience's alerts — each
   rule's shape past what its audience presented, presented once and said back, sounded unless muted, away if its
   shape last fired before the page opened (said in one line), a rule's shape subscribed again only when its tap
-  changes, another page's presenting honoured. In a browser: the LiveGrid sample's bell.
+  changes, its new shape's count compared only with a row of that shape (whichever comes first), another page's
+  presenting honoured. In a browser: the LiveGrid sample's bell.
 - JS, the grid's page body (tapline-grid.js), in Node: scrolling scaled past the safe height (the thumb at 90 % shows
   90 %, the bottom the last row; the wheel by rows, the row standing through the browser's rounding); the columns'
   places in pixels (a width's ch, em and rem from the font's measures, as WebKit zoomed needs them); the pre-fetch's

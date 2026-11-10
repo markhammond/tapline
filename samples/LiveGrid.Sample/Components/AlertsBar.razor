@@ -148,11 +148,11 @@
         });
     }
 
-    /// <summary>An alert presented: as far as this page presented its rule's shape, said to the desk; its rows counted on its tab.</summary>
+    /// <summary>An alert presented: as far as this page presented its rule's shape (by its number), said to the desk; its rows counted on its tab.</summary>
     [JSInvokable]
-    public void Alerted(string rule, string source, long count, long fired)
+    public void Alerted(string rule, string source, long count, uint shape, long fired)
     {
-        if (Guid.TryParse(rule, out var id)) _page?.Presented(id, fired);
+        if (Guid.TryParse(rule, out var id)) _page?.Presented(id, shape, fired);
         var unseen = Book.Unseen;
         Book.Count(source, count);
         if (Book.Unseen != unseen) StateHasChanged();

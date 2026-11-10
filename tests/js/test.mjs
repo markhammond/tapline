@@ -33,24 +33,24 @@ function newClient(sent) {
   return client;
 }
 
-test('alerts read as .NET lays them out (fixtures/frames.json "alerts", by the C# tests): an inbox row — how far presented, past 2³², muted, its source, name and sound — and a shape\'s value — its count, when it fired, its latest key, a line cut and marked so — and a rule\'s key, a .NET Guid', () => {
+test('alerts read as .NET lays them out (fixtures/frames.json "alerts", by the C# tests): an inbox row — how far presented, past 2³², muted, its source, name and sound, its shape\'s number — and a shape\'s value — its count, when it fired, its latest key, a line cut and marked so, its number — and a rule\'s key, a .NET Guid', () => {
   const a = fx.alerts, bytes = text => new Uint8Array(Buffer.from(text, 'base64'));
   const row = bytes(a.row), shape = bytes(a.shape);
   assert.deepEqual([row.length, shape.length], [ROW.size, SHAPE.size], 'the sizes .NET packs them to');
-  assert.deepEqual(readRow(row), { presented: a.presented, muted: true, source: 'fills', name: a.name, sound: 'kaching' });
-  assert.deepEqual(readShape(shape), { fired: a.fired, firedAt: a.firedAt, key: a.rule, summary: a.summary });
+  assert.deepEqual(readRow(row), { presented: a.presented, muted: true, source: 'fills', name: a.name, sound: 'kaching', shape: a.number });
+  assert.deepEqual(readShape(shape), { fired: a.fired, firedAt: a.firedAt, key: a.rule, summary: a.summary, shape: a.number });
   assert.equal(guidOf(bytes(a.key)), a.rule);
 });
 
-test('an audience\'s alerts (AlertInbox): each rule\'s shape past what its audience presented, presented once and said back — sounded unless muted; away if its shape last fired before the page opened, gathered in one line; a rule\'s shape subscribed again only when its tap changes; another page\'s presenting honoured', async () => {
+test('an audience\'s alerts (AlertInbox): each rule\'s shape past what its audience presented, presented once and said back — sounded unless muted; away if its shape last fired before the page opened, gathered in one line; a rule\'s shape subscribed again only when its tap changes, its new shape\'s count compared only with a row of that shape (either may come first); another page\'s presenting honoured', async () => {
   const guid = id => { const h = id.replace(/-/g, ''), b = i => parseInt(h.slice(2 * i, 2 * i + 2), 16);
     return Uint8Array.from([3, 2, 1, 0, 5, 4, 7, 6, 8, 9, 10, 11, 12, 13, 14, 15].map(b)); };
   const text = (bytes, at, value) => { const utf8 = new TextEncoder().encode(value); bytes[at] = utf8.length; bytes.set(utf8, at + 1); };
-  const row = (presented, muted, name) => { const b = new Uint8Array(ROW.size), dv = new DataView(b.buffer);
-    dv.setBigInt64(ROW.presented, BigInt(presented), true); b[ROW.muted] = muted ? 1 : 0;
+  const row = (presented, muted, name, number = 1) => { const b = new Uint8Array(ROW.size), dv = new DataView(b.buffer);
+    dv.setBigInt64(ROW.presented, BigInt(presented), true); b[ROW.muted] = muted ? 1 : 0; dv.setUint32(ROW.shape, number, true);
     text(b, ROW.source, 'orders'); text(b, ROW.name, name); text(b, ROW.sound, 'kaching'); return b; };
-  const shape = (fired, firedAtMs, summary = 'FERN Buy 1 BTC') => { const b = new Uint8Array(SHAPE.size), dv = new DataView(b.buffer);
-    dv.setBigInt64(SHAPE.fired, BigInt(fired), true); dv.setBigInt64(SHAPE.firedAt, BigInt(firedAtMs * 1000), true);
+  const shape = (fired, firedAtMs, summary = 'FERN Buy 1 BTC', number = 1) => { const b = new Uint8Array(SHAPE.size), dv = new DataView(b.buffer);
+    dv.setBigInt64(SHAPE.fired, BigInt(fired), true); dv.setBigInt64(SHAPE.firedAt, BigInt(firedAtMs * 1000), true); dv.setUint32(SHAPE.shape, number, true);
     text(b, SHAPE.summary, summary); return b; };
   const r1 = '01a18356-af60-7000-86cf-7ea6c6c82c20', r2 = '01a18356-af60-7000-86cf-7ea6c6c82c21';
   const inbox = rows => ({ members: [{ rows: new Map(rows.map(([id, bytes], i) => [i, { key: guid(id), row: bytes }])) }] });
@@ -61,7 +61,7 @@ test('an audience\'s alerts (AlertInbox): each rule\'s shape past what its audie
   globalThis.document = { hidden: false, addEventListener() {}, removeEventListener() {} };
   try {
     const box = new AlertInbox({ inbox: { tapId: 1 }, shapes: { [r1]: { tapId: 2 }, [r2]: { tapId: 3 } }, since, tapline, soundOn: true,
-      alert: a => said.alerts.push([a.name, a.count, a.away]), play: s => said.played.push(s), presented: (r, n) => said.presented.push([r, n]),
+      alert: a => said.alerts.push([a.name, a.count, a.away]), play: s => said.played.push(s), presented: (r, n, s) => said.presented.push([r, n, s]),
       away: list => said.away.push(list.map(a => [a.name, a.count])) });
     handlers.get(1)(inbox([[r1, row(10, false, 'Filled')], [r2, row(0, true, 'Quiet')]]));
     assert.deepEqual(said.alerts, [], 'rows alone: nothing to present');
@@ -72,16 +72,25 @@ test('an audience\'s alerts (AlertInbox): each rule\'s shape past what its audie
     handlers.get(3)(shape(2, since + 600));
     assert.deepEqual(said.alerts, [['Filled', 5, true], ['Filled', 3, false], ['Quiet', 2, false]], 'what fired past the presented: away before the page opened, once each');
     assert.deepEqual(said.played, ['kaching', 'kaching'], 'sounded, but not the muted rule');
-    assert.deepEqual(said.presented, [[r1, 15], [r1, 18], [r2, 2]], 'each presented said back, as far as its shape\'s count');
+    assert.deepEqual(said.presented, [[r1, 15, 1], [r1, 18, 1], [r2, 2, 1]], 'each presented said back, as far as its shape\'s count, and which shape');
     await new Promise(r => setTimeout(r, 300));
     assert.deepEqual(said.away, [[['Filled', 5]]], 'what fired while away, gathered in one line');
     box.setShapes({ [r1]: { tapId: 2 }, [r2]: { tapId: 4 } });
     assert.deepEqual(activated, [1, 2, 3, 4], 'the rule whose tap changed subscribed again; the other kept');
     assert.deepEqual([...handlers.keys()].sort(), [1, 2, 4], 'the old tap let go');
-    handlers.get(1)(inbox([[r1, row(20, false, 'Filled')], [r2, row(2, true, 'Quiet')]]));
+    // r2's shape changed (its condition, its id kept): another shape, numbered 2, whose count is its own — lower than the
+    // old shape's. Its value comes before the row saying the rule counts it: nothing is compared till both are of it.
+    handlers.get(4)(shape(1, since + 700, 'FERN Buy 2 BTC', 2));
+    assert.deepEqual(said.alerts.length, 3, 'the new shape\'s value, the row still the old shape\'s: nothing yet');
+    handlers.get(1)(inbox([[r1, row(20, false, 'Filled')], [r2, row(0, true, 'Quiet', 2)]]));
     handlers.get(2)(shape(20, since + 900));
     handlers.get(2)(shape(21, since + 950));
-    assert.deepEqual(said.alerts.slice(3), [['Filled', 1, false]], 'presented by another page of the audience: from there');
+    assert.deepEqual(said.alerts.slice(3), [['Quiet', 1, false], ['Filled', 1, false]],
+      'the new shape from its row\'s count, though the old shape had counted more; presented by another page of the audience: from there');
+    assert.deepEqual(said.presented.slice(3), [[r2, 1, 2], [r1, 21, 1]], 'said back of the shape presented');
+    handlers.get(1)(inbox([[r1, row(21, false, 'Filled')], [r2, row(2, true, 'Quiet', 1)]]));
+    handlers.get(4)(shape(3, since + 980, 'FERN Buy 3 BTC', 2));
+    assert.deepEqual(said.alerts.slice(5), [], 'a row of a shape the rule has left (late): the new shape\'s count not compared with it');
     box.dispose();
     assert.equal(handlers.size, 0, 'disposed: nothing left subscribed');
   } finally {
