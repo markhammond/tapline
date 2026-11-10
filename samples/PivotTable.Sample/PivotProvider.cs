@@ -101,6 +101,9 @@ internal sealed partial class PivotProvider : BackgroundService, IDataProvider
     // (nobody was watching: its answer's old), runs at once.
     private static readonly TimeSpan MarketTick = TimeSpan.FromMilliseconds(250),
         StatsEvery = TimeSpan.FromSeconds(1),
+        // The engine's clock (every query's now, @now's too) advanced at least this often, by a refresh of nothing else if
+        // nothing has changed: a window on now moves on through a quiet spell.
+        ClockEvery = TimeSpan.FromSeconds(1),
         CompactEvery =
             TimeSpan.FromSeconds(
                 30); // (a compaction's refresh, and the updates after it, cost more whatever it removes: rare enough to fall past p99.5 — Pivot:CompactEvery)
@@ -927,7 +930,7 @@ internal sealed partial class PivotProvider : BackgroundService, IDataProvider
             .Where(p => !IsNow(p.Name) && !bindings.ContainsKey((p.Name ?? "").TrimStart('@', ':'))).ToList();
         if (unbound.Count > 0)
             return (default,
-                $"A pivot's statement may bind @now — the time it runs, each run — and the lists the page binds ({(bindings.Count == 0 ? "none" : string.Join(", ", bindings.Keys.Select(k => "@" + k)))}); " +
+                $"A pivot's statement may bind @now — the engine's clock, as of the rows it reads — and the lists the page binds ({(bindings.Count == 0 ? "none" : string.Join(", ", bindings.Keys.Select(k => "@" + k)))}); " +
                 $"this one binds {string.Join(", ", unbound.Select(p => string.IsNullOrEmpty(p.Name) ? "?" : "@" + p.Name!.TrimStart('@', ':')))} too.");
         var wide = WideColumns.Select(Index).ToArray(); // (an extended pivot's: what its statement answers besides)
         if (wide.FirstOrDefault(i => i >= 0 && !Number(i), -1) is var notNumber and >= 0)
@@ -1001,7 +1004,7 @@ internal sealed partial class PivotProvider : BackgroundService, IDataProvider
         ShapeParameter Parameter(string name, string type, bool list)
         {
             return new ShapeParameter(name, type, list, IsNow(name)
-                ? "the time it runs, each run: the provider binds it"
+                ? "the engine's clock, as of the rows it reads (its last refresh, a second old at most)"
                 : $"bound: {(bindings.TryGetValue(name, out var values) ? values.Length : 0)} values");
         }
 
@@ -1520,7 +1523,8 @@ internal sealed partial class PivotProvider : BackgroundService, IDataProvider
             nextMarket = now + MarketTick,
             nextStats = now + StatsEvery,
             nextCompact = now + _compactEvery,
-            nextTrim = now + Compaction;
+            nextTrim = now + Compaction,
+            clockedAt = now; // (the engine's clock last advanced: ReplaceAll's, below, at the start)
         // (the last position row's time — a trade's or a fill's: every row later — or now)
         DateTime statsFrom = now,
             lastBooked = keptRisk.Count > 0 && keptRisk[^1].UpdateTime > now ? keptRisk[^1].UpdateTime : now;
@@ -1734,7 +1738,7 @@ internal sealed partial class PivotProvider : BackgroundService, IDataProvider
             {
                 stale = true;
             }
-            else if (changed || stale)
+            else if (changed || stale || now - clockedAt >= ClockEvery) // (nothing changed: the clock alone)
             {
                 var refreshing = Stopwatch.GetTimestamp();
                 var replacing =
@@ -1810,12 +1814,14 @@ internal sealed partial class PivotProvider : BackgroundService, IDataProvider
                         }
 
                         if (compacting || trimmed) refreshes.Rewritten(Stopwatch.GetElapsedTime(appending).TotalMilliseconds);
+                        else if (!changed) refreshes.Clocked(Stopwatch.GetElapsedTime(appending).TotalMilliseconds);
                         else
                             refreshes.Appended(Stopwatch.GetElapsedTime(appending).TotalMilliseconds,
                                 rewrite is not null || commit is not null, GC.GetTotalAllocatedBytes(true) - allocated);
                     }
 
                     refreshMs = Stopwatch.GetElapsedTime(refreshing).TotalMilliseconds;
+                    clockedAt = now;
                     Refreshed(engine.Version, pace); // (where it stands now: a pace asked for, applied, told)
                     _drawdown.Changed();
                     foreach (var topic in live)
@@ -2007,9 +2013,8 @@ internal sealed partial class PivotProvider : BackgroundService, IDataProvider
         for (;;)
             try
             {
-                // ts is a wall clock (TIMESTAMP): @now is bound as one — the time in UTC, of kind Unspecified.
-                if (topic.BindsNow)
-                    topic.Values["now"] = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
+                // @now isn't bound: it's the engine's clock, as the rows are of its last refresh (the same now as a view's,
+                // and as CURRENT_TIMESTAMP's), kept moving through a quiet spell (ClockEvery).
                 await using var execution = topic.Values.Count > 0
                     ? await engine.ExecuteAsync(query, topic.Values, topic.Arena,
                         ct) // (a list: expanded, one placeholder each)
@@ -2997,7 +3002,7 @@ internal sealed partial class PivotProvider : BackgroundService, IDataProvider
         }
 
         public required Dictionary<string, object?>
-            Values; // what it binds, by name: the page's lists (and @now, set each run)
+            Values; // what it binds, by name: the page's lists (@now left to the engine's clock)
 
         public StandingView<PivotKey, PivotCell>?
             View; // its standing view, made at its first run (a statement binding @now: none — a snapshot each run)
@@ -3474,7 +3479,7 @@ internal sealed partial class PivotProvider : BackgroundService, IDataProvider
     private sealed class Refreshes
     {
         private readonly Ring _appends = new(), _during = new(), _rewrites = new(), _prepares = new(), _onLoop = new(),
-            _appendBytes = new();
+            _appendBytes = new(), _clocked = new();
         private int _gen2;
         private TimeSpan _paused;
         public int Swaps, LetGo;
@@ -3488,6 +3493,12 @@ internal sealed partial class PivotProvider : BackgroundService, IDataProvider
         {
             (during ? _during : _appends).Add(ms);
             if (!during) _appendBytes.Add(allocated);
+        }
+
+        /// <summary>A refresh of the clock alone (nothing changed for <see cref="ClockEvery" />).</summary>
+        public void Clocked(double ms)
+        {
+            _clocked.Add(ms);
         }
 
         public void Rewritten(double ms)
@@ -3509,7 +3520,7 @@ internal sealed partial class PivotProvider : BackgroundService, IDataProvider
         public override string ToString()
         {
             return
-                $"appends {_appends}, {_appendBytes.Bytes()} allocated each (the process's); those while a rewrite's prepared or committed {_during}; rewrites' refreshes {_rewrites}, prepared off the loop {_prepares}, " +
+                $"appends {_appends}, {_appendBytes.Bytes()} allocated each (the process's); the clock's alone {_clocked}; those while a rewrite's prepared or committed {_during}; rewrites' refreshes {_rewrites}, prepared off the loop {_prepares}, " +
                 $"the loop's share {_onLoop}; {LetGo} let go; {Swaps} plans swapped in; {GC.CollectionCount(2) - _gen2} gen2 collections since the start, " +
                 $"{(GC.GetTotalPauseDuration() - _paused).TotalMilliseconds:N0} ms paused in all";
         }
